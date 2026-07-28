@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Turf Management - Select Time Slot</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@400;600;700&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7fafc;
+        }
+        .date-scroll::-webkit-scrollbar {
+            display: none;
+        }
+        .date-scroll {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        .slot-card {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .slot-card:active {
+            transform: scale(0.96);
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-tertiary-fixed-variant": "#414754",
+                      "on-surface": "#181c1e",
+                      "secondary-fixed": "#ffdcbf",
+                      "outline": "#6f7a6e",
+                      "on-primary": "#ffffff",
+                      "surface-container-lowest": "#ffffff",
+                      "surface-container-high": "#e5e9eb",
+                      "primary-fixed-dim": "#75dc8b",
+                      "secondary-container": "#fe9400",
+                      "surface-container-low": "#f1f4f6",
+                      "primary-container": "#148641",
+                      "surface-container-highest": "#e0e3e5",
+                      "surface-dim": "#d7dadc",
+                      "on-secondary-fixed": "#2d1600",
+                      "surface-variant": "#e0e3e5",
+                      "secondary-fixed-dim": "#ffb874",
+                      "background": "#f7fafc",
+                      "on-tertiary-fixed": "#161c27",
+                      "on-surface-variant": "#3f4a3f",
+                      "on-secondary-fixed-variant": "#6a3b00",
+                      "error-container": "#ffdad6",
+                      "error": "#ba1a1a",
+                      "on-tertiary-container": "#fefcff",
+                      "on-primary-fixed-variant": "#005323",
+                      "tertiary": "#565c6a",
+                      "tertiary-container": "#6f7483",
+                      "on-tertiary": "#ffffff",
+                      "primary": "#006b30",
+                      "on-secondary": "#ffffff",
+                      "on-primary-container": "#f7fff3",
+                      "surface": "#f7fafc",
+                      "on-primary-fixed": "#00210a",
+                      "surface-container": "#ebeef0",
+                      "inverse-primary": "#75dc8b",
+                      "on-error-container": "#93000a",
+                      "tertiary-fixed": "#dde2f3",
+                      "on-error": "#ffffff",
+                      "secondary": "#8c5000",
+                      "inverse-surface": "#2d3133",
+                      "surface-tint": "#006d31",
+                      "outline-variant": "#becabb",
+                      "on-background": "#181c1e",
+                      "tertiary-fixed-dim": "#c1c6d7",
+                      "surface-bright": "#f7fafc",
+                      "primary-fixed": "#91f9a5",
+                      "on-secondary-container": "#633700",
+                      "inverse-on-surface": "#eef1f3"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "md": "16px",
+                      "margin-mobile": "16px",
+                      "base": "4px",
+                      "sm": "8px",
+                      "lg": "24px",
+                      "xl": "32px",
+                      "margin-desktop": "40px",
+                      "xs": "4px",
+                      "gutter": "16px"
+              },
+              "fontFamily": {
+                      "headline-sm": ["Archivo Narrow"],
+                      "label-bold": ["Inter"],
+                      "display-lg-mobile": ["Archivo Narrow"],
+                      "body-md": ["Inter"],
+                      "body-lg": ["Inter"],
+                      "display-lg": ["Archivo Narrow"],
+                      "headline-md": ["Archivo Narrow"],
+                      "label-sm": ["Inter"]
+              },
+              "fontSize": {
+                      "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                      "label-bold": ["14px", {"lineHeight": "20px", "letterSpacing": "0.02em", "fontWeight": "600"}],
+                      "display-lg-mobile": ["32px", {"lineHeight": "38px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                      "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                      "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                      "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                      "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "500"}]
+              }
+            },
+          },
+        }
+    </script>
+</head>
+<body class="flex flex-col min-h-screen">
+<!-- TopNavBar -->
+<header class="bg-surface-container-low dark:bg-on-surface shadow-sm sticky top-0 z-50">
+<div class="flex justify-between items-center w-full px-margin-desktop max-w-7xl mx-auto h-16">
+<div class="flex items-center gap-xl">
+<span class="font-headline-md text-headline-md font-bold text-primary dark:text-primary-fixed-dim">Turf Management</span>
+<nav class="hidden md:flex items-center gap-lg">
+<a class="text-on-surface-variant dark:text-outline-variant font-label-bold text-label-bold hover:text-primary dark:hover:text-primary-fixed transition-colors duration-200" href="#">Home</a>
+<a class="text-primary dark:text-primary-fixed-dim border-b-2 border-primary font-bold pb-1 hover:text-primary dark:hover:text-primary-fixed transition-colors duration-200" href="#">Venues</a>
+<a class="text-on-surface-variant dark:text-outline-variant font-label-bold text-label-bold hover:text-primary dark:hover:text-primary-fixed transition-colors duration-200" href="#">Schedule</a>
+<a class="text-on-surface-variant dark:text-outline-variant font-label-bold text-label-bold hover:text-primary dark:hover:text-primary-fixed transition-colors duration-200" href="#">My Bookings</a>
+</nav>
+</div>
+<div class="flex items-center gap-md">
+<button class="hidden lg:flex items-center gap-xs text-on-surface-variant font-label-bold text-label-bold hover:text-primary transition-colors">
+<span class="material-symbols-outlined">help_outline</span> Support
+                </button>
+<button class="bg-primary text-on-primary px-lg py-sm rounded-lg font-headline-sm text-headline-sm hover:opacity-90 active:scale-95 transition-all">Book Now</button>
+<div class="w-10 h-10 rounded-full overflow-hidden border-2 border-surface-container-high">
+<img class="w-full h-full object-cover" data-alt="A professional headshot of a person in high-quality sports management attire, set against a blurred background of a modern athletic facility. The lighting is crisp and professional, reflecting a high-performance corporate atmosphere. The color palette is clean, with soft grays and white, maintaining a professional and reliable identity." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDA5XnyUd9vbMKkfOeklqefDYKGu27LLyH3PhO5oOB_vPIqGeBhHQCy3_vj06ibWRYX6Bc32liBNlFOmlvuPqzp0KFoXoWJlk3EBiCBRnLaYJs4HJRTocWD-V9DQ2fuLmHh1lyyPRweCwCkVLHJgElHAptadeMmXqtMoJnL_C7aqSks3SLjDrv9aEkxarnNC3sbADuoZlIZC--mE4P1xnQgp714vgv5H8TQgljTTYdmHO3kub1ROOXW"/>
+</div>
+</div>
+</div>
+</header>
+<main class="flex-grow w-full max-w-7xl mx-auto px-margin-desktop py-xl">
+<!-- Step Indicator -->
+<div class="mb-xl">
+<div class="flex items-center gap-sm mb-base">
+<span class="text-primary font-label-bold text-label-bold">Step 2 of 4</span>
+<span class="text-on-surface-variant text-label-sm">Select your preferred time slot</span>
+</div>
+<div class="h-1 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary w-1/2"></div>
+</div>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-xl">
+<!-- Left Content Area (8 Columns) -->
+<div class="lg:col-span-8 space-y-xl">
+<!-- Horizontal Date Picker -->
+<section class="bg-surface-container-lowest p-md rounded-xl shadow-[0px_4px_20px_rgba(0,0,0,0.05)]">
+<div class="flex items-center justify-between mb-md px-base">
+<h2 class="font-headline-sm text-headline-sm text-on-surface">September 2024</h2>
+<div class="flex gap-sm">
+<button class="p-xs rounded-full hover:bg-surface-container transition-colors"><span class="material-symbols-outlined">chevron_left</span></button>
+<button class="p-xs rounded-full hover:bg-surface-container transition-colors"><span class="material-symbols-outlined">chevron_right</span></button>
+</div>
+</div>
+<div class="date-scroll flex gap-md overflow-x-auto pb-sm px-base">
+<!-- Date Cards -->
+<button class="flex flex-col items-center min-w-[64px] p-sm rounded-lg border-2 border-transparent hover:border-outline-variant transition-all">
+<span class="text-label-sm text-on-surface-variant">Mon</span>
+<span class="font-headline-sm text-headline-sm">16</span>
+</button>
+<button class="flex flex-col items-center min-w-[64px] p-sm rounded-lg border-2 border-primary bg-primary-container/10 text-primary transition-all">
+<span class="text-label-sm font-bold">Tue</span>
+<span class="font-headline-sm text-headline-sm font-bold">17</span>
+</button>
+<button class="flex flex-col items-center min-w-[64px] p-sm rounded-lg border-2 border-transparent hover:border-outline-variant transition-all">
+<span class="text-label-sm text-on-surface-variant">Wed</span>
+<span class="font-headline-sm text-headline-sm">18</span>
+</button>
+<button class="flex flex-col items-center min-w-[64px] p-sm rounded-lg border-2 border-transparent hover:border-outline-variant transition-all">
+<span class="text-label-sm text-on-surface-variant">Thu</span>
+<span class="font-headline-sm text-headline-sm">19</span>
+</button>
+<button class="flex flex-col items-center min-w-[64px] p-sm rounded-lg border-2 border-transparent hover:border-outline-variant transition-all opacity-50 cursor-not-allowed">
+<span class="text-label-sm text-on-surface-variant">Fri</span>
+<span class="font-headline-sm text-headline-sm">20</span>
+</button>
+<button class="flex flex-col items-center min-w-[64px] p-sm rounded-lg border-2 border-transparent hover:border-outline-variant transition-all">
+<span class="text-label-sm text-on-surface-variant">Sat</span>
+<span class="font-headline-sm text-headline-sm">21</span>
+</button>
+<button class="flex flex-col items-center min-w-[64px] p-sm rounded-lg border-2 border-transparent hover:border-outline-variant transition-all">
+<span class="text-label-sm text-on-surface-variant">Sun</span>
+<span class="font-headline-sm text-headline-sm">22</span>
+</button>
+<button class="flex flex-col items-center min-w-[64px] p-sm rounded-lg border-2 border-transparent hover:border-outline-variant transition-all">
+<span class="text-label-sm text-on-surface-variant">Mon</span>
+<span class="font-headline-sm text-headline-sm">23</span>
+</button>
+</div>
+</section>
+<!-- Time Slots Grid -->
+<div class="space-y-lg">
+<!-- Morning -->
+<div>
+<div class="flex items-center gap-sm mb-md">
+<span class="material-symbols-outlined text-secondary">wb_sunny</span>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Morning Slots</h3>
+<span class="text-label-sm text-on-surface-variant">(06:00 - 12:00)</span>
+</div>
+<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-md">
+<button class="slot-card bg-surface-container-highest/50 text-on-surface-variant cursor-not-allowed opacity-60 p-md rounded-lg border border-outline-variant flex flex-col items-center">
+<span class="font-label-bold text-label-bold">07:00 AM</span>
+<span class="text-label-sm">Booked</span>
+</button>
+<button class="slot-card bg-surface-container-highest/50 text-on-surface-variant cursor-not-allowed opacity-60 p-md rounded-lg border border-outline-variant flex flex-col items-center">
+<span class="font-label-bold text-label-bold">08:00 AM</span>
+<span class="text-label-sm">Booked</span>
+</button>
+<button class="slot-card bg-surface-container-lowest hover:border-primary border border-outline-variant p-md rounded-lg flex flex-col items-center shadow-sm">
+<span class="font-label-bold text-label-bold">09:00 AM</span>
+<span class="text-label-sm text-primary">Available</span>
+</button>
+<button class="slot-card bg-surface-container-lowest hover:border-primary border border-outline-variant p-md rounded-lg flex flex-col items-center shadow-sm">
+<span class="font-label-bold text-label-bold">10:00 AM</span>
+<span class="text-label-sm text-primary">Available</span>
+</button>
+</div>
+</div>
+<!-- Afternoon -->
+<div>
+<div class="flex items-center gap-sm mb-md">
+<span class="material-symbols-outlined text-secondary-container">light_mode</span>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Afternoon Slots</h3>
+<span class="text-label-sm text-on-surface-variant">(12:00 - 17:00)</span>
+</div>
+<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-md">
+<button class="slot-card bg-secondary text-on-primary border-2 border-secondary p-md rounded-lg flex flex-col items-center shadow-md">
+<span class="font-label-bold text-label-bold">01:00 PM</span>
+<span class="text-label-sm">Selected</span>
+</button>
+<button class="slot-card bg-surface-container-lowest border-2 border-secondary-container p-md rounded-lg flex flex-col items-center shadow-sm">
+<span class="font-label-bold text-label-bold text-on-surface">02:00 PM</span>
+<span class="text-label-sm text-secondary-container">Held (2m left)</span>
+</button>
+<button class="slot-card bg-surface-container-lowest hover:border-primary border border-outline-variant p-md rounded-lg flex flex-col items-center shadow-sm">
+<span class="font-label-bold text-label-bold">03:00 PM</span>
+<span class="text-label-sm text-primary">Available</span>
+</button>
+<button class="slot-card bg-surface-container-lowest hover:border-primary border border-outline-variant p-md rounded-lg flex flex-col items-center shadow-sm">
+<span class="font-label-bold text-label-bold">04:00 PM</span>
+<span class="text-label-sm text-primary">Available</span>
+</button>
+</div>
+</div>
+<!-- Evening -->
+<div>
+<div class="flex items-center gap-sm mb-md">
+<span class="material-symbols-outlined text-tertiary">nights_stay</span>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Evening Slots</h3>
+<span class="text-label-sm text-on-surface-variant">(17:00 - 22:00)</span>
+</div>
+<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-md">
+<button class="slot-card bg-surface-container-lowest hover:border-primary border border-outline-variant p-md rounded-lg flex flex-col items-center shadow-sm">
+<span class="font-label-bold text-label-bold">06:00 PM</span>
+<span class="text-label-sm text-primary">Available</span>
+</button>
+<button class="slot-card bg-surface-container-highest/50 text-on-surface-variant cursor-not-allowed opacity-60 p-md rounded-lg border border-outline-variant flex flex-col items-center">
+<span class="font-label-bold text-label-bold">07:00 PM</span>
+<span class="text-label-sm">Booked</span>
+</button>
+<button class="slot-card bg-surface-container-lowest hover:border-primary border border-outline-variant p-md rounded-lg flex flex-col items-center shadow-sm">
+<span class="font-label-bold text-label-bold">08:00 PM</span>
+<span class="text-label-sm text-primary">Available</span>
+</button>
+<button class="slot-card bg-surface-container-lowest hover:border-primary border border-outline-variant p-md rounded-lg flex flex-col items-center shadow-sm">
+<span class="font-label-bold text-label-bold">09:00 PM</span>
+<span class="text-label-sm text-primary">Available</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Legend -->
+<div class="flex flex-wrap gap-lg pt-md border-t border-surface-container-high">
+<div class="flex items-center gap-xs">
+<div class="w-4 h-4 rounded bg-surface-container-lowest border border-outline-variant"></div>
+<span class="text-label-sm text-on-surface-variant">Available</span>
+</div>
+<div class="flex items-center gap-xs">
+<div class="w-4 h-4 rounded bg-secondary"></div>
+<span class="text-label-sm text-on-surface-variant">Selected</span>
+</div>
+<div class="flex items-center gap-xs">
+<div class="w-4 h-4 rounded bg-surface-container-highest opacity-60"></div>
+<span class="text-label-sm text-on-surface-variant">Booked</span>
+</div>
+<div class="flex items-center gap-xs">
+<div class="w-4 h-4 rounded border border-secondary-container"></div>
+<span class="text-label-sm text-on-surface-variant">Held</span>
+</div>
+</div>
+</div>
+<!-- Right Sidebar Summary (4 Columns) -->
+<aside class="lg:col-span-4 h-fit sticky top-24">
+<div class="bg-surface-container-lowest rounded-xl shadow-[0px_8px_30px_rgba(0,0,0,0.08)] overflow-hidden border border-surface-container-high">
+<div class="h-48 relative">
+<img class="w-full h-full object-cover" data-alt="A wide-angle, high-resolution photograph of a pristine indoor soccer arena with vibrant green turf, bright professional stadium lighting, and clean white boundary lines. The facility is modern and high-tech, reflecting a premium sports tech aesthetic. The lighting is even and bright, highlighting the quality of the playing surface and the professional nature of the venue." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAw1ws0-1P-Txs_M6VNcYTSCJECOLwMU4XQckza8bYccflrwh3p0xBBzR31JpjjB9G9PP0dfju3ZrxF6uGP5PpZMyPc6ZQ2agYWnGtXjig1UtFtj8kHyVPPjIYcehg-q07kzhFIm9jtcnqtI8Wuutbch2R4MZ5Crn0fTg4bLzVk5EPJOxoxoNUhWkgCbOCbu8jjDz2cR_PGvCcLvft7Y9kaaSuNfXIEeGb9hVeMHIwJGTOVtUQF1GGb"/>
+<div class="absolute top-md right-md bg-secondary-container text-on-secondary-fixed px-sm py-xs rounded font-label-bold text-label-bold shadow-lg">
+                            $45.00/hr
+                        </div>
+</div>
+<div class="p-lg space-y-md">
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface">Arena Center - Court 4</h2>
+<p class="text-label-sm text-on-surface-variant flex items-center gap-xs">
+<span class="material-symbols-outlined text-sm">location_on</span>
+                                Downtown Sports Complex, Zone B
+                            </p>
+</div>
+<div class="p-md bg-surface-container-low rounded-lg space-y-sm">
+<div class="flex justify-between items-center">
+<span class="text-on-surface-variant text-label-sm font-label-bold uppercase tracking-wider">Date</span>
+<span class="text-on-surface font-body-md">Tue, 17 Sep 2024</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-on-surface-variant text-label-sm font-label-bold uppercase tracking-wider">Selected Time</span>
+<span class="text-secondary font-bold font-body-md">01:00 PM - 02:00 PM</span>
+</div>
+<div class="flex justify-between items-center pt-sm border-t border-outline-variant/20">
+<span class="text-on-surface-variant font-label-bold">Subtotal</span>
+<span class="text-on-surface font-bold">$45.00</span>
+</div>
+</div>
+<div class="space-y-sm">
+<button class="w-full bg-secondary text-on-primary py-md rounded-lg font-headline-sm text-headline-sm shadow-md hover:bg-secondary/90 transition-all active:scale-[0.98]">
+                                Continue to Payment
+                            </button>
+<p class="text-center text-label-sm text-on-surface-variant">No charges until next step</p>
+</div>
+</div>
+</div>
+</aside>
+</div>
+</main>
+<!-- Footer -->
+<footer class="bg-surface-container-highest dark:bg-on-tertiary-fixed-variant mt-xl">
+<div class="flex flex-col md:flex-row justify-between items-center w-full py-xl px-margin-desktop max-w-7xl mx-auto">
+<div class="mb-lg md:mb-0">
+<span class="font-headline-sm text-headline-sm font-bold text-on-surface dark:text-surface-bright">Turf Management</span>
+<p class="text-on-surface-variant dark:text-outline-variant font-body-md text-body-md mt-sm">© 2024 Turf Management - by Codiva. All rights reserved.</p>
+</div>
+<div class="flex flex-wrap justify-center gap-md">
+<a class="text-on-surface-variant dark:text-outline-variant font-body-md text-body-md hover:text-primary dark:hover:text-primary-fixed-dim underline transition-all" href="#">Support</a>
+<a class="text-on-surface-variant dark:text-outline-variant font-body-md text-body-md hover:text-primary dark:hover:text-primary-fixed-dim underline transition-all" href="#">Privacy Policy</a>
+<a class="text-on-surface-variant dark:text-outline-variant font-body-md text-body-md hover:text-primary dark:hover:text-primary-fixed-dim underline transition-all" href="#">Terms of Service</a>
+<a class="text-on-surface-variant dark:text-outline-variant font-body-md text-body-md hover:text-primary dark:hover:text-primary-fixed-dim underline transition-all" href="#">Partner with Us</a>
+<a class="text-on-surface-variant dark:text-outline-variant font-body-md text-body-md hover:text-primary dark:hover:text-primary-fixed-dim underline transition-all" href="#">Contact Us</a>
+</div>
+</div>
+</footer>
+<script>
+        // Micro-interactions for slot selection
+        const slots = document.querySelectorAll('.slot-card');
+        slots.forEach(slot => {
+            if (!slot.classList.contains('cursor-not-allowed')) {
+                slot.addEventListener('click', () => {
+                    // Reset others (simplified demo logic)
+                    slots.forEach(s => {
+                        if (!s.classList.contains('cursor-not-allowed') && s !== slot) {
+                           // Keep the 'held' and 'selected' styling for demo visualization
+                        }
+                    });
+                    // This is where real state management would go
+                    console.log('Slot clicked:', slot.querySelector('.text-label-bold')?.innerText);
+                });
+            }
+        });
+
+        // Sticky observer for sidebar to ensure it doesn't overlap footer
+        window.addEventListener('scroll', () => {
+            const footer = document.querySelector('footer');
+            const aside = document.querySelector('aside');
+            const footerRect = footer.getBoundingClientRect();
+            if (footerRect.top < window.innerHeight) {
+                aside.style.bottom = (window.innerHeight - footerRect.top) + 'px';
+            } else {
+                aside.style.bottom = 'auto';
+            }
+        });
+    </script>
+</body></html>

@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Booking Confirmation - Turf Management</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@400;600;700&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .success-checkmark-anim {
+            animation: scaleIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+        @keyframes scaleIn {
+            0% { transform: scale(0); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(8px);
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-tertiary-fixed-variant": "#414754",
+                      "on-surface": "#181c1e",
+                      "secondary-fixed": "#ffdcbf",
+                      "outline": "#6f7a6e",
+                      "on-primary": "#ffffff",
+                      "surface-container-lowest": "#ffffff",
+                      "surface-container-high": "#e5e9eb",
+                      "primary-fixed-dim": "#75dc8b",
+                      "secondary-container": "#fe9400",
+                      "surface-container-low": "#f1f4f6",
+                      "primary-container": "#148641",
+                      "surface-container-highest": "#e0e3e5",
+                      "surface-dim": "#d7dadc",
+                      "on-secondary-fixed": "#2d1600",
+                      "surface-variant": "#e0e3e5",
+                      "secondary-fixed-dim": "#ffb874",
+                      "background": "#f7fafc",
+                      "on-tertiary-fixed": "#161c27",
+                      "on-surface-variant": "#3f4a3f",
+                      "on-secondary-fixed-variant": "#6a3b00",
+                      "error-container": "#ffdad6",
+                      "error": "#ba1a1a",
+                      "on-tertiary-container": "#fefcff",
+                      "on-primary-fixed-variant": "#005323",
+                      "tertiary": "#565c6a",
+                      "tertiary-container": "#6f7483",
+                      "on-tertiary": "#ffffff",
+                      "primary": "#006b30",
+                      "on-secondary": "#ffffff",
+                      "on-primary-container": "#f7fff3",
+                      "surface": "#f7fafc",
+                      "on-primary-fixed": "#00210a",
+                      "surface-container": "#ebeef0",
+                      "inverse-primary": "#75dc8b",
+                      "on-error-container": "#93000a",
+                      "tertiary-fixed": "#dde2f3",
+                      "on-error": "#ffffff",
+                      "secondary": "#8c5000",
+                      "inverse-surface": "#2d3133",
+                      "surface-tint": "#006d31",
+                      "outline-variant": "#becabb",
+                      "on-background": "#181c1e",
+                      "tertiary-fixed-dim": "#c1c6d7",
+                      "surface-bright": "#f7fafc",
+                      "primary-fixed": "#91f9a5",
+                      "on-secondary-container": "#633700",
+                      "inverse-on-surface": "#eef1f3"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "md": "16px",
+                      "margin-mobile": "16px",
+                      "base": "4px",
+                      "sm": "8px",
+                      "lg": "24px",
+                      "xl": "32px",
+                      "margin-desktop": "40px",
+                      "xs": "4px",
+                      "gutter": "16px"
+              },
+              "fontFamily": {
+                      "headline-sm": ["Archivo Narrow"],
+                      "label-bold": ["Inter"],
+                      "display-lg-mobile": ["Archivo Narrow"],
+                      "body-md": ["Inter"],
+                      "body-lg": ["Inter"],
+                      "display-lg": ["Archivo Narrow"],
+                      "headline-md": ["Archivo Narrow"],
+                      "label-sm": ["Inter"]
+              },
+              "fontSize": {
+                      "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                      "label-bold": ["14px", {"lineHeight": "20px", "letterSpacing": "0.02em", "fontWeight": "600"}],
+                      "display-lg-mobile": ["32px", {"lineHeight": "38px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                      "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                      "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                      "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                      "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "500"}]
+              }
+            },
+          },
+        }
+      </script>
+</head>
+<body class="bg-background text-on-surface font-body-md min-h-screen flex flex-col">
+<!-- TopNavBar -->
+<header class="bg-surface-container-low dark:bg-on-surface shadow-sm docked full-width top-0 z-50">
+<nav class="flex justify-between items-center w-full px-margin-desktop max-w-7xl mx-auto h-16">
+<div class="flex items-center gap-xl">
+<span class="font-headline-md text-headline-md font-bold text-primary dark:text-primary-fixed-dim">Turf Management</span>
+<div class="hidden md:flex gap-lg">
+<a class="text-on-surface-variant dark:text-outline-variant font-label-bold text-label-bold hover:text-primary dark:hover:text-primary-fixed transition-colors duration-200" href="#">Home</a>
+<a class="text-on-surface-variant dark:text-outline-variant font-label-bold text-label-bold hover:text-primary dark:hover:text-primary-fixed transition-colors duration-200" href="#">Venues</a>
+<a class="text-on-surface-variant dark:text-outline-variant font-label-bold text-label-bold hover:text-primary dark:hover:text-primary-fixed transition-colors duration-200" href="#">Schedule</a>
+<a class="text-primary dark:text-primary-fixed-dim border-b-2 border-primary font-bold pb-1" href="#">My Bookings</a>
+</div>
+</div>
+<div class="flex items-center gap-md">
+<button class="hidden lg:block text-primary dark:text-primary-fixed-dim font-label-bold px-md py-sm hover:bg-primary/5 rounded-lg transition-all">Support</button>
+<button class="bg-primary text-on-primary font-headline-sm px-lg py-sm rounded-lg shadow-sm hover:scale-[1.02] active:scale-95 transition-all">Book Now</button>
+<img class="w-10 h-10 rounded-full border-2 border-primary shadow-sm cursor-pointer" data-alt="A professional headshot of a user with a clean, high-contrast background. The lighting is bright and modern, matching the sporty energetic brand aesthetic. The individual is smiling confidently, reflecting the trustworthy and reliable personality of the platform. Soft ambient shadows provide depth to the profile image." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCm2auEWQKOHA-6fhlt1Hsc2lZZ3NPTKsvlCdHGO5ZBIk6cv0CheowyYWjhSrioFQKZboJcBe2uSwp1NzXvrdFkNXtv20QZG4lWmyEgSrsP7jeo98NV8xYWELuVwN7Canj-7MwU4O8maa6DupWeYux3PANWie576tBWYD2Gtea_sUESPGRd5WekjaQ_Sf2KN7tTQEKS4yEVIZYc3CvnqV6NzEWHakET7Xt-2bpHjkCSVJgeUv8hoUbC"/>
+</div>
+</nav>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-grow flex flex-col items-center justify-center px-margin-mobile md:px-margin-desktop py-xl">
+<!-- Step Tracker (Minimalist) -->
+<div class="w-full max-w-3xl mb-xl">
+<div class="flex items-center justify-between relative">
+<div class="absolute top-1/2 left-0 w-full h-0.5 bg-surface-container-high -z-10"></div>
+<div class="absolute top-1/2 left-0 w-full h-0.5 bg-primary -z-10 origin-left transition-all duration-1000" style="transform: scaleX(1);"></div>
+<div class="bg-primary text-on-primary w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm">1</div>
+<div class="bg-primary text-on-primary w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm">2</div>
+<div class="bg-primary text-on-primary w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-4 border-white">
+<span class="material-symbols-outlined text-sm" style="font-variation-settings: 'wght' 700">check</span>
+</div>
+</div>
+<div class="flex justify-between mt-sm px-1">
+<span class="text-label-sm font-label-bold text-on-surface-variant">Selection</span>
+<span class="text-label-sm font-label-bold text-on-surface-variant">Payment</span>
+<span class="text-label-sm font-label-bold text-primary">Confirmed</span>
+</div>
+</div>
+<!-- Success Header -->
+<div class="text-center mb-xl">
+<div class="inline-flex items-center justify-center w-20 h-20 bg-primary-container rounded-full mb-md success-checkmark-anim shadow-lg">
+<span class="material-symbols-outlined text-on-primary-container text-5xl" style="font-variation-settings: 'FILL' 1, 'wght' 700">check_circle</span>
+</div>
+<h1 class="font-display-lg text-display-lg text-on-surface mb-xs">Booking Confirmed!</h1>
+<p class="text-body-lg text-on-surface-variant">Your reservation at Elite Sports Complex is secured.</p>
+<div class="mt-md inline-block px-lg py-sm bg-surface-container-high rounded-full font-label-bold text-on-surface">
+                Reference: <span class="text-primary font-bold">TM-882941X</span>
+</div>
+</div>
+<!-- Detailed Booking Card -->
+<div class="w-full max-w-4xl grid md:grid-cols-2 gap-lg bg-surface-container-lowest rounded-xl shadow-[0px_4px_20px_rgba(0,0,0,0.05)] overflow-hidden border border-outline-variant">
+<!-- Details Column -->
+<div class="p-lg flex flex-col justify-between">
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface mb-lg">Venue Details</h2>
+<div class="space-y-md">
+<div class="flex items-start gap-md">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1">stadium</span>
+<div>
+<p class="font-label-bold text-label-bold text-on-surface">Elite Sports Complex</p>
+<p class="text-label-sm text-on-surface-variant">Premium Indoor Turf - Court 4</p>
+</div>
+</div>
+<div class="flex items-start gap-md">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1">calendar_today</span>
+<div>
+<p class="font-label-bold text-label-bold text-on-surface">Saturday, Oct 12, 2024</p>
+<p class="text-label-sm text-on-surface-variant">06:00 PM - 08:00 PM (2 Hours)</p>
+</div>
+</div>
+<div class="flex items-start gap-md">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1">location_on</span>
+<div>
+<p class="font-label-bold text-label-bold text-on-surface">West Side Sports District</p>
+<p class="text-label-sm text-on-surface-variant">8800 Olympic Blvd, Los Angeles, CA</p>
+</div>
+</div>
+<div class="flex items-start gap-md">
+<span class="material-symbols-outlined text-secondary" style="font-variation-settings: 'FILL' 1">payments</span>
+<div>
+<p class="font-label-bold text-label-bold text-on-surface">$120.00 Total</p>
+<p class="text-label-sm text-on-surface-variant">Paid via Visa ending in 4422</p>
+</div>
+</div>
+</div>
+</div>
+<div class="mt-xl pt-lg border-t border-outline-variant flex flex-wrap gap-sm">
+<button class="flex items-center gap-xs bg-surface-container-high hover:bg-surface-dim text-on-surface font-label-bold py-sm px-md rounded-lg transition-all active:scale-95">
+<span class="material-symbols-outlined text-[20px]">calendar_add_on</span>
+                        Add to Calendar
+                    </button>
+<button class="flex items-center gap-xs bg-surface-container-high hover:bg-surface-dim text-on-surface font-label-bold py-sm px-md rounded-lg transition-all active:scale-95">
+<span class="material-symbols-outlined text-[20px]">print</span>
+                        Print Receipt
+                    </button>
+</div>
+</div>
+<!-- Map Column -->
+<div class="relative h-64 md:h-auto min-h-[300px]">
+<div class="absolute inset-0 bg-cover bg-center grayscale-[0.5] hover:grayscale-0 transition-all duration-500" data-alt="A clean, high-contrast map view of the West Side Sports District in Los Angeles. The map uses a minimalist, modern aesthetic with soft greens for parks and sharp grays for roads. A prominent Turf Green location pin marks the Elite Sports Complex. The lighting of the map feels bright and daytime-oriented, ensuring clear legibility and professional-grade reliability." data-location="Los Angeles" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuC6vyZ63tyRn0YcPbNOcTDBphhVpVaYNoE9O5NQsqX-YAUowtTRit3hDHa_UwK6rWxJHuYm0TRVeIzQkfBGSjzvmJouB7SNSeeyWAv7IvWNf_lS-NabbK46d1ifRX3ZgNST8y8HmxcooDKA8DbLDRjXL3fP3t3gc3kEfMoaJtbChmm9DzbS9Fdy6Vj3Yfy-SHaTQRPXDfTF6Iemx6wnhFw_iTeKCU0Qch4ZEyuACsB1bnYaRv1igpom')">
+</div>
+<!-- Glass Overlay Info -->
+<div class="absolute bottom-md left-md right-md glass-card p-md rounded-lg shadow-lg border border-white/20">
+<div class="flex items-center justify-between">
+<div>
+<p class="font-label-bold text-on-surface">Arrival Guide</p>
+<p class="text-label-sm text-on-surface-variant">Entrance B - Free Parking</p>
+</div>
+<button class="bg-primary text-on-primary p-2 rounded-full hover:shadow-md transition-shadow">
+<span class="material-symbols-outlined">directions</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Secondary Actions -->
+<div class="mt-xl flex flex-col items-center gap-md">
+<button class="flex items-center gap-sm bg-primary text-on-primary font-headline-sm px-xl py-md rounded-lg shadow-md hover:shadow-xl hover:scale-[1.02] active:scale-95 transition-all" onclick="window.location.href='#'">
+<span class="material-symbols-outlined">home</span>
+                Back to Home
+            </button>
+<p class="text-label-sm text-on-surface-variant">A confirmation email has been sent to user@example.com</p>
+</div>
+</main>
+<!-- Footer -->
+<footer class="bg-surface-container-highest dark:bg-on-tertiary-fixed-variant mt-auto">
+<div class="flex flex-col md:flex-row justify-between items-center w-full py-xl px-margin-desktop max-w-7xl mx-auto">
+<div class="mb-lg md:mb-0">
+<span class="font-headline-sm text-headline-sm font-bold text-on-surface dark:text-surface-bright">Turf Management</span>
+<p class="text-body-md text-on-surface-variant dark:text-outline-variant mt-xs">© 2024 Turf Management - by Codiva. All rights reserved.</p>
+</div>
+<div class="flex flex-wrap justify-center gap-lg">
+<a class="text-on-surface-variant dark:text-outline-variant hover:text-primary dark:hover:text-primary-fixed-dim underline transition-all font-body-md" href="#">Support</a>
+<a class="text-on-surface-variant dark:text-outline-variant hover:text-primary dark:hover:text-primary-fixed-dim underline transition-all font-body-md" href="#">Privacy Policy</a>
+<a class="text-on-surface-variant dark:text-outline-variant hover:text-primary dark:hover:text-primary-fixed-dim underline transition-all font-body-md" href="#">Terms of Service</a>
+<a class="text-on-surface-variant dark:text-outline-variant hover:text-primary dark:hover:text-primary-fixed-dim underline transition-all font-body-md" href="#">Partner with Us</a>
+<a class="text-on-surface-variant dark:text-outline-variant hover:text-primary dark:hover:text-primary-fixed-dim underline transition-all font-body-md" href="#">Contact Us</a>
+</div>
+</div>
+</footer>
+<script>
+        // Micro-interaction for buttons
+        document.querySelectorAll('button').forEach(button => {
+            button.addEventListener('mousedown', () => {
+                button.classList.add('scale-95');
+            });
+            button.addEventListener('mouseup', () => {
+                button.classList.remove('scale-95');
+            });
+            button.addEventListener('mouseleave', () => {
+                button.classList.remove('scale-95');
+            });
+        });
+    </script>
+</body></html>

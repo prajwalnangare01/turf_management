@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Contact Details - Turf Management</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@400;600;700&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "tertiary-fixed-dim": "#c1c6d7",
+                    "surface-tint": "#006d31",
+                    "surface-container-lowest": "#ffffff",
+                    "on-tertiary-fixed": "#161c27",
+                    "tertiary": "#565c6a",
+                    "primary-fixed": "#91f9a5",
+                    "inverse-primary": "#75dc8b",
+                    "primary-container": "#148641",
+                    "on-secondary-fixed-variant": "#6a3b00",
+                    "on-primary-container": "#f7fff3",
+                    "tertiary-container": "#6f7483",
+                    "on-error": "#ffffff",
+                    "surface-container": "#ebeef0",
+                    "surface-container-highest": "#e0e3e5",
+                    "on-primary": "#ffffff",
+                    "surface-container-high": "#e5e9eb",
+                    "background": "#f7fafc",
+                    "on-tertiary-fixed-variant": "#414754",
+                    "surface-dim": "#d7dadc",
+                    "on-secondary-container": "#633700",
+                    "surface-bright": "#f7fafc",
+                    "error-container": "#ffdad6",
+                    "on-tertiary": "#ffffff",
+                    "secondary-fixed": "#ffdcbf",
+                    "surface-container-low": "#f1f4f6",
+                    "inverse-on-surface": "#eef1f3",
+                    "secondary-container": "#fe9400",
+                    "on-error-container": "#93000a",
+                    "outline": "#6f7a6e",
+                    "on-tertiary-container": "#fefcff",
+                    "secondary-fixed-dim": "#ffb874",
+                    "on-surface-variant": "#3f4a3f",
+                    "on-primary-fixed": "#00210a",
+                    "on-secondary-fixed": "#2d1600",
+                    "primary": "#006b30",
+                    "on-secondary": "#ffffff",
+                    "outline-variant": "#becabb",
+                    "inverse-surface": "#2d3133",
+                    "tertiary-fixed": "#dde2f3",
+                    "secondary": "#8c5000",
+                    "on-background": "#181c1e",
+                    "on-primary-fixed-variant": "#005323",
+                    "error": "#ba1a1a",
+                    "surface-variant": "#e0e3e5",
+                    "on-surface": "#181c1e",
+                    "surface": "#f7fafc",
+                    "primary-fixed-dim": "#75dc8b"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "sm": "8px",
+                    "gutter": "16px",
+                    "margin-desktop": "40px",
+                    "md": "16px",
+                    "xl": "32px",
+                    "lg": "24px",
+                    "base": "4px",
+                    "margin-mobile": "16px",
+                    "xs": "4px"
+            },
+            "fontFamily": {
+                    "headline-sm": ["Archivo Narrow"],
+                    "headline-md": ["Archivo Narrow"],
+                    "display-lg-mobile": ["Archivo Narrow"],
+                    "display-lg": ["Archivo Narrow"],
+                    "label-sm": ["Inter"],
+                    "body-lg": ["Inter"],
+                    "label-bold": ["Inter"],
+                    "body-md": ["Inter"]
+            },
+            "fontSize": {
+                    "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                    "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                    "display-lg-mobile": ["32px", {"lineHeight": "38px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                    "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "500"}],
+                    "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                    "label-bold": ["14px", {"lineHeight": "20px", "letterSpacing": "0.02em", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      }
+      body {
+        -webkit-tap-highlight-color: transparent;
+      }
+      .booking-progress-line {
+        transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface font-body-md min-h-screen flex flex-col">
+<!-- Top Navigation Shell (Sub-page: Back action implies temporary departure) -->
+<nav class="fixed top-0 w-full z-50 bg-surface shadow-sm h-16 flex items-center justify-between px-margin-mobile">
+<div class="flex items-center gap-4">
+<button aria-label="Go back" class="p-2 -ml-2 transition-colors duration-200 hover:bg-surface-container rounded-full">
+<span class="material-symbols-outlined text-on-surface">arrow_back</span>
+</button>
+<h1 class="font-headline-sm text-headline-sm text-on-surface">Contact Details</h1>
+</div>
+<div class="flex items-center">
+<span class="material-symbols-outlined text-primary" data-icon="sports_soccer">sports_soccer</span>
+</div>
+</nav>
+<!-- Progress Tracker (Top) -->
+<div class="fixed top-16 w-full h-1 bg-surface-container z-40">
+<div class="booking-progress-line h-full bg-primary" style="width: 66%;"></div>
+</div>
+<!-- Main Content Canvas -->
+<main class="flex-grow pt-24 pb-32 px-margin-mobile max-w-xl mx-auto w-full">
+<!-- Urgency Countdown Badge -->
+<section class="mb-lg animate-pulse">
+<div class="bg-secondary-container text-on-secondary-container rounded-xl p-md flex items-center justify-between shadow-sm border border-secondary">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">timer</span>
+<span class="font-label-bold text-label-bold">Slot held for <span id="countdown">04:32</span></span>
+</div>
+<div class="h-2 w-16 bg-on-secondary-container/20 rounded-full overflow-hidden">
+<div class="h-full bg-on-secondary-container" id="countdown-bar" style="width: 90%;"></div>
+</div>
+</div>
+</section>
+<!-- Booking Summary Card (Bento Style) -->
+<section class="mb-lg">
+<div class="bg-surface-container-lowest rounded-xl shadow-[0px_4px_20px_rgba(0,0,0,0.05)] overflow-hidden border border-outline-variant">
+<div class="flex flex-col md:flex-row">
+<div class="md:w-1/3 h-32 md:h-auto overflow-hidden">
+<div class="w-full h-full bg-cover bg-center" data-alt="A professional floodlit synthetic turf football pitch at sunset. The vibrant green grass creates a high-contrast energetic mood against the deep blue sky. Soft ambient lighting from the stadium towers reflects off the surface, emphasizing a premium sports venue aesthetic." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuA7rsMD5r4u_q3Noyp-dccJn00MEMWiGZEUl45Yqsk6UGSyuvVPeu2u0SCAeg7fY0-A_lJekPHSQLwhQmh3LQPvBbg2Zvj01cBhR4-y-I_8V1-O6fLEn0dVs6X1z1q7qGgduCtxTfegkA3EjaIUk3M9aTepX3zSIUcZ-ng3ClKVbf_oObFs3BwhXOmZ12rlcs3wFM178pYd8ficGiJPdJ5sxrQz32UtFeNb_9BdnU96nOCkwR44GuVj')"></div>
+</div>
+<div class="p-md md:w-2/3">
+<div class="flex justify-between items-start mb-base">
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Wembley Elite Arena</h2>
+<span class="bg-secondary-container text-on-secondary-container font-label-bold text-label-sm px-2 py-0.5 rounded">£45/hr</span>
+</div>
+<div class="flex flex-wrap gap-md mt-sm">
+<div class="flex items-center gap-xs text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px]">calendar_today</span>
+<span class="font-label-sm text-label-sm">Oct 24, 2023</span>
+</div>
+<div class="flex items-center gap-xs text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px]">schedule</span>
+<span class="font-label-sm text-label-sm">18:00 - 19:00</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Contact Form -->
+<section class="space-y-lg">
+<div>
+<label class="block font-label-bold text-label-bold text-on-surface mb-sm" for="full-name">
+                    Full Name
+                </label>
+<div class="relative">
+<span class="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-outline">person</span>
+<input class="w-full pl-12 pr-4 py-4 bg-surface-container-lowest border border-outline-variant rounded-xl focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all font-body-md text-on-surface placeholder:text-outline-variant" id="full-name" placeholder="Enter your full name" type="text"/>
+</div>
+</div>
+<div>
+<label class="block font-label-bold text-label-bold text-on-surface mb-sm" for="phone-number">
+                    Phone Number
+                </label>
+<div class="relative">
+<span class="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-outline">call</span>
+<input class="w-full pl-12 pr-4 py-4 bg-surface-container-lowest border border-outline-variant rounded-xl focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all font-body-md text-on-surface placeholder:text-outline-variant" id="phone-number" placeholder="+44 7000 000 000" type="tel"/>
+</div>
+<p class="mt-base text-label-sm text-on-surface-variant ml-base">We'll send your booking confirmation via SMS.</p>
+</div>
+<div class="pt-sm">
+<div class="flex items-start gap-md p-md bg-surface-container rounded-xl border border-outline-variant">
+<div class="mt-1">
+<input class="w-5 h-5 rounded border-outline text-primary focus:ring-primary" id="terms" type="checkbox"/>
+</div>
+<label class="font-label-sm text-label-sm text-on-surface-variant" for="terms">
+                        I agree to the <span class="text-primary font-semibold">Terms of Service</span> and <span class="text-primary font-semibold">Privacy Policy</span>. I understand that cancellations made within 24 hours of the slot are non-refundable.
+                    </label>
+</div>
+</div>
+</section>
+</main>
+<!-- Bottom Sticky CTA -->
+<div class="fixed bottom-0 w-full bg-surface-container-lowest shadow-[0px_-8px_30px_rgba(0,0,0,0.08)] border-t border-outline-variant px-margin-mobile py-lg z-50">
+<div class="max-w-xl mx-auto flex items-center justify-between gap-lg">
+<div class="hidden md:block">
+<p class="text-label-sm text-on-surface-variant">Total Amount</p>
+<p class="font-headline-sm text-headline-sm text-on-surface">£45.00</p>
+</div>
+<button class="flex-grow h-14 bg-secondary-container text-on-secondary-container font-headline-sm text-headline-sm rounded-xl flex items-center justify-center gap-sm active:scale-95 transition-transform shadow-lg" id="btn-continue">
+                Continue
+                <span class="material-symbols-outlined">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- Background Atmospheric Effect -->
+<div class="fixed inset-0 -z-10 pointer-events-none opacity-20">
+<div class="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-primary rounded-full blur-[120px]"></div>
+<div class="absolute bottom-[-10%] left-[-10%] w-[400px] h-[400px] bg-secondary-fixed-dim rounded-full blur-[100px]"></div>
+</div>
+<script>
+        // Micro-interactions and Countdown Logic
+        document.addEventListener('DOMContentLoaded', () => {
+            const countdownEl = document.getElementById('countdown');
+            const countdownBar = document.getElementById('countdown-bar');
+            let totalSeconds = (4 * 60) + 32;
+            const initialSeconds = totalSeconds;
+
+            const timer = setInterval(() => {
+                totalSeconds--;
+                if (totalSeconds <= 0) {
+                    clearInterval(timer);
+                    countdownEl.textContent = "00:00";
+                    return;
+                }
+
+                const mins = Math.floor(totalSeconds / 60);
+                const secs = totalSeconds % 60;
+                countdownEl.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                
+                const percentage = (totalSeconds / initialSeconds) * 100;
+                countdownBar.style.width = `${percentage}%`;
+                
+                if (totalSeconds < 60) {
+                    countdownBar.classList.remove('bg-on-secondary-container');
+                    countdownBar.classList.add('bg-error');
+                }
+            }, 1000);
+
+            // Button interaction
+            const btn = document.getElementById('btn-continue');
+            btn.addEventListener('click', function() {
+                this.innerHTML = `<span class="material-symbols-outlined animate-spin">progress_activity</span> Processing...`;
+                setTimeout(() => {
+                    this.innerHTML = `Continue <span class="material-symbols-outlined">arrow_forward</span>`;
+                }, 2000);
+            });
+
+            // Form focus effects
+            const inputs = document.querySelectorAll('input');
+            inputs.forEach(input => {
+                input.addEventListener('focus', () => {
+                    input.parentElement.querySelector('.material-symbols-outlined').style.color = '#006b30';
+                });
+                input.addEventListener('blur', () => {
+                    input.parentElement.querySelector('.material-symbols-outlined').style.color = '#6f7a6e';
+                });
+            });
+        });
+    </script>
+</body></html>

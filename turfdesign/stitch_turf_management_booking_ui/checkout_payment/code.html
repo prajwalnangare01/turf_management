@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Checkout | Turf Management</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@400;600;700&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-tertiary-fixed-variant": "#414754",
+                    "on-surface": "#181c1e",
+                    "secondary-fixed": "#ffdcbf",
+                    "outline": "#6f7a6e",
+                    "on-primary": "#ffffff",
+                    "surface-container-lowest": "#ffffff",
+                    "surface-container-high": "#e5e9eb",
+                    "primary-fixed-dim": "#75dc8b",
+                    "secondary-container": "#fe9400",
+                    "surface-container-low": "#f1f4f6",
+                    "primary-container": "#148641",
+                    "surface-container-highest": "#e0e3e5",
+                    "surface-dim": "#d7dadc",
+                    "on-secondary-fixed": "#2d1600",
+                    "surface-variant": "#e0e3e5",
+                    "secondary-fixed-dim": "#ffb874",
+                    "background": "#f7fafc",
+                    "on-tertiary-fixed": "#161c27",
+                    "on-surface-variant": "#3f4a3f",
+                    "on-secondary-fixed-variant": "#6a3b00",
+                    "error-container": "#ffdad6",
+                    "error": "#ba1a1a",
+                    "on-tertiary-container": "#fefcff",
+                    "on-primary-fixed-variant": "#005323",
+                    "tertiary": "#565c6a",
+                    "tertiary-container": "#6f7483",
+                    "on-tertiary": "#ffffff",
+                    "primary": "#006b30",
+                    "on-secondary": "#ffffff",
+                    "on-primary-container": "#f7fff3",
+                    "surface": "#f7fafc",
+                    "on-primary-fixed": "#00210a",
+                    "surface-container": "#ebeef0",
+                    "inverse-primary": "#75dc8b",
+                    "on-error-container": "#93000a",
+                    "tertiary-fixed": "#dde2f3",
+                    "on-error": "#ffffff",
+                    "secondary": "#8c5000",
+                    "inverse-surface": "#2d3133",
+                    "surface-tint": "#006d31",
+                    "outline-variant": "#becabb",
+                    "on-background": "#181c1e",
+                    "tertiary-fixed-dim": "#c1c6d7",
+                    "surface-bright": "#f7fafc",
+                    "primary-fixed": "#91f9a5",
+                    "on-secondary-container": "#633700",
+                    "inverse-on-surface": "#eef1f3"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "md": "16px",
+                    "margin-mobile": "16px",
+                    "base": "4px",
+                    "sm": "8px",
+                    "lg": "24px",
+                    "xl": "32px",
+                    "margin-desktop": "40px",
+                    "xs": "4px",
+                    "gutter": "16px"
+            },
+            "fontFamily": {
+                    "headline-sm": ["Archivo Narrow"],
+                    "label-bold": ["Inter"],
+                    "display-lg-mobile": ["Archivo Narrow"],
+                    "body-md": ["Inter"],
+                    "body-lg": ["Inter"],
+                    "display-lg": ["Archivo Narrow"],
+                    "headline-md": ["Archivo Narrow"],
+                    "label-sm": ["Inter"]
+            },
+            "fontSize": {
+                    "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                    "label-bold": ["14px", {"lineHeight": "20px", "letterSpacing": "0.02em", "fontWeight": "600"}],
+                    "display-lg-mobile": ["32px", {"lineHeight": "38px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                    "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                    "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "500"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .countdown-pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .7; }
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(226, 232, 240, 1);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body-md min-h-screen flex flex-col">
+<!-- TopNavBar -->
+<header class="bg-surface-container-low dark:bg-on-surface shadow-sm sticky top-0 z-50">
+<div class="flex justify-between items-center w-full px-margin-desktop max-w-7xl mx-auto h-16">
+<div class="flex items-center gap-xl">
+<span class="font-headline-md text-headline-md font-bold text-primary dark:text-primary-fixed-dim">Turf Management</span>
+<nav class="hidden md:flex items-center gap-lg">
+<a class="text-on-surface-variant dark:text-outline-variant font-label-bold text-label-bold hover:text-primary dark:hover:text-primary-fixed transition-colors duration-200" href="#">Home</a>
+<a class="text-on-surface-variant dark:text-outline-variant font-label-bold text-label-bold hover:text-primary dark:hover:text-primary-fixed transition-colors duration-200" href="#">Venues</a>
+<a class="text-on-surface-variant dark:text-outline-variant font-label-bold text-label-bold hover:text-primary dark:hover:text-primary-fixed transition-colors duration-200" href="#">Schedule</a>
+<a class="text-on-surface-variant dark:text-outline-variant font-label-bold text-label-bold hover:text-primary dark:hover:text-primary-fixed transition-colors duration-200" href="#">My Bookings</a>
+</nav>
+</div>
+<div class="flex items-center gap-md">
+<button class="hidden md:block text-on-surface-variant font-label-bold text-label-bold hover:text-primary transition-all">Support</button>
+<button class="bg-primary-container text-on-primary-container px-lg py-sm rounded-lg font-label-bold text-label-bold hover:opacity-90 transition-all Active:scale-95">Book Now</button>
+<div class="w-10 h-10 rounded-full bg-surface-container-high overflow-hidden border border-outline-variant">
+<img class="w-full h-full object-cover" data-alt="A professional headshot of a sporty person wearing a sleek, athletic quarter-zip jacket. The background is a blurred high-end sports complex with turf green and clean white architecture. Lighting is bright and natural, emphasizing a high-contrast, energetic, and corporate modern aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDXPLMwTWJKJqnOgsCUEyJmFkgGRoy05wOYJR94q1YwUEKFT6CuB3rXAEgiFToFy30C3lcQYLsZzTI1eHFYiWKN7j-tfYjlBVykJ0PRom8wqoF0RZ9iLdI3zg9HWsZPq94bIisL-sV1E0FrYVCmhyRw16VF96i8xnJAv11pfVun8ZHIqjEz0uCCus7WJhSW2ENqp6CGMPVRBVsaM0pmEVNhrQuYvtWDXC75vgQ16t2QjS7xutmuh-MN"/>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-grow w-full max-w-7xl mx-auto px-margin-desktop py-xl">
+<!-- Step Tracker -->
+<div class="w-full max-w-2xl mx-auto mb-xl">
+<div class="flex items-center justify-between mb-sm">
+<span class="text-primary font-label-bold text-label-bold uppercase">Details</span>
+<span class="text-on-surface-variant font-label-bold text-label-bold uppercase">Payment</span>
+<span class="text-outline-variant font-label-bold text-label-bold uppercase">Confirm</span>
+</div>
+<div class="h-1 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary w-1/2 transition-all duration-500"></div>
+</div>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-xl items-start">
+<!-- Left Column: Checkout Form & Countdown -->
+<div class="lg:col-span-7 space-y-lg">
+<!-- Countdown Timer -->
+<div class="bg-primary-container/10 border border-primary/20 rounded-xl p-md flex items-center justify-between">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">timer</span>
+<span class="font-label-bold text-label-bold text-primary">Your slot is held for you</span>
+</div>
+<div class="font-headline-sm text-headline-sm text-primary countdown-pulse" id="countdown">09:59</div>
+</div>
+<!-- Contact Details Section -->
+<section class="glass-card rounded-xl p-xl shadow-[0px_4px_20px_rgba(0,0,0,0.05)]">
+<h2 class="font-headline-sm text-headline-sm mb-lg flex items-center gap-sm">
+<span class="material-symbols-outlined text-primary">person</span>
+                        Contact Details
+                    </h2>
+<form class="space-y-md">
+<div class="grid grid-cols-1 md:grid-cols-2 gap-md">
+<div class="flex flex-col gap-xs">
+<label class="font-label-bold text-label-bold text-on-surface-variant">First Name</label>
+<input class="w-full bg-white border-outline-variant rounded-lg p-md focus:ring-2 focus:ring-primary focus:border-primary transition-all" placeholder="e.g. Michael" type="text"/>
+</div>
+<div class="flex flex-col gap-xs">
+<label class="font-label-bold text-label-bold text-on-surface-variant">Last Name</label>
+<input class="w-full bg-white border-outline-variant rounded-lg p-md focus:ring-2 focus:ring-primary focus:border-primary transition-all" placeholder="e.g. Jordan" type="text"/>
+</div>
+</div>
+<div class="flex flex-col gap-xs">
+<label class="font-label-bold text-label-bold text-on-surface-variant">Email Address</label>
+<input class="w-full bg-white border-outline-variant rounded-lg p-md focus:ring-2 focus:ring-primary focus:border-primary transition-all" placeholder="michael@example.com" type="email"/>
+</div>
+<div class="flex flex-col gap-xs">
+<label class="font-label-bold text-label-bold text-on-surface-variant">Phone Number</label>
+<div class="flex gap-sm">
+<select class="w-24 bg-white border-outline-variant rounded-lg p-md focus:ring-2 focus:ring-primary">
+<option>+1</option>
+<option>+44</option>
+<option>+91</option>
+</select>
+<input class="flex-grow bg-white border-outline-variant rounded-lg p-md focus:ring-2 focus:ring-primary focus:border-primary transition-all" placeholder="555-0123" type="tel"/>
+</div>
+</div>
+</form>
+</section>
+<!-- Additional Information -->
+<section class="glass-card rounded-xl p-xl shadow-[0px_4px_20px_rgba(0,0,0,0.05)]">
+<h2 class="font-headline-sm text-headline-sm mb-lg flex items-center gap-sm">
+<span class="material-symbols-outlined text-primary">description</span>
+                        Special Requirements
+                    </h2>
+<textarea class="w-full bg-white border-outline-variant rounded-lg p-md h-32 focus:ring-2 focus:ring-primary focus:border-primary transition-all" placeholder="e.g. Requesting extra water or specific equipment setup..."></textarea>
+</section>
+</div>
+<!-- Right Column: Booking Summary -->
+<div class="lg:col-span-5 sticky top-24">
+<div class="bg-white rounded-xl shadow-[0px_8px_30px_rgba(0,0,0,0.08)] overflow-hidden border border-outline-variant/30">
+<!-- Venue Image -->
+<div class="relative h-48 w-full">
+<div class="bg-cover bg-center w-full h-full" data-alt="A wide-angle, high-resolution shot of a professional indoor soccer arena with pristine emerald green turf. The ceiling is high with industrial steel beams and bright LED floodlights casting a clean, professional glow. The atmosphere is energetic and focused, with sharp architectural lines and vibrant colors consistent with a premium sports-tech brand." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuBLkvDZJvM0n1sFxMKrqAYB8c4oMFVXr17e0JnldzR_4l866Nyg-VIQXwTeMPmjoRJv4fJoqGd4ctX3CLsom8N5MwKEsBh2nQUrnkSgR7rAz4GhK1akCZnwjBv__vWkjUnWCy55q7fO7Kyda8oB2zAStd_EyqxwkevzgNv2Qn0I-XRsbeFrIRsmV4cQeapSLtyuIju9tw6edw1_x4RsnqHhHObLtFj0YhIArlL61ncO2dVrBTx4qV_b')"></div>
+<div class="absolute top-md right-md bg-secondary-container text-on-secondary-container font-label-bold text-label-bold px-md py-xs rounded-full shadow-lg">
+                            Confirmed Slot
+                        </div>
+</div>
+<!-- Summary Content -->
+<div class="p-xl space-y-lg">
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface">Elite Indoor Arena - Court 4</h3>
+<p class="text-on-surface-variant flex items-center gap-xs mt-xs">
+<span class="material-symbols-outlined text-sm">location_on</span>
+                                Downtown Sports Hub, Sector 12
+                            </p>
+</div>
+<div class="space-y-md bg-surface-container-low rounded-lg p-md">
+<div class="flex justify-between items-center">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-primary">calendar_today</span>
+<div>
+<p class="text-label-sm font-label-bold text-on-surface-variant uppercase tracking-wider">Date</p>
+<p class="font-label-bold text-on-surface">October 24, 2024</p>
+</div>
+</div>
+</div>
+<div class="flex justify-between items-center">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-primary">schedule</span>
+<div>
+<p class="text-label-sm font-label-bold text-on-surface-variant uppercase tracking-wider">Time</p>
+<p class="font-label-bold text-on-surface">18:00 - 19:30 (90 mins)</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Price Breakdown -->
+<div class="space-y-sm pt-md border-t border-outline-variant">
+<div class="flex justify-between text-on-surface-variant">
+<span>Base Price (90 mins)</span>
+<span>$75.00</span>
+</div>
+<div class="flex justify-between text-on-surface-variant">
+<span>Service Fee</span>
+<span>$4.50</span>
+</div>
+<div class="flex justify-between text-on-surface-variant">
+<span>Taxes (VAT 5%)</span>
+<span>$3.98</span>
+</div>
+<div class="flex justify-between items-center pt-md mt-md border-t border-outline-variant">
+<span class="font-headline-sm text-headline-sm">Total Amount</span>
+<span class="font-headline-md text-headline-md text-primary">$83.48</span>
+</div>
+</div>
+<!-- Payment CTA -->
+<button class="w-full bg-secondary-container hover:bg-secondary-container/90 text-on-secondary-container font-headline-sm text-headline-sm py-lg rounded-xl shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-md group">
+                            Pay Now
+                            <span class="material-symbols-outlined group-hover:translate-x-1 transition-transform">arrow_forward</span>
+</button>
+<p class="text-center text-label-sm text-on-surface-variant">
+                            By clicking "Pay Now" you agree to our <a class="underline hover:text-primary" href="#">Terms of Service</a>.
+                        </p>
+</div>
+</div>
+<!-- Trusted Badge -->
+<div class="mt-md flex items-center justify-center gap-md opacity-60">
+<div class="flex items-center gap-xs">
+<span class="material-symbols-outlined text-sm">lock</span>
+<span class="text-label-sm">Secure Payment</span>
+</div>
+<div class="w-px h-3 bg-outline-variant"></div>
+<div class="flex items-center gap-xs">
+<span class="material-symbols-outlined text-sm">verified_user</span>
+<span class="text-label-sm">Verified Vendor</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Footer -->
+<footer class="bg-surface-container-highest dark:bg-on-tertiary-fixed-variant mt-xl">
+<div class="flex flex-col md:flex-row justify-between items-center w-full py-xl px-margin-desktop max-w-7xl mx-auto gap-lg">
+<div class="flex flex-col gap-sm items-center md:items-start">
+<span class="font-headline-sm text-headline-sm font-bold text-on-surface dark:text-surface-bright">Turf Management</span>
+<p class="text-on-surface-variant dark:text-outline-variant text-body-md font-body-md">© 2024 Turf Management - by Codiva. All rights reserved.</p>
+</div>
+<div class="flex flex-wrap justify-center gap-lg">
+<a class="text-on-surface-variant dark:text-outline-variant hover:text-primary dark:hover:text-primary-fixed-dim underline transition-all font-body-md text-body-md" href="#">Support</a>
+<a class="text-on-surface-variant dark:text-outline-variant hover:text-primary dark:hover:text-primary-fixed-dim underline transition-all font-body-md text-body-md" href="#">Privacy Policy</a>
+<a class="text-on-surface-variant dark:text-outline-variant hover:text-primary dark:hover:text-primary-fixed-dim underline transition-all font-body-md text-body-md" href="#">Terms of Service</a>
+<a class="text-on-surface-variant dark:text-outline-variant hover:text-primary dark:hover:text-primary-fixed-dim underline transition-all font-body-md text-body-md" href="#">Partner with Us</a>
+<a class="text-on-surface-variant dark:text-outline-variant hover:text-primary dark:hover:text-primary-fixed-dim underline transition-all font-body-md text-body-md" href="#">Contact Us</a>
+</div>
+</div>
+</footer>
+<script>
+        // Micro-interaction: Countdown Timer
+        let timeLeft = 600; // 10 minutes in seconds
+        const countdownEl = document.getElementById('countdown');
+
+        function updateTimer() {
+            const minutes = Math.floor(timeLeft / 60);
+            const seconds = timeLeft % 60;
+            countdownEl.innerText = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            
+            if (timeLeft > 0) {
+                timeLeft--;
+            } else {
+                countdownEl.innerText = "EXPIRED";
+                countdownEl.classList.remove('text-primary');
+                countdownEl.classList.add('text-error');
+            }
+        }
+
+        setInterval(updateTimer, 1000);
+        updateTimer();
+
+        // Form Focus Effects
+        const inputs = document.querySelectorAll('input, select, textarea');
+        inputs.forEach(input => {
+            input.addEventListener('focus', () => {
+                input.parentElement.classList.add('text-primary');
+            });
+            input.addEventListener('blur', () => {
+                input.parentElement.classList.remove('text-primary');
+            });
+        });
+    </script>
+</body></html>

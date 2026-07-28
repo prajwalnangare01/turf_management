@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@400;600;700&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .success-checkmark-animation {
+            animation: scaleIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+        }
+        @keyframes scaleIn {
+            from { transform: scale(0); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+        .confetti {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            border-radius: 2px;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-fixed-dim": "#c1c6d7",
+                        "surface-tint": "#006d31",
+                        "surface-container-lowest": "#ffffff",
+                        "on-tertiary-fixed": "#161c27",
+                        "tertiary": "#565c6a",
+                        "primary-fixed": "#91f9a5",
+                        "inverse-primary": "#75dc8b",
+                        "primary-container": "#148641",
+                        "on-secondary-fixed-variant": "#6a3b00",
+                        "on-primary-container": "#f7fff3",
+                        "tertiary-container": "#6f7483",
+                        "on-error": "#ffffff",
+                        "surface-container": "#ebeef0",
+                        "surface-container-highest": "#e0e3e5",
+                        "on-primary": "#ffffff",
+                        "surface-container-high": "#e5e9eb",
+                        "background": "#f7fafc",
+                        "on-tertiary-fixed-variant": "#414754",
+                        "surface-dim": "#d7dadc",
+                        "on-secondary-container": "#633700",
+                        "surface-bright": "#f7fafc",
+                        "error-container": "#ffdad6",
+                        "on-tertiary": "#ffffff",
+                        "secondary-fixed": "#ffdcbf",
+                        "surface-container-low": "#f1f4f6",
+                        "inverse-on-surface": "#eef1f3",
+                        "secondary-fixed-dim": "#ffb874",
+                        "on-surface-variant": "#3f4a3f",
+                        "on-primary-fixed": "#00210a",
+                        "on-secondary-fixed": "#2d1600",
+                        "primary": "#006b30",
+                        "on-secondary": "#ffffff",
+                        "outline-variant": "#becabb",
+                        "inverse-surface": "#2d3133",
+                        "tertiary-fixed": "#dde2f3",
+                        "secondary": "#8c5000",
+                        "on-background": "#181c1e",
+                        "on-primary-fixed-variant": "#005323",
+                        "error": "#ba1a1a",
+                        "surface-variant": "#e0e3e5",
+                        "on-surface": "#181c1e",
+                        "surface": "#f7fafc",
+                        "primary-fixed-dim": "#75dc8b"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "sm": "8px",
+                        "gutter": "16px",
+                        "margin-desktop": "40px",
+                        "md": "16px",
+                        "xl": "32px",
+                        "lg": "24px",
+                        "base": "4px",
+                        "margin-mobile": "16px",
+                        "xs": "4px"
+                    },
+                    "fontFamily": {
+                        "headline-sm": ["Archivo Narrow"],
+                        "headline-md": ["Archivo Narrow"],
+                        "display-lg-mobile": ["Archivo Narrow"],
+                        "display-lg": ["Archivo Narrow"],
+                        "label-sm": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "label-bold": ["Inter"],
+                        "body-md": ["Inter"]
+                    },
+                    "fontSize": {
+                        "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                        "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                        "display-lg-mobile": ["32px", {"lineHeight": "38px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                        "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "500"}],
+                        "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                        "label-bold": ["14px", {"lineHeight": "20px", "letterSpacing": "0.02em", "fontWeight": "600"}],
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background font-body-md text-on-background min-h-screen pb-24 md:pb-0 flex flex-col items-center">
+<!-- Top AppBar (from JSON - hidden for success splash as per UX mandate, but here we include a simplified version for brand continuity if needed) -->
+<header class="fixed top-0 w-full z-50 bg-surface shadow-sm flex items-center justify-between px-margin-mobile h-16">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary" data-icon="sports_soccer">sports_soccer</span>
+<h1 class="font-headline-md text-headline-md font-bold text-primary">Turf Management</h1>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="account_circle">account_circle</span>
+</header>
+<main class="w-full max-w-lg mt-24 px-margin-mobile relative overflow-hidden">
+<!-- Confetti Container -->
+<div class="absolute inset-0 pointer-events-none" id="confetti-cannon"></div>
+<!-- Success Header -->
+<div class="flex flex-col items-center text-center mb-xl">
+<div class="w-24 h-24 bg-primary-container/20 rounded-full flex items-center justify-center mb-md success-checkmark-animation shadow-lg">
+<span class="material-symbols-outlined text-primary text-[48px]" data-icon="check_circle" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<h2 class="font-display-lg-mobile text-display-lg-mobile text-primary mb-xs">Booking Confirmed!</h2>
+<p class="text-on-surface-variant font-label-bold">Your slot at Wembley Central Turf is secured.</p>
+<div class="mt-md px-4 py-1 bg-surface-container-high rounded-full border border-outline-variant">
+<span class="text-label-sm font-label-bold text-on-surface-variant uppercase tracking-wider">Ref: TMF-9842-XP</span>
+</div>
+</div>
+<!-- Booking Summary Card -->
+<div class="bg-surface shadow-[0px_4px_20px_rgba(0,0,0,0.05)] rounded-xl overflow-hidden mb-lg">
+<div class="p-md border-b border-surface-container-highest">
+<h3 class="font-headline-sm text-headline-sm text-on-surface mb-xs">Summary Card</h3>
+<div class="flex items-center gap-2 text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px]" data-icon="calendar_today">calendar_today</span>
+<span class="font-label-bold">Saturday, Oct 14, 2023</span>
+</div>
+</div>
+<div class="p-md space-y-md">
+<div class="flex justify-between items-start">
+<div class="flex flex-col">
+<span class="text-label-sm text-on-surface-variant">Time Slot</span>
+<span class="font-label-bold text-on-surface">18:00 - 19:30 (90 mins)</span>
+</div>
+<div class="flex flex-col items-end">
+<span class="text-label-sm text-on-surface-variant">Pitch</span>
+<span class="font-label-bold text-on-surface">5-A-Side Pitch 4</span>
+</div>
+</div>
+<div class="flex justify-between items-center bg-background p-sm rounded-lg border border-outline-variant/30">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary" data-icon="payments">payments</span>
+<span class="font-label-bold text-on-surface">Total Paid</span>
+</div>
+<span class="font-headline-sm text-headline-sm text-primary">$45.00</span>
+</div>
+</div>
+</div>
+<!-- Location & Map Section -->
+<div class="bg-surface shadow-[0px_4px_20px_rgba(0,0,0,0.05)] rounded-xl overflow-hidden mb-lg">
+<div class="p-md flex items-start gap-md">
+<div class="flex-shrink-0 w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
+<span class="material-symbols-outlined text-primary" data-icon="location_on">location_on</span>
+</div>
+<div>
+<h4 class="font-label-bold text-on-surface">Wembley Central Turf</h4>
+<p class="text-body-md text-on-surface-variant leading-relaxed">
+                        12 Olympic Way, Wembley Park,<br/>
+                        London HA9 0NP, United Kingdom
+                    </p>
+</div>
+</div>
+<!-- Map Preview -->
+<div class="h-32 w-full relative group cursor-pointer overflow-hidden">
+<div class="bg-cover bg-center w-full h-full grayscale group-hover:grayscale-0 transition-all duration-500" data-alt="A clean, professional-looking aerial map view of a modern sports complex in Wembley, London. The map is minimalist with subtle color accents showing lush green football pitches and surrounding urban infrastructure. The aesthetic is high-end, utilizing a soft color palette that matches a professional management application." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDu704Vy7VdM_wNOUj7XMb345AJ549NvaRAbZ3QpTaqCk8O5vwbWrecGgTV1SEO3zyYrGrvh0fNMnSJ4_1q7G2TfaRFV9batoFHPYkleW7Uu6zcUtH_xx9jlCBgTUMM5BO3JODmNudJEpyuirUjqcWL-XPVbxKut2V4c_6UO3Sx7IC7E8gOF29QCPyupVS4cpHnmZCX4naEwcJrXjgw06bvNVI-G8cXOp5QdI0zfZRsse3pAEogcZCL')"></div>
+<div class="absolute inset-0 bg-primary/10 pointer-events-none"></div>
+<div class="absolute bottom-2 right-2">
+<button class="bg-surface text-on-surface px-3 py-1.5 rounded-lg shadow-sm font-label-bold flex items-center gap-1 hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-[16px]" data-icon="map">map</span>
+                        Open in Maps
+                    </button>
+</div>
+<div data-location="London" style=""></div>
+</div>
+</div>
+<!-- Action Buttons -->
+<div class="flex flex-col gap-md mb-xl">
+<button class="w-full bg-secondary-container text-on-secondary-container h-14 rounded-xl font-label-bold flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform">
+<span class="material-symbols-outlined" data-icon="event_upcoming">event_upcoming</span>
+                Add to Calendar
+            </button>
+<button class="w-full bg-primary text-on-primary h-14 rounded-xl font-label-bold flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+                Back to Home
+            </button>
+<button class="w-full bg-transparent border-2 border-primary text-primary h-14 rounded-xl font-label-bold flex items-center justify-center gap-2 hover:bg-primary/5 transition-colors">
+<span class="material-symbols-outlined" data-icon="share">share</span>
+                Share Details
+            </button>
+</div>
+<!-- Need Help -->
+<div class="flex flex-col items-center justify-center text-center pb-xl">
+<p class="text-label-sm text-on-surface-variant mb-sm">Need help with your booking?</p>
+<a class="text-primary font-label-bold flex items-center gap-1 hover:underline" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="help">help</span>
+                Contact Support Center
+            </a>
+</div>
+</main>
+<script>
+        // Simple confetti effect for celebration
+        function launchConfetti() {
+            const container = document.getElementById('confetti-cannon');
+            const colors = ['#006b30', '#fe9400', '#91f9a5', '#ffdcbf'];
+            
+            for (let i = 0; i < 50; i++) {
+                const confetti = document.createElement('div');
+                confetti.classList.add('confetti');
+                confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                confetti.style.left = Math.random() * 100 + '%';
+                confetti.style.top = '-20px';
+                confetti.style.transform = `rotate(${Math.random() * 360}deg)`;
+                
+                container.appendChild(confetti);
+                
+                const duration = 2 + Math.random() * 3;
+                const drift = (Math.random() - 0.5) * 200;
+                
+                confetti.animate([
+                    { transform: `translate(0, 0) rotate(0deg)`, opacity: 1 },
+                    { transform: `translate(${drift}px, 600px) rotate(${Math.random() * 720}deg)`, opacity: 0 }
+                ], {
+                    duration: duration * 1000,
+                    easing: 'cubic-bezier(0, .9, .57, 1)',
+                    fill: 'forwards'
+                });
+                
+                setTimeout(() => confetti.remove(), duration * 1000);
+            }
+        }
+
+        window.onload = launchConfetti;
+    </script>
+</body></html>

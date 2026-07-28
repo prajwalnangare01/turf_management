@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Turf Management - Select Date &amp; Time</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@400;600;700&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "tertiary-fixed-dim": "#c1c6d7",
+                    "surface-tint": "#006d31",
+                    "surface-container-lowest": "#ffffff",
+                    "on-tertiary-fixed": "#161c27",
+                    "tertiary": "#565c6a",
+                    "primary-fixed": "#91f9a5",
+                    "inverse-primary": "#75dc8b",
+                    "primary-container": "#148641",
+                    "on-secondary-fixed-variant": "#6a3b00",
+                    "on-primary-container": "#f7fff3",
+                    "tertiary-container": "#6f7483",
+                    "on-error": "#ffffff",
+                    "surface-container": "#ebeef0",
+                    "surface-container-highest": "#e0e3e5",
+                    "on-primary": "#ffffff",
+                    "surface-container-high": "#e5e9eb",
+                    "background": "#f7fafc",
+                    "on-tertiary-fixed-variant": "#414754",
+                    "surface-dim": "#d7dadc",
+                    "on-secondary-container": "#633700",
+                    "surface-bright": "#f7fafc",
+                    "error-container": "#ffdad6",
+                    "on-tertiary": "#ffffff",
+                    "secondary-fixed": "#ffdcbf",
+                    "surface-container-low": "#f1f4f6",
+                    "inverse-on-surface": "#eef1f3",
+                    "secondary-container": "#fe9400",
+                    "on-error-container": "#93000a",
+                    "outline": "#6f7a6e",
+                    "on-tertiary-container": "#fefcff",
+                    "secondary-fixed-dim": "#ffb874",
+                    "on-surface-variant": "#3f4a3f",
+                    "on-primary-fixed": "#00210a",
+                    "on-secondary-fixed": "#2d1600",
+                    "primary": "#006b30",
+                    "on-secondary": "#ffffff",
+                    "outline-variant": "#becabb",
+                    "inverse-surface": "#2d3133",
+                    "tertiary-fixed": "#dde2f3",
+                    "secondary": "#8c5000",
+                    "on-background": "#181c1e",
+                    "on-primary-fixed-variant": "#005323",
+                    "error": "#ba1a1a",
+                    "surface-variant": "#e0e3e5",
+                    "on-surface": "#181c1e",
+                    "surface": "#f7fafc",
+                    "primary-fixed-dim": "#75dc8b"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "sm": "8px",
+                    "gutter": "16px",
+                    "margin-desktop": "40px",
+                    "md": "16px",
+                    "xl": "32px",
+                    "lg": "24px",
+                    "base": "4px",
+                    "margin-mobile": "16px",
+                    "xs": "4px"
+            },
+            "fontFamily": {
+                    "headline-sm": ["Archivo Narrow"],
+                    "headline-md": ["Archivo Narrow"],
+                    "display-lg-mobile": ["Archivo Narrow"],
+                    "display-lg": ["Archivo Narrow"],
+                    "label-sm": ["Inter"],
+                    "body-lg": ["Inter"],
+                    "label-bold": ["Inter"],
+                    "body-md": ["Inter"]
+            },
+            "fontSize": {
+                    "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                    "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                    "display-lg-mobile": ["32px", {"lineHeight": "38px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                    "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "500"}],
+                    "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                    "label-bold": ["14px", {"lineHeight": "20px", "letterSpacing": "0.02em", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body-md min-h-screen pb-40">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-surface dark:bg-on-background shadow-sm flex items-center justify-between px-margin-mobile h-16">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-primary dark:text-primary-fixed-dim" style="font-variation-settings: 'FILL' 1;">sports_soccer</span>
+<h1 class="font-headline-md text-headline-md font-bold text-primary dark:text-primary-fixed-dim">Turf Management</h1>
+</div>
+<div class="flex items-center gap-md">
+<button class="text-on-surface-variant hover:bg-surface-container p-2 rounded-full transition-colors duration-200">
+<span class="material-symbols-outlined">account_circle</span>
+</button>
+</div>
+</header>
+<main class="mt-16 max-w-[1200px] mx-auto">
+<!-- Date Selection Strip -->
+<section class="bg-surface-container-lowest py-lg border-b border-outline-variant sticky top-16 z-40">
+<div class="px-margin-mobile mb-sm flex justify-between items-center">
+<h2 class="font-headline-sm text-headline-sm">Select Date</h2>
+<button class="text-primary font-label-bold flex items-center gap-xs">
+                    August 2024 <span class="material-symbols-outlined text-sm">calendar_month</span>
+</button>
+</div>
+<div class="flex overflow-x-auto hide-scrollbar gap-sm px-margin-mobile">
+<!-- Date Cards -->
+<button class="flex-shrink-0 w-16 h-20 rounded-xl flex flex-col items-center justify-center bg-primary-container text-on-primary-container shadow-md transition-transform scale-100">
+<span class="font-label-sm uppercase opacity-80">Mon</span>
+<span class="font-headline-sm">12</span>
+</button>
+<button class="flex-shrink-0 w-16 h-20 rounded-xl flex flex-col items-center justify-center bg-surface border border-outline-variant hover:border-primary transition-all">
+<span class="font-label-sm uppercase text-on-surface-variant">Tue</span>
+<span class="font-headline-sm">13</span>
+</button>
+<button class="flex-shrink-0 w-16 h-20 rounded-xl flex flex-col items-center justify-center bg-surface border border-outline-variant hover:border-primary transition-all">
+<span class="font-label-sm uppercase text-on-surface-variant">Wed</span>
+<span class="font-headline-sm">14</span>
+</button>
+<button class="flex-shrink-0 w-16 h-20 rounded-xl flex flex-col items-center justify-center bg-surface border border-outline-variant hover:border-primary transition-all">
+<span class="font-label-sm uppercase text-on-surface-variant">Thu</span>
+<span class="font-headline-sm">15</span>
+</button>
+<button class="flex-shrink-0 w-16 h-20 rounded-xl flex flex-col items-center justify-center bg-surface border border-outline-variant hover:border-primary transition-all">
+<span class="font-label-sm uppercase text-on-surface-variant">Fri</span>
+<span class="font-headline-sm">16</span>
+</button>
+<button class="flex-shrink-0 w-16 h-20 rounded-xl flex flex-col items-center justify-center bg-surface border border-outline-variant hover:border-primary transition-all">
+<span class="font-label-sm uppercase text-on-surface-variant">Sat</span>
+<span class="font-headline-sm">17</span>
+</button>
+<button class="flex-shrink-0 w-16 h-20 rounded-xl flex flex-col items-center justify-center bg-surface border border-outline-variant hover:border-primary transition-all">
+<span class="font-label-sm uppercase text-on-surface-variant">Sun</span>
+<span class="font-headline-sm">18</span>
+</button>
+</div>
+</section>
+<!-- Legend Section -->
+<section class="px-margin-mobile py-md flex flex-wrap gap-lg border-b border-outline-variant bg-surface-container-low">
+<div class="flex items-center gap-xs">
+<div class="w-4 h-4 rounded-xs border-2 border-primary bg-white"></div>
+<span class="text-label-sm">Available</span>
+</div>
+<div class="flex items-center gap-xs">
+<div class="w-4 h-4 rounded-xs bg-primary-container"></div>
+<span class="text-label-sm">Selected</span>
+</div>
+<div class="flex items-center gap-xs">
+<div class="w-4 h-4 rounded-xs bg-surface-dim"></div>
+<span class="text-label-sm">Booked</span>
+</div>
+<div class="flex items-center gap-xs">
+<div class="w-4 h-4 rounded-xs bg-surface-container-high border border-outline-variant"></div>
+<span class="text-label-sm">Held</span>
+</div>
+</section>
+<!-- Time Slot Grid -->
+<section class="p-margin-mobile">
+<h3 class="font-headline-sm text-headline-sm mb-lg">Available Slots</h3>
+<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-md">
+<!-- Morning Slots -->
+<div class="col-span-full border-l-4 border-secondary pl-sm mb-sm mt-md">
+<h4 class="font-label-bold text-secondary uppercase tracking-wider">Morning</h4>
+</div>
+<!-- Available State -->
+<button class="h-16 rounded-lg bg-white border-2 border-primary flex items-center justify-center font-label-bold text-primary hover:bg-primary/5 transition-colors cursor-pointer group relative overflow-hidden">
+<span>08:00 AM</span>
+</button>
+<!-- Booked State -->
+<button class="h-16 rounded-lg bg-surface-dim flex items-center justify-center font-label-bold text-on-surface-variant opacity-60 cursor-not-allowed" disabled="">
+<span>09:00 AM</span>
+</button>
+<!-- Held State -->
+<div class="h-16 rounded-lg bg-surface-container-high border border-outline-variant flex flex-col items-center justify-center font-label-bold text-on-surface-variant opacity-70 relative">
+<span>10:00 AM</span>
+<span class="text-[10px] font-bold uppercase bg-tertiary-container text-white px-1 rounded-xs mt-1">Held</span>
+</div>
+<button class="h-16 rounded-lg bg-white border-2 border-primary flex items-center justify-center font-label-bold text-primary hover:bg-primary/5 transition-colors">
+<span>11:00 AM</span>
+</button>
+<!-- Afternoon Slots -->
+<div class="col-span-full border-l-4 border-secondary pl-sm mb-sm mt-md">
+<h4 class="font-label-bold text-secondary uppercase tracking-wider">Afternoon</h4>
+</div>
+<button class="h-16 rounded-lg bg-white border-2 border-primary flex items-center justify-center font-label-bold text-primary hover:bg-primary/5 transition-colors">
+<span>12:00 PM</span>
+</button>
+<button class="h-16 rounded-lg bg-surface-dim flex items-center justify-center font-label-bold text-on-surface-variant opacity-60 cursor-not-allowed" disabled="">
+<span>01:00 PM</span>
+</button>
+<button class="h-16 rounded-lg bg-white border-2 border-primary flex items-center justify-center font-label-bold text-primary hover:bg-primary/5 transition-colors">
+<span>02:00 PM</span>
+</button>
+<button class="h-16 rounded-lg bg-white border-2 border-primary flex items-center justify-center font-label-bold text-primary hover:bg-primary/5 transition-colors">
+<span>03:00 PM</span>
+</button>
+<button class="h-16 rounded-lg bg-white border-2 border-primary flex items-center justify-center font-label-bold text-primary hover:bg-primary/5 transition-colors">
+<span>04:00 PM</span>
+</button>
+<button class="h-16 rounded-lg bg-surface-dim flex items-center justify-center font-label-bold text-on-surface-variant opacity-60 cursor-not-allowed" disabled="">
+<span>05:00 PM</span>
+</button>
+<!-- Evening Slots -->
+<div class="col-span-full border-l-4 border-secondary pl-sm mb-sm mt-md">
+<h4 class="font-label-bold text-secondary uppercase tracking-wider">Evening</h4>
+</div>
+<!-- Selected State -->
+<button class="h-16 rounded-lg bg-primary-container flex flex-col items-center justify-center font-label-bold text-on-primary-container shadow-lg ring-2 ring-primary-container ring-offset-2">
+<span class="material-symbols-outlined text-sm mb-0.5" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span>06:00 PM</span>
+</button>
+<button class="h-16 rounded-lg bg-white border-2 border-primary flex items-center justify-center font-label-bold text-primary hover:bg-primary/5 transition-colors">
+<span>07:00 PM</span>
+</button>
+<button class="h-16 rounded-lg bg-white border-2 border-primary flex items-center justify-center font-label-bold text-primary hover:bg-primary/5 transition-colors">
+<span>08:00 PM</span>
+</button>
+<button class="h-16 rounded-lg bg-surface-dim flex items-center justify-center font-label-bold text-on-surface-variant opacity-60 cursor-not-allowed" disabled="">
+<span>09:00 PM</span>
+</button>
+</div>
+</section>
+<!-- Venue Context Card (Optional Visual Flourish) -->
+<section class="p-margin-mobile">
+<div class="bg-surface rounded-xl border border-outline-variant overflow-hidden flex flex-col md:flex-row shadow-sm">
+<div class="h-48 md:w-64 md:h-auto bg-cover bg-center shrink-0" data-alt="A professional floodlit synthetic turf soccer field at dusk. The lush green grass is perfectly manicured with crisp white markings. Modern bleachers are visible in the background against a deep blue sky. High-contrast energetic lighting creates a premium sports venue atmosphere." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAFs7anSgRWuHqosk3Z-DNu-piqvA7vzpA3XVEwbZ2Rnt5yZnsoU89wIgvfSnt1UgCbaVk1M3UA5KACDoHmq3jruh97elpiXFykDnIlYrYlrNr7tp72AzVWI4i8IdlGO2rLaPt-_THl9yJvvDy-icRt5E1f4Af-eQUsPM7O1pmoPbrZe84Z8Hq05L-b8IpnEpQ9Vh7pdSskF-8k4gbRg8qcMwtrzalwSfFGGqJll35pj-TE8n_avL65')"></div>
+<div class="p-lg flex-grow">
+<h4 class="font-headline-sm text-headline-sm text-primary mb-xs">Champions Arena - Pitch A</h4>
+<p class="text-on-surface-variant text-body-md mb-md">Premium 5-a-side AstroTurf with professional drainage and LED floodlighting.</p>
+<div class="flex items-center gap-lg">
+<div class="flex items-center gap-xs text-on-surface-variant">
+<span class="material-symbols-outlined text-sm">location_on</span>
+<span class="text-label-sm">Sector 5, Sports Hub</span>
+</div>
+<div class="flex items-center gap-xs text-on-surface-variant">
+<span class="material-symbols-outlined text-sm">payments</span>
+<span class="text-label-sm">$50.00 / Hour</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Sticky Bottom Bar -->
+<div class="fixed bottom-0 left-0 right-0 z-50 bg-surface border-t border-outline-variant shadow-[0px_-8px_30px_rgba(0,0,0,0.08)]">
+<div class="max-w-[1200px] mx-auto px-margin-mobile py-lg flex flex-col md:flex-row items-center justify-between gap-md">
+<div class="flex flex-col w-full md:w-auto">
+<div class="flex items-center gap-xs text-primary font-label-bold">
+<span class="material-symbols-outlined text-md">event_available</span>
+<span>Selected: 6:00 PM - 7:00 PM</span>
+</div>
+<div class="text-on-surface-variant text-label-sm">
+                    Monday, August 12, 2024
+                </div>
+</div>
+<div class="flex items-center justify-between w-full md:w-auto md:gap-xl">
+<div class="flex flex-col text-right md:text-left">
+<span class="text-label-sm text-on-surface-variant uppercase tracking-tighter">Total Price</span>
+<span class="font-headline-md text-headline-md text-on-background">$50.00</span>
+</div>
+<button class="bg-secondary-container hover:bg-secondary text-white font-headline-sm px-xl py-md rounded-xl shadow-lg transition-all active:scale-95 flex items-center gap-sm">
+                    Continue
+                    <span class="material-symbols-outlined">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- Safe Area Spacer for iOS -->
+<div class="h-safe pb-4"></div>
+</div>
+<!-- Micro-interaction Script -->
+<script>
+        // Simple mock interaction for slot selection
+        const slots = document.querySelectorAll('button.border-primary');
+        slots.forEach(slot => {
+            slot.addEventListener('click', () => {
+                // Clear others if only 1 selection allowed (mock logic)
+                document.querySelectorAll('.bg-primary-container').forEach(el => {
+                    if(!el.classList.contains('flex-shrink-0')) { // Don't clear the date strip selection
+                         el.classList.replace('bg-primary-container', 'bg-white');
+                         el.classList.add('border-2', 'border-primary', 'text-primary');
+                         el.classList.remove('text-on-primary-container', 'shadow-lg', 'ring-2');
+                         const icon = el.querySelector('.material-symbols-outlined');
+                         if(icon) icon.remove();
+                    }
+                });
+
+                // Toggle this one
+                slot.classList.replace('bg-white', 'bg-primary-container');
+                slot.classList.remove('border-2', 'border-primary', 'text-primary');
+                slot.classList.add('text-on-primary-container', 'shadow-lg', 'ring-2', 'ring-primary-container', 'ring-offset-2');
+                
+                // Add Checkmark
+                const check = document.createElement('span');
+                check.className = "material-symbols-outlined text-sm mb-0.5";
+                check.style.fontVariationSettings = "'FILL' 1";
+                check.textContent = "check_circle";
+                slot.prepend(check);
+            });
+        });
+
+        // Date selection interaction
+        const dateButtons = document.querySelectorAll('section .flex-shrink-0');
+        dateButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                dateButtons.forEach(b => {
+                    b.classList.remove('bg-primary-container', 'text-on-primary-container', 'shadow-md');
+                    b.classList.add('bg-surface', 'border', 'border-outline-variant');
+                    const spans = b.querySelectorAll('span');
+                    spans[0].classList.add('text-on-surface-variant');
+                    spans[0].classList.remove('opacity-80');
+                });
+                btn.classList.add('bg-primary-container', 'text-on-primary-container', 'shadow-md');
+                btn.classList.remove('bg-surface', 'border', 'border-outline-variant');
+                const spans = btn.querySelectorAll('span');
+                spans[0].classList.remove('text-on-surface-variant');
+                spans[0].classList.add('opacity-80');
+            });
+        });
+    </script>
+</body></html>

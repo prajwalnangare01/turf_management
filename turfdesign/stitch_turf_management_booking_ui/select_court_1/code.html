@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Turf Management - Court Selection</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@400;600;700&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind Config Verbatim -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "tertiary-fixed-dim": "#c1c6d7",
+                    "surface-tint": "#006d31",
+                    "surface-container-lowest": "#ffffff",
+                    "on-tertiary-fixed": "#161c27",
+                    "tertiary": "#565c6a",
+                    "primary-fixed": "#91f9a5",
+                    "inverse-primary": "#75dc8b",
+                    "primary-container": "#148641",
+                    "on-secondary-fixed-variant": "#6a3b00",
+                    "on-primary-container": "#f7fff3",
+                    "tertiary-container": "#6f7483",
+                    "on-error": "#ffffff",
+                    "surface-container": "#ebeef0",
+                    "surface-container-highest": "#e0e3e5",
+                    "on-primary": "#ffffff",
+                    "surface-container-high": "#e5e9eb",
+                    "background": "#f7fafc",
+                    "on-tertiary-fixed-variant": "#414754",
+                    "surface-dim": "#d7dadc",
+                    "on-secondary-container": "#633700",
+                    "surface-bright": "#f7fafc",
+                    "error-container": "#ffdad6",
+                    "on-tertiary": "#ffffff",
+                    "secondary-fixed": "#ffdcbf",
+                    "surface-container-low": "#f1f4f6",
+                    "inverse-on-surface": "#eef1f3",
+                    "secondary-container": "#fe9400",
+                    "on-error-container": "#93000a",
+                    "outline": "#6f7a6e",
+                    "on-tertiary-container": "#fefcff",
+                    "secondary-fixed-dim": "#ffb874",
+                    "on-surface-variant": "#3f4a3f",
+                    "on-primary-fixed": "#00210a",
+                    "on-secondary-fixed": "#2d1600",
+                    "primary": "#006b30",
+                    "on-secondary": "#ffffff",
+                    "outline-variant": "#becabb",
+                    "inverse-surface": "#2d3133",
+                    "tertiary-fixed": "#dde2f3",
+                    "secondary": "#8c5000",
+                    "on-background": "#181c1e",
+                    "on-primary-fixed-variant": "#005323",
+                    "error": "#ba1a1a",
+                    "surface-variant": "#e0e3e5",
+                    "on-surface": "#181c1e",
+                    "surface": "#f7fafc",
+                    "primary-fixed-dim": "#75dc8b"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "sm": "8px",
+                    "gutter": "16px",
+                    "margin-desktop": "40px",
+                    "md": "16px",
+                    "xl": "32px",
+                    "lg": "24px",
+                    "base": "4px",
+                    "margin-mobile": "16px",
+                    "xs": "4px"
+            },
+            "fontFamily": {
+                    "headline-sm": ["Archivo Narrow"],
+                    "headline-md": ["Archivo Narrow"],
+                    "display-lg-mobile": ["Archivo Narrow"],
+                    "display-lg": ["Archivo Narrow"],
+                    "label-sm": ["Inter"],
+                    "body-lg": ["Inter"],
+                    "label-bold": ["Inter"],
+                    "body-md": ["Inter"]
+            },
+            "fontSize": {
+                    "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                    "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                    "display-lg-mobile": ["32px", {"lineHeight": "38px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                    "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "500"}],
+                    "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                    "label-bold": ["14px", {"lineHeight": "20px", "letterSpacing": "0.02em", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            background-color: #f7fafc;
+            font-family: 'Inter', sans-serif;
+        }
+        .bento-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 24px;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background pb-24 md:pb-0">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 shadow-sm bg-surface dark:bg-on-background flex items-center justify-between px-margin-mobile h-16">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-primary dark:text-primary-fixed-dim" style="font-size: 24px;">sports_soccer</span>
+<h1 class="font-headline-md text-headline-md font-bold text-primary dark:text-primary-fixed-dim">Turf Management</h1>
+</div>
+<button class="w-10 h-10 rounded-full flex items-center justify-center hover:bg-surface-container transition-colors duration-200">
+<span class="material-symbols-outlined text-on-surface-variant">account_circle</span>
+</button>
+</header>
+<main class="pt-24 pb-12 px-margin-mobile max-w-[1200px] mx-auto">
+<!-- Step Tracker / Breadcrumb -->
+<div class="mb-lg">
+<div class="h-1 w-full bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-primary w-2/3 transition-all duration-500"></div>
+</div>
+<div class="flex justify-between mt-base">
+<span class="font-label-sm text-label-sm text-primary">Venue Details</span>
+<span class="font-label-sm text-label-sm text-primary">Court Selection</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Checkout</span>
+</div>
+</div>
+<!-- Header Section -->
+<section class="mb-xl">
+<h2 class="font-display-lg-mobile md:font-display-lg text-display-lg-mobile md:text-display-lg text-on-background">Select Your Court</h2>
+<p class="font-body-md text-body-md text-on-surface-variant mt-sm">Choose from our premium pro-turf options for your next match.</p>
+</section>
+<!-- Court Selection Grid -->
+<div class="bento-grid">
+<!-- Court Card 1 -->
+<div class="bg-surface-container-lowest rounded-xl overflow-hidden shadow-[0px_4px_20px_rgba(0,0,0,0.05)] flex flex-col group transition-all duration-300 hover:shadow-[0px_8px_30px_rgba(0,0,0,0.08)]">
+<div class="relative h-56 w-full">
+<div class="bg-cover bg-center w-full h-full" data-alt="A professional high-angle shot of a pristine indoor football arena featuring high-quality green synthetic turf. The court is illuminated by professional stadium-grade cool white LED lighting, creating a high-performance athletic atmosphere. The background shows blurred spectator seating in a corporate modern style with grey and black tones. Vibrant amber accents are reflected in the glossy sidelines." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuB9YU8axTyRrJpxQ047H6EW5cH8E9t7yipDpL6-Xw5PLZlTf0RWsvM5QObzNmVI81MRHhSCN4LxeK0L-_VxOP0cvNjJkqvmLPIFoS8ycPk42kDnEcayjUCZ2shecWPR-wc3M4fjPK-nl1i_mmger82GP8f-sIGpOiIkXynsXtMbXI-k2AC-nh9LSkgd_3NHEPengOQzP_CcVbGmRtzgxGhqCB9eYtrTei7ZeiduFwxHAmHjooTZQqtV')"></div>
+<div class="absolute top-4 right-4 bg-secondary-container text-on-secondary-container font-label-bold text-label-bold px-3 py-1 rounded-lg">
+                        $40 - $60 / hr
+                    </div>
+</div>
+<div class="p-md flex flex-col flex-grow">
+<div class="flex justify-between items-start mb-sm">
+<div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Arena 1 - Pro Turf</h3>
+<div class="flex items-center gap-xs mt-xs">
+<span class="material-symbols-outlined text-primary text-[18px]">verified</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">FIFA Quality Certified</span>
+</div>
+</div>
+</div>
+<div class="space-y-base mb-lg">
+<div class="flex items-center gap-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-[20px]">groups</span>
+<span class="font-body-md text-body-md">5v5 / 6v6 Match</span>
+</div>
+<div class="flex items-center gap-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-[20px]">wb_sunny</span>
+<span class="font-body-md text-body-md">Indoor Climate Controlled</span>
+</div>
+</div>
+<div class="mt-auto">
+<button class="w-full bg-secondary-container text-on-secondary-container font-headline-sm text-headline-sm py-3 rounded-lg hover:brightness-95 transition-all flex items-center justify-center gap-sm active:scale-[0.98]">
+                            Select
+                            <span class="material-symbols-outlined">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Court Card 2 -->
+<div class="bg-surface-container-lowest rounded-xl overflow-hidden shadow-[0px_4px_20px_rgba(0,0,0,0.05)] flex flex-col group transition-all duration-300 hover:shadow-[0px_8px_30px_rgba(0,0,0,0.08)]">
+<div class="relative h-56 w-full">
+<div class="bg-cover bg-center w-full h-full" data-alt="A cinematic outdoor floodlit football pitch at dusk. The vibrant turf green contrast with a deep navy sky. Professional sports stadium lighting creates sharp shadows and bright highlights on the pitch. The aesthetic is energetic and premium, featuring the clean architectural lines of a modern sports complex with white and green branding elements." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuC1LNE9TNnazju3IXlYvyCmWtigYI1ETUwtnnRxjRMafy49YqTf1fpD82rZhVJB8fdmyDz1KYqOfrov0Vak0S2R8HDYdqgXPxB26j_rCIfaLWCAnBHUYlM1t48XpoRVlURoSLx4zQX_8y6QQpUOodpyEmpIErnZ5DXJMcuaxrlaEbkv_hdRHV3SRdj0grtxHPq-OGlszrUPhnioV7l4MlW5MU1dnFxqnG_YXOORX_6Jd1ryfUCUqa4P')"></div>
+<div class="absolute top-4 right-4 bg-secondary-container text-on-secondary-container font-label-bold text-label-bold px-3 py-1 rounded-lg">
+                        $55 - $75 / hr
+                    </div>
+</div>
+<div class="p-md flex flex-col flex-grow">
+<div class="flex justify-between items-start mb-sm">
+<div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Main Stadium Court</h3>
+<div class="flex items-center gap-xs mt-xs">
+<span class="material-symbols-outlined text-primary text-[18px]">stadium</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Full Floodlights</span>
+</div>
+</div>
+</div>
+<div class="space-y-base mb-lg">
+<div class="flex items-center gap-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-[20px]">groups</span>
+<span class="font-body-md text-body-md">7v7 / 8v8 Match</span>
+</div>
+<div class="flex items-center gap-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-[20px]">cloud</span>
+<span class="font-body-md text-body-md">Outdoor High Performance</span>
+</div>
+</div>
+<div class="mt-auto">
+<button class="w-full bg-secondary-container text-on-secondary-container font-headline-sm text-headline-sm py-3 rounded-lg hover:brightness-95 transition-all flex items-center justify-center gap-sm active:scale-[0.98]">
+                            Select
+                            <span class="material-symbols-outlined">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Court Card 3 -->
+<div class="bg-surface-container-lowest rounded-xl overflow-hidden shadow-[0px_4px_20px_rgba(0,0,0,0.05)] flex flex-col group transition-all duration-300 hover:shadow-[0px_8px_30px_rgba(0,0,0,0.08)]">
+<div class="relative h-56 w-full">
+<div class="bg-cover bg-center w-full h-full" data-alt="A specialized indoor futsal court with high-impact flooring and synthetic turf walls. The lighting is bright and uniform, perfect for high-speed technical drills. The scene is captured in a wide-angle view, emphasizing the clean, minimalist design of the sports facility. The color palette is dominated by neutral greys, crisp whites, and vibrant grass greens." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuD7qEWoglPQcAjKHaFqm3V0dVhULrZJnEj6b2wr3s6xDqKyFIdQ6Y4HAa-lNNLAIVLFlP-lq-6eECNd-5oFR81jrD9RFocX_1NZBs6LJuG3gJFAaUTeabqBfM0G0ZNOHDrey_VY26DEpLB1hXRxyDvc6Ojwj2xuvZqGXRvgj4xkjEVVuTdzO9Lm_OgtE2u6tn5-hcOOTk8H_NMkSh7DJAN5x-HcZ6P_iKc9DHwu6aJJjKH2Bj-bQshF')"></div>
+<div class="absolute top-4 right-4 bg-secondary-container text-on-secondary-container font-label-bold text-label-bold px-3 py-1 rounded-lg">
+                        $35 - $50 / hr
+                    </div>
+</div>
+<div class="p-md flex flex-col flex-grow">
+<div class="flex justify-between items-start mb-sm">
+<div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">The Drill Zone</h3>
+<div class="flex items-center gap-xs mt-xs">
+<span class="material-symbols-outlined text-primary text-[18px]">bolt</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">High Speed Surface</span>
+</div>
+</div>
+</div>
+<div class="space-y-base mb-lg">
+<div class="flex items-center gap-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-[20px]">groups</span>
+<span class="font-body-md text-body-md">4v4 Technical Play</span>
+</div>
+<div class="flex items-center gap-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-[20px]">speed</span>
+<span class="font-body-md text-body-md">Training Optimized</span>
+</div>
+</div>
+<div class="mt-auto">
+<button class="w-full bg-secondary-container text-on-secondary-container font-headline-sm text-headline-sm py-3 rounded-lg hover:brightness-95 transition-all flex items-center justify-center gap-sm active:scale-[0.98]">
+                            Select
+                            <span class="material-symbols-outlined">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Secondary Info Area -->
+<div class="mt-xl grid grid-cols-1 md:grid-cols-2 gap-lg">
+<div class="p-lg bg-surface-container rounded-xl">
+<h4 class="font-label-bold text-label-bold text-on-surface mb-sm">Cancellation Policy</h4>
+<p class="font-body-md text-body-md text-on-surface-variant">Free cancellation up to 24 hours before your booking. Late cancellations may incur a 50% fee.</p>
+</div>
+<div class="p-lg bg-primary-container text-on-primary-container rounded-xl flex items-center gap-lg">
+<div class="bg-white/20 p-md rounded-full">
+<span class="material-symbols-outlined text-[32px]">workspace_premium</span>
+</div>
+<div>
+<h4 class="font-label-bold text-label-bold mb-xs">Pro Member Perks</h4>
+<p class="font-label-sm text-label-sm opacity-90">Unlock 15% discount on all evening bookings and priority access to Arena 1.</p>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar (Mobile Only) -->
+<nav class="md:hidden fixed bottom-0 w-full z-50 bg-surface dark:bg-on-background shadow-[0px_-4px_20px_rgba(0,0,0,0.05)] flex justify-around items-center h-20 px-2 pb-safe">
+<a class="flex flex-col items-center justify-center text-on-surface-variant" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="font-label-sm text-label-sm">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-xl px-4 py-1" href="#">
+<span class="material-symbols-outlined">event_available</span>
+<span class="font-label-sm text-label-sm">Bookings</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant" href="#">
+<span class="material-symbols-outlined">favorite</span>
+<span class="font-label-sm text-label-sm">Saved</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="font-label-sm text-label-sm">Profile</span>
+</a>
+</nav>
+<!-- Micro-interaction Script -->
+<script>
+        document.querySelectorAll('button').forEach(button => {
+            button.addEventListener('mousedown', () => {
+                button.classList.add('scale-95');
+            });
+            button.addEventListener('mouseup', () => {
+                button.classList.remove('scale-95');
+            });
+            button.addEventListener('mouseleave', () => {
+                button.classList.remove('scale-95');
+            });
+        });
+    </script>
+</body></html>

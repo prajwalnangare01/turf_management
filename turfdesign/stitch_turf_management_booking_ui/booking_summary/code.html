@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Payment Summary - Turf Management</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@400;600;700&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Design System Theme Config -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                "tertiary-fixed-dim": "#c1c6d7",
+                "surface-tint": "#006d31",
+                "surface-container-lowest": "#ffffff",
+                "on-tertiary-fixed": "#161c27",
+                "tertiary": "#565c6a",
+                "primary-fixed": "#91f9a5",
+                "inverse-primary": "#75dc8b",
+                "primary-container": "#148641",
+                "on-secondary-fixed-variant": "#6a3b00",
+                "on-primary-container": "#f7fff3",
+                "tertiary-container": "#6f7483",
+                "on-error": "#ffffff",
+                "surface-container": "#ebeef0",
+                "surface-container-highest": "#e0e3e5",
+                "on-primary": "#ffffff",
+                "surface-container-high": "#e5e9eb",
+                "background": "#f7fafc",
+                "on-tertiary-fixed-variant": "#414754",
+                "surface-dim": "#d7dadc",
+                "on-secondary-container": "#633700",
+                "surface-bright": "#f7fafc",
+                "error-container": "#ffdad6",
+                "on-tertiary": "#ffffff",
+                "secondary-fixed": "#ffdcbf",
+                "surface-container-low": "#f1f4f6",
+                "inverse-on-surface": "#eef1f3",
+                "secondary-container": "#fe9400",
+                "on-error-container": "#93000a",
+                "outline": "#6f7a6e",
+                "on-tertiary-container": "#fefcff",
+                "secondary-fixed-dim": "#ffb874",
+                "on-surface-variant": "#3f4a3f",
+                "on-primary-fixed": "#00210a",
+                "on-secondary-fixed": "#2d1600",
+                "primary": "#006b30",
+                "on-secondary": "#ffffff",
+                "outline-variant": "#becabb",
+                "inverse-surface": "#2d3133",
+                "tertiary-fixed": "#dde2f3",
+                "secondary": "#8c5000",
+                "on-background": "#181c1e",
+                "on-primary-fixed-variant": "#005323",
+                "error": "#ba1a1a",
+                "surface-variant": "#e0e3e5",
+                "on-surface": "#181c1e",
+                "surface": "#f7fafc",
+                "primary-fixed-dim": "#75dc8b"
+            },
+            "borderRadius": {
+                "DEFAULT": "0.25rem",
+                "lg": "0.5rem",
+                "xl": "0.75rem",
+                "full": "9999px"
+            },
+            "spacing": {
+                "sm": "8px",
+                "gutter": "16px",
+                "margin-desktop": "40px",
+                "md": "16px",
+                "xl": "32px",
+                "lg": "24px",
+                "base": "4px",
+                "margin-mobile": "16px",
+                "xs": "4px"
+            },
+            "fontFamily": {
+                "headline-sm": ["Archivo Narrow"],
+                "headline-md": ["Archivo Narrow"],
+                "display-lg-mobile": ["Archivo Narrow"],
+                "display-lg": ["Archivo Narrow"],
+                "label-sm": ["Inter"],
+                "body-lg": ["Inter"],
+                "label-bold": ["Inter"],
+                "body-md": ["Inter"]
+            },
+            "fontSize": {
+                "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                "display-lg-mobile": ["32px", {"lineHeight": "38px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "500"}],
+                "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                "label-bold": ["14px", {"lineHeight": "20px", "letterSpacing": "0.02em", "fontWeight": "600"}],
+                "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            background-color: #f7fafc;
+            color: #181c1e;
+        }
+        .step-active {
+            background-color: #006b30;
+            color: white;
+        }
+        .step-inactive {
+            background-color: #e0e3e5;
+            color: #3f4a3f;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="font-body-md text-body-md min-h-screen pb-24">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-surface dark:bg-on-background shadow-sm flex items-center justify-between px-margin-mobile h-16">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary dark:text-primary-fixed-dim" data-icon="sports_soccer">sports_soccer</span>
+<h1 class="font-headline-md text-headline-md font-bold text-primary dark:text-primary-fixed-dim">Turf Management</h1>
+</div>
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer" data-icon="account_circle">account_circle</span>
+</div>
+</header>
+<!-- Content Canvas -->
+<main class="pt-24 px-margin-mobile max-w-[1200px] mx-auto">
+<!-- Step Tracker (Progress Indicator) -->
+<div class="mb-lg">
+<div class="flex justify-between items-center mb-sm">
+<span class="text-primary font-label-bold text-label-bold">Payment Summary</span>
+<span class="text-on-surface-variant text-label-sm font-label-sm">Step 3 of 3</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-primary w-[100%] transition-all duration-700 ease-out"></div>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-12 gap-lg">
+<!-- Left Column: Details & Breakdown -->
+<div class="md:col-span-7 space-y-lg">
+<!-- Order Summary Card -->
+<section class="bg-surface-container-lowest rounded-xl shadow-[0px_4px_20px_rgba(0,0,0,0.05)] overflow-hidden">
+<div class="relative h-48 w-full">
+<div class="absolute inset-0 bg-cover bg-center" data-alt="A professional-grade indoor football arena with lush green synthetic turf, vibrant white markings, and bright overhead stadium lighting. The atmosphere is energetic and pristine, showcasing a high-end sports facility in a light-mode, modern aesthetic with sharp focus and cinematic depth." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuB2zx7M5ZcCjJnvVPAcIAphraMw2MUEcA0-_tglWEySNUnJPp5jdfHlbJkOx01awQI0TW5EU5gmapT1-jehhdAVcUL2KhwYOVk-uvnSw8R-65AyJj7uOgB5GkD8HlDFfrC_VW-7J5VFaBL8Uq9ZOLQD3hS3Dov4GfCnLIc3upA5yHcv_w6FFgyThcCtzU0IWtNpBPH1cG2O2xTl8mDbYgMJk-wYKSnpj0Rt6BI7WyIiukMl6qbss077')"></div>
+<div class="absolute top-md right-md bg-secondary-container text-on-secondary-container px-3 py-1 rounded-full font-label-bold text-label-bold">
+                            Football
+                        </div>
+</div>
+<div class="p-md">
+<h2 class="font-headline-sm text-headline-sm text-on-surface mb-xs">Elite Arena 1</h2>
+<div class="flex flex-col gap-sm text-on-surface-variant">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-sm" data-icon="calendar_today">calendar_today</span>
+<span class="font-label-bold text-label-bold">Thursday, Oct 24, 2024</span>
+</div>
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-sm" data-icon="schedule">schedule</span>
+<span class="font-label-bold text-label-bold">6:00 PM - 7:00 PM (1 Hour)</span>
+</div>
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-sm" data-icon="location_on">location_on</span>
+<span class="font-label-bold text-label-bold">Turf Masters Sports Center, Downtown</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Payment Breakdown Card -->
+<section class="bg-surface-container-lowest rounded-xl shadow-[0px_4px_20px_rgba(0,0,0,0.05)] p-md">
+<h3 class="font-label-bold text-label-bold text-on-surface uppercase tracking-wider mb-md">Price Breakdown</h3>
+<div class="space-y-sm">
+<div class="flex justify-between items-center">
+<span class="text-on-surface-variant">Base Price (1 Hour)</span>
+<span class="font-label-bold text-label-bold">$45.00</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-on-surface-variant">Service Fee</span>
+<span class="font-label-bold text-label-bold">$2.50</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-on-surface-variant">Taxes (8%)</span>
+<span class="font-label-bold text-label-bold">$3.80</span>
+</div>
+<div class="pt-sm border-t border-outline-variant mt-sm flex justify-between items-center">
+<span class="font-headline-sm text-headline-sm text-on-surface">Total Amount</span>
+<span class="font-headline-sm text-headline-sm text-primary">$51.30</span>
+</div>
+</div>
+</section>
+</div>
+<!-- Right Column: Payment Actions -->
+<div class="md:col-span-5 space-y-lg">
+<!-- Payment Method Section -->
+<section class="bg-surface-container-lowest rounded-xl shadow-[0px_4px_20px_rgba(0,0,0,0.05)] p-md border-2 border-primary">
+<div class="flex items-center justify-between mb-md">
+<h3 class="font-label-bold text-label-bold text-on-surface">Payment Method</h3>
+<button class="text-primary font-label-bold text-label-sm">Change</button>
+</div>
+<div class="flex items-center gap-md p-sm bg-surface-container-low rounded-lg">
+<span class="material-symbols-outlined text-secondary" data-icon="credit_card">credit_card</span>
+<div>
+<p class="font-label-bold text-label-bold">Visa Ending in 4242</p>
+<p class="text-on-surface-variant text-label-sm font-label-sm">Expires 12/26</p>
+</div>
+</div>
+</section>
+<!-- Pay Button & Trust -->
+<div class="space-y-md">
+<button class="w-full bg-secondary-container hover:bg-secondary text-on-secondary-container font-headline-sm text-headline-sm py-4 rounded-xl shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2" id="pay-now-btn">
+<span class="material-symbols-outlined" data-icon="lock">lock</span>
+                        Pay Now $51.30
+                    </button>
+<div class="flex flex-col items-center gap-sm">
+<div class="flex items-center gap-gutter">
+<div class="flex items-center gap-xs text-on-surface-variant">
+<span class="material-symbols-outlined text-sm" data-icon="verified_user">verified_user</span>
+<span class="text-label-sm font-label-sm">Secure Payment</span>
+</div>
+<div class="flex items-center gap-xs text-on-surface-variant">
+<span class="material-symbols-outlined text-sm" data-icon="shield">shield</span>
+<span class="text-label-sm font-label-sm">SSL Encrypted</span>
+</div>
+</div>
+<p class="text-center text-on-surface-variant text-label-sm font-label-sm px-xl">
+                            By clicking 'Pay Now', you agree to our Terms of Service and Cancellation Policy.
+                        </p>
+</div>
+</div>
+<!-- Promo Code -->
+<div class="bg-surface-container-low p-md rounded-xl border border-dashed border-outline">
+<label class="font-label-bold text-label-bold block mb-sm">Have a Promo Code?</label>
+<div class="flex gap-sm">
+<input class="flex-grow bg-surface-container-lowest border-outline rounded-lg px-md py-2 focus:ring-2 focus:ring-primary outline-none" placeholder="Enter code" type="text"/>
+<button class="px-md py-2 border-2 border-primary text-primary font-label-bold text-label-sm rounded-lg hover:bg-primary-container hover:text-on-primary-container transition-colors">Apply</button>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar (Mobile Shell Only) -->
+<nav class="md:hidden fixed bottom-0 w-full z-50 bg-surface dark:bg-on-background shadow-[0px_-4px_20px_rgba(0,0,0,0.05)] flex justify-around items-center h-20 px-2 pb-safe">
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-transform scale-95 active:scale-90" href="#">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+<span class="font-label-sm text-label-sm">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-xl px-4 py-1 transition-transform scale-95 active:scale-90" href="#">
+<span class="material-symbols-outlined" data-icon="event_available">event_available</span>
+<span class="font-label-sm text-label-sm">Bookings</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-transform scale-95 active:scale-90" href="#">
+<span class="material-symbols-outlined" data-icon="favorite">favorite</span>
+<span class="font-label-sm text-label-sm">Saved</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-transform scale-95 active:scale-90" href="#">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+<span class="font-label-sm text-label-sm">Profile</span>
+</a>
+</nav>
+<!-- Micro-interaction Script -->
+<script>
+        document.getElementById('pay-now-btn').addEventListener('click', function() {
+            const btn = this;
+            const originalContent = btn.innerHTML;
+            
+            btn.disabled = true;
+            btn.innerHTML = `
+                <svg class="animate-spin h-5 w-5 mr-2 text-on-secondary-container" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Processing...
+            `;
+            
+            setTimeout(() => {
+                btn.innerHTML = `
+                    <span class="material-symbols-outlined" data-icon="check_circle">check_circle</span>
+                    Payment Successful!
+                `;
+                btn.classList.replace('bg-secondary-container', 'bg-primary');
+                btn.classList.replace('text-on-secondary-container', 'text-on-primary');
+            }, 2000);
+        });
+    </script>
+</body></html>
