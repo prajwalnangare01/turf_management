@@ -3,8 +3,9 @@ import { Court, DynamicSlot, Coupon } from '../../types/schema';
 import { store } from '../../services/store';
 import { PostgresEngine } from '../../services/postgresEngine';
 import { RazorpayService } from '../../services/razorpayService';
-import { RedisLockService } from '../../services/redisLockService';
-import { Clock, ShieldCheck, Tag, CreditCard, Smartphone, CheckCircle, AlertTriangle, X } from 'lucide-react';
+import { ShieldCheck, Tag, CreditCard, Smartphone, AlertTriangle, X, Timer, PersonStanding } from 'lucide-react';
+
+import { formatTimeRange12h } from '../../utils/formatters';
 
 interface CheckoutModalProps {
   court: Court;
@@ -30,10 +31,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
   const [couponError, setCouponError] = useState('');
 
-  // Lock countdown timer
-  const [timeLeft, setTimeLeft] = useState(300); // 5 mins in seconds
+  // Lock countdown timer (2 mins)
+  const [timeLeft, setTimeLeft] = useState(120);
 
-  // OTP Step
+  // OTP & Payment step
   const [step, setStep] = useState<'details' | 'otp' | 'payment'>('details');
   const [otpInput, setOtpInput] = useState('');
   const [otpError, setOtpError] = useState('');
@@ -47,7 +48,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       setTimeLeft(prev => {
         if (prev <= 1) {
           clearInterval(timer);
-          alert('Your slot lock expired! Please select your slots again.');
+          alert('Your slot hold expired! Please select your slots again.');
           onClose();
           return 0;
         }
@@ -129,11 +130,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         store.setCustomers(customers);
       }
 
-      // Check duplicate booking warning
       const sports = store.getSports();
       const courtSportId = court.sport_ids[0] || sports[0].id;
 
-      // 2. Create pending DB Booking for first selected slot
+      // 2. Create pending DB Booking
       const firstSlot = selectedSlots[0];
       const lastSlot = selectedSlots[selectedSlots.length - 1];
       const bookingRef = `TRF-${dateStr.replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -190,124 +190,142 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   };
 
   return (
-    <div className="modal-backdrop">
-      <div className="bg-[#131b2e] border border-[#24304f] rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl">
-        {/* Header */}
-        <div className="p-4 bg-[#0b0f19] border-b border-[#24304f] flex items-center justify-between">
+    <div className="modal-overlay">
+      <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto shadow-2xl animate-modalScaleIn text-on-surface">
+        {/* Stitch Header */}
+        <div className="p-4 bg-surface-container-low border-b border-outline-variant/40 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <ShieldCheck className="w-5 h-5 text-emerald-400" />
-            <h3 className="font-semibold text-lg text-white">Complete Booking</h3>
+            <span className="material-symbols-outlined text-primary" style={{ fontSize: '24px' }}>sports_soccer</span>
+            <h3 className="font-headline font-bold text-xl text-primary">Checkout & Payment</h3>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-white p-1">
+          <button onClick={onClose} className="text-on-surface-variant hover:text-on-surface p-1 rounded-full hover:bg-surface-container transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Lock Timer Banner */}
-        <div className="bg-cyan-500/10 border-b border-cyan-500/20 px-4 py-2 flex items-center justify-between text-xs text-cyan-300">
-          <span className="flex items-center gap-1.5 font-medium">
-            <Clock className="w-4 h-4 text-cyan-400 animate-pulse" />
-            Slot Lock Reserved
-          </span>
-          <span className="font-mono text-sm font-bold bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-500/40 text-cyan-200">
-            {formatTimer(timeLeft)}
-          </span>
+        {/* Stitch Step Tracker */}
+        <div className="px-6 pt-4 pb-2 bg-white">
+          <div className="flex items-center justify-between text-xs font-headline font-bold uppercase tracking-wider mb-2">
+            <span className={step === 'details' ? 'text-primary' : 'text-on-surface-variant'}>1. Details</span>
+            <span className={step === 'otp' ? 'text-primary' : 'text-on-surface-variant'}>2. OTP Verification</span>
+            <span className={step === 'payment' ? 'text-primary' : 'text-on-surface-variant'}>3. Payment</span>
+          </div>
+          <div className="h-1.5 w-full bg-surface-container-high rounded-full overflow-hidden">
+            <div
+              className="h-full bg-primary transition-all duration-300"
+              style={{
+                width: step === 'details' ? '33%' : step === 'otp' ? '66%' : '100%'
+              }}
+            ></div>
+          </div>
         </div>
 
-        {/* Modal Body */}
-        <div className="p-5 max-h-[75vh] overflow-y-auto space-y-5">
+        {/* Stitch Slot Hold Timer Banner */}
+        <div className="bg-primary/10 border-y border-primary/20 px-6 py-2.5 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Timer className="w-4 h-4 text-primary" />
+            <span className="font-headline font-bold text-xs text-primary">Slot held exclusively for you</span>
+          </div>
+          <div className="font-headline text-base font-extrabold text-primary countdown-pulse bg-white px-3 py-0.5 rounded-md border border-primary/30 shadow-sm">
+            {formatTimer(timeLeft)}
+          </div>
+        </div>
+
+        {/* Modal Content */}
+        <div className="p-6 max-h-[70vh] overflow-y-auto space-y-6">
           {/* Summary Box */}
-          <div className="bg-[#0f172a] p-4 rounded-xl border border-[#24304f] text-xs space-y-2">
-            <div className="flex justify-between font-medium text-gray-300">
-              <span>Court:</span>
-              <span className="text-white font-semibold">{court.name}</span>
+          <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/40 space-y-2">
+            <div className="flex justify-between text-xs text-on-surface-variant">
+              <span className="font-medium">Arena / Court:</span>
+              <span className="font-headline font-bold text-on-surface text-sm">{court.name}</span>
             </div>
-            <div className="flex justify-between text-gray-300">
-              <span>Date & Time:</span>
-              <span className="text-emerald-400 font-semibold">
-                {dateStr} | {selectedSlots[0]?.start_time} - {selectedSlots[selectedSlots.length - 1]?.end_time}
+            <div className="flex justify-between text-xs text-on-surface-variant">
+              <span className="font-medium">Date & Slot Time:</span>
+              <span className="font-headline font-bold text-primary text-xs">
+                {dateStr} | {formatTimeRange12h(selectedSlots[0]?.start_time, selectedSlots[selectedSlots.length - 1]?.end_time)} ({selectedSlots.length} slot)
               </span>
             </div>
-            <div className="border-t border-[#24304f] pt-2 flex justify-between text-sm">
-              <span className="text-gray-400">Total Amount:</span>
+            <div className="border-t border-outline-variant/30 pt-2 flex justify-between items-center">
+              <span className="text-xs font-semibold text-on-surface-variant">Total Payable:</span>
               <div className="text-right">
-                {discount > 0 && <span className="line-through text-gray-500 mr-2">₹{rawTotal}</span>}
-                <span className="text-emerald-400 font-bold text-base">₹{finalTotal}</span>
+                {discount > 0 && <span className="line-through text-on-surface-variant text-xs mr-2">₹{rawTotal}</span>}
+                <span className="font-headline text-2xl font-extrabold text-primary">₹{finalTotal}</span>
               </div>
             </div>
           </div>
 
-          {/* STEP 1: Contact Details */}
+          {/* STEP 1: Contact Form */}
           {step === 'details' && (
             <form onSubmit={handleSendOtp} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-300 mb-1">Full Name *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Rahul Sharma"
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  className="input-field"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-300 mb-1">Mobile Number (WhatsApp) *</label>
-                <div className="flex gap-2">
-                  <span className="bg-[#0f172a] border border-[#24304f] text-gray-400 text-xs flex items-center px-3 rounded-lg font-medium">+91</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-headline font-bold text-on-surface-variant mb-1">Full Name *</label>
                   <input
-                    type="tel"
+                    type="text"
                     required
-                    maxLength={10}
-                    placeholder="9876543210"
-                    value={phone}
-                    onChange={e => setPhone(e.target.value.replace(/\D/g, ''))}
-                    className="input-field"
+                    placeholder="e.g. Rahul Sharma"
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    className="form-input"
                   />
+                </div>
+                <div>
+                  <label className="block text-xs font-headline font-bold text-on-surface-variant mb-1">Mobile Number (WhatsApp) *</label>
+                  <div className="flex gap-2">
+                    <span className="bg-surface-container-high border border-outline-variant px-3 py-2.5 rounded-lg text-xs font-bold text-on-surface flex items-center">+91</span>
+                    <input
+                      type="tel"
+                      required
+                      maxLength={10}
+                      placeholder="9876543210"
+                      value={phone}
+                      onChange={e => setPhone(e.target.value.replace(/\D/g, ''))}
+                      className="form-input flex-1"
+                    />
+                  </div>
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-300 mb-1">Email Address (Optional)</label>
+                <label className="block text-xs font-headline font-bold text-on-surface-variant mb-1">Email Address (Optional)</label>
                 <input
                   type="email"
                   placeholder="rahul@example.com"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  className="input-field"
+                  className="form-input"
                 />
               </div>
 
               {/* Coupon Section */}
-              <div className="pt-2 border-t border-[#24304f]">
-                <label className="block text-xs font-semibold text-gray-300 mb-1">Apply Coupon</label>
+              <div className="pt-3 border-t border-outline-variant/30">
+                <label className="block text-xs font-headline font-bold text-on-surface-variant mb-1">Apply Coupon Code</label>
                 <div className="flex gap-2">
                   <input
                     type="text"
                     placeholder="WELCOME100 or TURF20"
                     value={couponCode}
                     onChange={e => setCouponCode(e.target.value)}
-                    className="input-field font-mono text-xs uppercase"
+                    className="form-input uppercase font-mono text-xs"
                   />
                   <button
                     type="button"
                     onClick={handleApplyCoupon}
-                    className="btn btn-secondary text-xs px-3 shrink-0 flex items-center gap-1"
+                    className="btn-secondary px-4 py-2 text-xs font-bold shrink-0 flex items-center gap-1"
                   >
-                    <Tag className="w-3.5 h-3.5 text-emerald-400" /> Apply
+                    <Tag className="w-3.5 h-3.5 text-primary" /> Apply
                   </button>
                 </div>
                 {appliedCoupon && (
-                  <p className="text-xs text-emerald-400 mt-1 font-medium flex items-center gap-1">
-                    <CheckCircle className="w-3.5 h-3.5" /> Coupon '{appliedCoupon.code}' applied (-₹{discount})
+                  <p className="text-xs text-primary font-bold mt-1.5 flex items-center gap-1">
+                    ✓ Coupon '{appliedCoupon.code}' applied (-₹{discount})
                   </p>
                 )}
-                {couponError && <p className="text-xs text-red-400 mt-1">{couponError}</p>}
+                {couponError && <p className="text-xs text-red-600 font-semibold mt-1.5">{couponError}</p>}
               </div>
 
-              <button type="submit" className="btn btn-primary w-full mt-4 text-sm font-bold">
-                Proceed to Verification
+              <button type="submit" className="btn-cta w-full py-3 text-sm font-headline uppercase tracking-wider shadow-md">
+                Proceed to Mobile Verification
               </button>
             </form>
           )}
@@ -315,9 +333,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           {/* STEP 2: Phone OTP Verification */}
           {step === 'otp' && (
             <form onSubmit={handleVerifyOtp} className="space-y-4 text-center py-2">
-              <div className="bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20 text-xs text-emerald-300">
-                Enter the 4-digit OTP sent via SMS/WhatsApp to <strong>+91 {phone}</strong>
-                <p className="text-[11px] text-gray-400 mt-1">(Demo OTP: <code className="bg-emerald-950 px-1 py-0.5 rounded text-emerald-300">1234</code>)</p>
+              <div className="bg-primary/10 p-4 rounded-xl border border-primary/20 text-xs text-on-surface">
+                Enter the 4-digit verification code sent via WhatsApp to <strong>+91 {phone}</strong>
+                <p className="text-[11px] text-on-surface-variant mt-1.5 font-medium">
+                  (Demo Master OTP: <code className="bg-white px-2 py-0.5 rounded border border-primary/30 font-bold text-primary">1234</code>)
+                </p>
               </div>
 
               <input
@@ -327,21 +347,21 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 placeholder="1234"
                 value={otpInput}
                 onChange={e => setOtpInput(e.target.value)}
-                className="input-field text-center font-mono text-2xl tracking-[0.5em] py-3"
+                className="form-input text-center font-mono text-2xl tracking-[0.5em] py-3 max-w-xs mx-auto block"
               />
 
-              {otpError && <p className="text-xs text-red-400">{otpError}</p>}
+              {otpError && <p className="text-xs text-red-600 font-semibold">{otpError}</p>}
 
-              <div className="flex gap-2 pt-2">
+              <div className="flex gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setStep('details')}
-                  className="btn btn-secondary flex-1 text-xs"
+                  className="btn-secondary flex-1 py-2.5 text-xs font-bold"
                 >
                   Back
                 </button>
-                <button type="submit" className="btn btn-primary flex-1 text-xs font-bold">
-                  Verify & Pay
+                <button type="submit" className="btn-primary flex-1 py-2.5 text-xs font-bold">
+                  Verify OTP & Proceed
                 </button>
               </div>
             </form>
@@ -350,55 +370,55 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           {/* STEP 3: Razorpay Payment Simulation */}
           {step === 'payment' && (
             <div className="space-y-4 text-center py-2">
-              <div className="flex items-center justify-between p-3 bg-slate-900 border border-slate-700 rounded-xl text-left">
+              <div className="flex items-center justify-between p-4 bg-surface-container-low border border-outline-variant/40 rounded-xl text-left">
                 <div className="flex items-center gap-3">
-                  <CreditCard className="w-6 h-6 text-emerald-400" />
+                  <ShieldCheck className="w-7 h-7 text-primary" />
                   <div>
-                    <p className="text-xs font-bold text-white">Razorpay Secure Checkout</p>
-                    <p className="text-[10px] text-gray-400">Order Amount: ₹{finalTotal}</p>
+                    <p className="font-headline font-bold text-sm text-on-surface">Razorpay Gateway Simulation</p>
+                    <p className="text-xs text-on-surface-variant">Amount: ₹{finalTotal}</p>
                   </div>
                 </div>
-                <span className="text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded font-semibold">
-                  LIVE API SIMULATOR
+                <span className="bg-primary text-white text-[10px] px-2.5 py-0.5 rounded-full font-headline font-bold uppercase tracking-wider">
+                  TEST MODE
                 </span>
               </div>
 
               {paymentError && (
-                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-xs text-red-400 text-left flex items-start gap-2">
-                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <div>{paymentError}</div>
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 text-left flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                  <div className="font-medium">{paymentError}</div>
                 </div>
               )}
 
               {isProcessingPayment ? (
                 <div className="py-8 space-y-3">
-                  <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-                  <p className="text-xs text-gray-300 font-semibold">Processing Razorpay Payment...</p>
-                  <p className="text-[10px] text-gray-500">Verifying HMAC webhook signature & DB constraint...</p>
+                  <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
+                  <p className="text-sm font-headline font-bold text-on-surface">Verifying Payment & Syncing DB Lock...</p>
+                  <p className="text-xs text-on-surface-variant">HMAC Webhook verification in progress...</p>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  <p className="text-xs text-gray-400 font-medium">Select payment simulation mode:</p>
-                  
+                <div className="space-y-3 pt-2">
+                  <p className="text-xs text-on-surface-variant font-medium">Select instant payment method:</p>
+
                   <button
                     onClick={() => handleExecutePayment('upi', false)}
-                    className="btn btn-primary w-full text-xs font-bold flex items-center justify-center gap-2 py-3"
+                    className="btn-cta w-full text-xs font-headline font-bold uppercase tracking-wider flex items-center justify-center gap-2 py-3 shadow-md"
                   >
-                    <Smartphone className="w-4 h-4" /> Pay via UPI / GPay (Simulate Success)
+                    <Smartphone className="w-4 h-4" /> Pay via UPI / GooglePay / PhonePe (Simulate Success)
                   </button>
 
                   <button
                     onClick={() => handleExecutePayment('card', false)}
-                    className="btn btn-secondary w-full text-xs font-semibold flex items-center justify-center gap-2"
+                    className="btn-secondary w-full text-xs font-bold flex items-center justify-center gap-2 py-3"
                   >
-                    <CreditCard className="w-4 h-4" /> Pay via Credit/Debit Card (Simulate Success)
+                    <CreditCard className="w-4 h-4 text-primary" /> Pay via Credit / Debit Card (Simulate Success)
                   </button>
 
                   <button
                     onClick={() => handleExecutePayment('upi', true)}
-                    className="btn btn-danger w-full text-xs font-semibold flex items-center justify-center gap-2 opacity-80 hover:opacity-100"
+                    className="w-full py-2.5 bg-red-50 border border-red-200 text-red-700 text-xs font-bold rounded-lg hover:bg-red-100 transition-colors flex items-center justify-center gap-2"
                   >
-                    <AlertTriangle className="w-4 h-4" /> Simulate Payment Failure / Decline
+                    <AlertTriangle className="w-4 h-4" /> Simulate Payment Failure / Bank Decline
                   </button>
                 </div>
               )}

@@ -24,7 +24,8 @@ export class SlotEngine {
    * Determine if a date is weekday or weekend
    */
   private static getDayType(dateStr: string): DayType {
-    const date = new Date(dateStr);
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const date = new Date(y, m - 1, d);
     const day = date.getDay();
     return (day === 0 || day === 6) ? 'weekend' : 'weekday';
   }
@@ -49,6 +50,19 @@ export class SlotEngine {
     const isToday = dateStr === now.toISOString().split('T')[0];
     const currentMins = now.getHours() * 60 + now.getMinutes();
 
+    const [year, month, dayNum] = dateStr.split('-').map(Number);
+    const slotDate = new Date(year, month - 1, dayNum);
+    const dayOfWeek = slotDate.getDay(); // 0 = Sunday, 6 = Saturday
+
+    let baseRate = court.base_price_per_hour;
+    if (dayOfWeek === 6 && court.saturday_price_per_hour !== undefined) {
+      baseRate = court.saturday_price_per_hour;
+    } else if (dayOfWeek === 0 && court.sunday_price_per_hour !== undefined) {
+      baseRate = court.sunday_price_per_hour;
+    } else if ((dayOfWeek === 0 || dayOfWeek === 6) && court.weekend_price_per_hour !== undefined) {
+      baseRate = court.weekend_price_per_hour;
+    }
+
     let cursor = openMins;
 
     while (cursor + stepMins <= closeMins) {
@@ -58,13 +72,27 @@ export class SlotEngine {
       // Check if slot start time is in past or violates min_notice_minutes
       const isPast = isToday && (cursor <= (currentMins + venue.min_notice_minutes));
 
-      // Calculate price based on pricing rules or fallback base price
-      let slotPrice = court.base_price_per_hour;
+      let slotPrice = baseRate;
       let isPeak = false;
 
+      // 1. Check Pitch Peak Hours Configuration
+      if (court.peak_enabled && court.peak_start_time && court.peak_end_time && court.peak_price_per_hour) {
+        const pStart = this.timeToMinutes(court.peak_start_time);
+        const pEnd = this.timeToMinutes(court.peak_end_time);
+        if (cursor >= pStart && cursor < pEnd) {
+          slotPrice = court.peak_price_per_hour;
+          isPeak = true;
+        }
+      }
+
+      // 2. Check Custom Granular Pricing Rules
       for (const rule of pricingRules) {
         const rStart = this.timeToMinutes(rule.start_time);
         const rEnd = this.timeToMinutes(rule.end_time);
+        // Ignore full-day legacy pricing rules so court's Saturday/Sunday rates take priority
+        if (rStart <= openMins && rEnd >= closeMins) {
+          continue;
+        }
         if (cursor >= rStart && cursor < rEnd) {
           slotPrice = rule.price;
           isPeak = true;

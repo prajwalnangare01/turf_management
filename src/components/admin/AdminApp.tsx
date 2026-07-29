@@ -34,49 +34,49 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onSwitchToCustomer }) => {
   const activeLocksCount = store.getSlotLocks().filter(l => l.expires_at > Date.now()).length;
 
   return (
-    <div className="min-h-screen text-slate-100 pb-16">
+    <div className="bg-background text-on-surface min-h-screen pb-16">
       {/* Admin Top Navbar */}
-      <header className="sticky top-0 z-40 bg-[#070b15]/90 backdrop-blur-xl border-b border-white/10 px-4 py-3 shadow-2xl">
+      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-outline-variant/40 shadow-sm px-4 py-3">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <button
               onClick={onSwitchToCustomer}
-              className="btn-glass text-xs px-3 py-1.5 flex items-center gap-1.5 font-semibold"
+              className="btn-secondary text-xs px-3.5 py-1.5 flex items-center gap-1.5 font-bold"
             >
-              <ArrowLeft className="w-3.5 h-3.5" /> Customer Portal
+              <ArrowLeft className="w-3.5 h-3.5 text-primary" /> Customer Portal
             </button>
 
             <div className="flex items-center gap-2.5">
-              <span className="w-9 h-9 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-xl flex items-center justify-center font-black text-base shadow-lg shadow-amber-500/10">
+              <div className="w-9 h-9 bg-primary text-white rounded-xl flex items-center justify-center font-bold text-lg shadow-sm">
                 🛡️
-              </span>
+              </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h1 className="font-black text-base text-white tracking-tight leading-none">Apex Turf Operations</h1>
-                  <span className="badge-neon badge-neon-amber text-[9px] px-1.5 py-0.5">
+                  <h1 className="font-headline font-bold text-xl text-primary leading-none">Apex Turf Operations</h1>
+                  <span className="bg-secondary-container text-on-secondary-container px-2 py-0.5 rounded-full font-headline font-bold text-[10px]">
                     EXECUTIVE PORTAL
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-400 mt-0.5 font-medium">Real-time Scheduling & Control Center</p>
+                <p className="text-[11px] text-on-surface-variant font-medium mt-0.5">Real-time Scheduling & Control Center</p>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
             {/* Live Role Switcher */}
-            <div className="flex items-center gap-2 bg-slate-900/90 px-3 py-1.5 rounded-xl border border-white/10 text-xs">
-              <UserCheck className="w-4 h-4 text-emerald-400" />
-              <span className="text-slate-400 font-semibold">Active Role:</span>
+            <div className="flex items-center gap-2 bg-surface-container-low px-3 py-1.5 rounded-xl border border-outline-variant/40 text-xs">
+              <UserCheck className="w-4 h-4 text-primary" />
+              <span className="text-on-surface-variant font-medium">Role:</span>
               <select
                 value={currentAdmin.id}
                 onChange={e => {
                   const adm = adminUsers.find(a => a.id === e.target.value);
                   if (adm) setCurrentAdmin(adm);
                 }}
-                className="bg-transparent text-white font-extrabold outline-none cursor-pointer"
+                className="bg-transparent text-on-surface font-headline font-bold outline-none cursor-pointer"
               >
                 {adminUsers.map(a => (
-                  <option key={a.id} value={a.id} className="bg-slate-900 text-white">
+                  <option key={a.id} value={a.id} className="bg-white text-on-surface">
                     {a.name} ({a.role.toUpperCase()})
                   </option>
                 ))}
@@ -85,9 +85,9 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onSwitchToCustomer }) => {
 
             <button
               onClick={() => setShowOfflineModal(true)}
-              className="btn-emerald text-xs px-4 py-2 font-black shadow-lg shadow-emerald-500/20 flex items-center gap-1.5"
+              className="btn-cta text-xs px-4 py-2 font-headline font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-md"
             >
-              <PlusCircle className="w-4 h-4" /> + New Offline Booking
+              <PlusCircle className="w-4 h-4" /> + New Walk-in Booking
             </button>
           </div>
         </div>
@@ -96,131 +96,75 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onSwitchToCustomer }) => {
       {/* Metric Cards Grid */}
       <div className="max-w-7xl mx-auto px-4 py-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-          <div className="glass-card p-5 space-y-2 border-emerald-500/30">
-            <div className="flex justify-between items-center text-slate-400 font-bold uppercase text-[10px] tracking-wider">
-              <span>Today's Revenue</span>
-              <span className="text-emerald-400">₹</span>
-            </div>
-            <h3 className="text-2xl font-black text-emerald-400">₹{todayRevenue}</h3>
-            <p className="text-[10px] text-slate-400 flex items-center gap-1">
-              <Zap className="w-3 h-3 text-emerald-400" /> Live Captured Revenue
-            </p>
-          </div>
-
-          <div className="glass-card p-5 space-y-2">
-            <div className="flex justify-between items-center text-slate-400 font-bold uppercase text-[10px] tracking-wider">
+          <div className="bg-white p-5 rounded-xl border border-outline-variant/50 shadow-sm space-y-2">
+            <div className="flex justify-between items-center text-on-surface-variant font-headline font-bold text-xs uppercase tracking-wider">
               <span>Today's Bookings</span>
-              <span>📅</span>
+              <Calendar className="w-4 h-4 text-primary" />
             </div>
-            <h3 className="text-2xl font-black text-white">{todayBookings.length} Sessions</h3>
-            <p className="text-[10px] text-slate-400">Online & Counter Walk-ins</p>
+            <p className="text-3xl font-headline font-extrabold text-on-surface">{todayBookings.length}</p>
+            <p className="text-[11px] text-primary font-semibold">Active pitches booked</p>
           </div>
 
-          <div className="glass-card p-5 space-y-2 border-cyan-500/30">
-            <div className="flex justify-between items-center text-slate-400 font-bold uppercase text-[10px] tracking-wider">
-              <span>Active Customer Locks</span>
-              <Lock className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+          <div className="bg-white p-5 rounded-xl border border-outline-variant/50 shadow-sm space-y-2">
+            <div className="flex justify-between items-center text-on-surface-variant font-headline font-bold text-xs uppercase tracking-wider">
+              <span>Today's Revenue</span>
+              <Zap className="w-4 h-4 text-secondary" />
             </div>
-            <h3 className="text-2xl font-black text-cyan-300">{activeLocksCount} Held</h3>
-            <p className="text-[10px] text-cyan-400/80 font-medium">5-Min Redis Lock Guard</p>
+            <p className="text-3xl font-headline font-extrabold text-primary">₹{todayRevenue.toLocaleString()}</p>
+            <p className="text-[11px] text-on-surface-variant font-medium">Verified Razorpay & Walk-in</p>
           </div>
 
-          <div className="glass-card p-5 space-y-2 border-amber-500/30">
-            <div className="flex justify-between items-center text-slate-400 font-bold uppercase text-[10px] tracking-wider">
-              <span>Current Admin</span>
-              <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+          <div className="bg-white p-5 rounded-xl border border-outline-variant/50 shadow-sm space-y-2">
+            <div className="flex justify-between items-center text-on-surface-variant font-headline font-bold text-xs uppercase tracking-wider">
+              <span>Live Redis Locks</span>
+              <Lock className="w-4 h-4 text-sky-600" />
             </div>
-            <h3 className="text-base font-black text-white truncate">{currentAdmin.name}</h3>
-            <span className="badge-neon badge-neon-amber text-[9px] px-2 py-0.5">
-              {currentAdmin.role}
-            </span>
+            <p className="text-3xl font-headline font-extrabold text-sky-700">{activeLocksCount}</p>
+            <p className="text-[11px] text-sky-600 font-semibold">Sessions holding slots</p>
+          </div>
+
+          <div className="bg-white p-5 rounded-xl border border-outline-variant/50 shadow-sm space-y-2">
+            <div className="flex justify-between items-center text-on-surface-variant font-headline font-bold text-xs uppercase tracking-wider">
+              <span>DB Integrity Guard</span>
+              <ShieldCheck className="w-4 h-4 text-primary" />
+            </div>
+            <p className="text-3xl font-headline font-extrabold text-primary">100%</p>
+            <p className="text-[11px] text-on-surface-variant font-medium">Zero double-bookings</p>
           </div>
         </div>
-      </div>
 
-      {/* Tabs Navigation */}
-      <main className="max-w-7xl mx-auto px-4 space-y-6">
-        <div className="flex gap-2 border-b border-white/10 overflow-x-auto pb-1 text-xs font-extrabold">
-          <button
-            onClick={() => setActiveTab('calendar')}
-            className={`px-4 py-2.5 rounded-t-xl flex items-center gap-2 border-b-2 transition-all ${
-              activeTab === 'calendar'
-                ? 'border-emerald-400 text-emerald-400 bg-emerald-500/10'
-                : 'border-transparent text-slate-400 hover:text-white'
-            }`}
-          >
-            <Calendar className="w-4 h-4" /> Schedule Matrix
-          </button>
-
-          <button
-            onClick={() => setActiveTab('bookings')}
-            className={`px-4 py-2.5 rounded-t-xl flex items-center gap-2 border-b-2 transition-all ${
-              activeTab === 'bookings'
-                ? 'border-emerald-400 text-emerald-400 bg-emerald-500/10'
-                : 'border-transparent text-slate-400 hover:text-white'
-            }`}
-          >
-            <ListFilter className="w-4 h-4" /> Bookings Directory
-          </button>
-
-          <button
-            onClick={() => setActiveTab('courts')}
-            className={`px-4 py-2.5 rounded-t-xl flex items-center gap-2 border-b-2 transition-all ${
-              activeTab === 'courts'
-                ? 'border-emerald-400 text-emerald-400 bg-emerald-500/10'
-                : 'border-transparent text-slate-400 hover:text-white'
-            }`}
-          >
-            <Settings className="w-4 h-4" /> Courts & Pricing
-          </button>
-
-          <button
-            onClick={() => setActiveTab('crm')}
-            className={`px-4 py-2.5 rounded-t-xl flex items-center gap-2 border-b-2 transition-all ${
-              activeTab === 'crm'
-                ? 'border-emerald-400 text-emerald-400 bg-emerald-500/10'
-                : 'border-transparent text-slate-400 hover:text-white'
-            }`}
-          >
-            <Users className="w-4 h-4" /> Customer CRM
-          </button>
-
-          <button
-            onClick={() => setActiveTab('reports')}
-            className={`px-4 py-2.5 rounded-t-xl flex items-center gap-2 border-b-2 transition-all ${
-              activeTab === 'reports'
-                ? 'border-emerald-400 text-emerald-400 bg-emerald-500/10'
-                : 'border-transparent text-slate-400 hover:text-white'
-            }`}
-          >
-            <BarChart3 className="w-4 h-4" /> Reports & CSV
-          </button>
-
-          <button
-            onClick={() => setActiveTab('audit')}
-            className={`px-4 py-2.5 rounded-t-xl flex items-center gap-2 border-b-2 transition-all ${
-              activeTab === 'audit'
-                ? 'border-emerald-400 text-emerald-400 bg-emerald-500/10'
-                : 'border-transparent text-slate-400 hover:text-white'
-            }`}
-          >
-            <History className="w-4 h-4" /> Audit Log
-          </button>
-
-          <button
-            onClick={() => setActiveTab('settings')}
-            className={`px-4 py-2.5 rounded-t-xl flex items-center gap-2 border-b-2 transition-all ${
-              activeTab === 'settings'
-                ? 'border-emerald-400 text-emerald-400 bg-emerald-500/10'
-                : 'border-transparent text-slate-400 hover:text-white'
-            }`}
-          >
-            <Sliders className="w-4 h-4" /> Settings
-          </button>
+        {/* Tab Navigation */}
+        <div className="flex gap-2 overflow-x-auto my-6 border-b border-outline-variant/40 pb-2 no-scrollbar">
+          {[
+            { id: 'calendar', label: 'Schedule Calendar', icon: Calendar },
+            { id: 'bookings', label: 'Bookings Directory', icon: ListFilter },
+            { id: 'courts', label: 'Court Pricing Manager', icon: Sliders },
+            { id: 'crm', label: 'Customer CRM', icon: Users },
+            { id: 'reports', label: 'Analytics & Revenue', icon: BarChart3 },
+            { id: 'audit', label: 'Audit Logs', icon: History },
+            { id: 'settings', label: 'Venue Settings', icon: Settings },
+          ].map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`px-4 py-2.5 rounded-xl text-xs font-headline font-bold flex items-center gap-2 whitespace-nowrap transition-all ${
+                  isActive
+                    ? 'bg-primary text-white shadow-md'
+                    : 'bg-white text-on-surface-variant hover:text-on-surface border border-outline-variant/40'
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
 
-        {/* Tab Views */}
-        <div>
+        {/* Tab Content Views */}
+        <div className="bg-white rounded-2xl p-6 border border-outline-variant/50 shadow-sm">
           {activeTab === 'calendar' && <ScheduleCalendarView currentAdmin={currentAdmin} />}
           {activeTab === 'bookings' && <BookingListView currentAdmin={currentAdmin} />}
           {activeTab === 'courts' && <CourtPricingManager currentAdmin={currentAdmin} />}
@@ -229,14 +173,12 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onSwitchToCustomer }) => {
           {activeTab === 'audit' && <AuditLogViewer />}
           {activeTab === 'settings' && <SettingsPanel currentAdmin={currentAdmin} />}
         </div>
-      </main>
+      </div>
 
-      {/* Offline Booking Modal */}
       {showOfflineModal && (
         <OfflineBookingModal
           currentAdmin={currentAdmin}
           onClose={() => setShowOfflineModal(false)}
-          onSuccess={() => setShowOfflineModal(false)}
         />
       )}
     </div>

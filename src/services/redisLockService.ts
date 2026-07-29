@@ -1,7 +1,7 @@
 import { store } from './store';
 import { SlotLock } from '../types/schema';
 
-const LOCK_TTL_SECONDS = 300; // 5 minutes
+const LOCK_TTL_SECONDS = 120; // 2 minutes hold time
 
 export class RedisLockService {
   // Purge expired locks from simulated Redis store
@@ -16,7 +16,7 @@ export class RedisLockService {
   }
 
   /**
-   * Acquire a 5-minute slot lock (SET key session_id NX EX 300)
+   * Acquire a 2-minute slot lock (SET key session_id NX EX 120)
    */
   public static acquireLock(
     courtId: string, 

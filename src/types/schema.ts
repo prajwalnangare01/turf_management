@@ -1,4 +1,4 @@
-export type SportType = 'Football' | 'Cricket' | 'Badminton' | 'Tennis' | 'Pickleball';
+export type SportType = string;
 
 export type BookingSource = 'online' | 'offline_phone' | 'offline_whatsapp' | 'offline_walkin';
 
@@ -54,7 +54,14 @@ export interface Court {
   closing_time: string; // "23:00"
   buffer_minutes: number; // turnover time (e.g., 10 mins)
   status: 'active' | 'maintenance' | 'inactive';
-  base_price_per_hour: number;
+  base_price_per_hour: number; // Weekday Rate (Mon - Fri)
+  saturday_price_per_hour?: number; // Saturday Special Rate
+  sunday_price_per_hour?: number; // Sunday Special Rate
+  weekend_price_per_hour?: number; // Generic Weekend Rate
+  peak_enabled?: boolean; // Enable Peak Hours & Pricing
+  peak_start_time?: string; // "18:00" (06:00 PM)
+  peak_end_time?: string; // "23:00" (11:00 PM)
+  peak_price_per_hour?: number; // e.g. 1800
 }
 
 export interface PricingRule {

@@ -1,7 +1,7 @@
 import React from 'react';
 import { store } from '../../services/store';
 import { AdminUser } from '../../types/schema';
-import { BarChart3, Download, TrendingUp, Calendar, PieChart } from 'lucide-react';
+import { BarChart3, Download, TrendingUp } from 'lucide-react';
 
 interface ReportsAnalyticsProps {
   currentAdmin: AdminUser;
@@ -48,19 +48,19 @@ export const ReportsAnalytics: React.FC<ReportsAnalyticsProps> = ({ currentAdmin
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 text-on-surface">
       {/* Header */}
-      <div className="flex justify-between items-center bg-[#131b2e] p-4 rounded-xl border border-[#24304f]">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-surface-container-low p-4 rounded-xl border border-outline-variant/40">
         <div>
-          <h2 className="font-bold text-white text-base flex items-center gap-2">
-            <BarChart3 className="w-5 h-5 text-emerald-400" /> Revenue & Occupancy Reports
+          <h2 className="font-headline font-bold text-lg text-primary flex items-center gap-2">
+            <BarChart3 className="w-5 h-5 text-primary" /> Revenue & Occupancy Reports
           </h2>
-          <p className="text-xs text-gray-400 mt-0.5">Financial summaries, court heatmaps, and CSV export.</p>
+          <p className="text-xs text-on-surface-variant mt-0.5 font-medium">Financial summaries, pitch heatmaps, and CSV export.</p>
         </div>
 
         <button
           onClick={exportToCsv}
-          className="btn btn-primary text-xs flex items-center gap-1.5 font-bold"
+          className="btn-primary text-xs px-4 py-2 flex items-center gap-1.5 font-headline font-bold shadow-sm"
         >
           <Download className="w-4 h-4" /> Export Bookings CSV
         </button>
@@ -68,25 +68,25 @@ export const ReportsAnalytics: React.FC<ReportsAnalyticsProps> = ({ currentAdmin
 
       {/* Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-[#131b2e] p-5 rounded-xl border border-[#24304f] space-y-1">
-          <span className="text-xs text-gray-400 font-semibold uppercase">Today's Revenue</span>
-          <h3 className="text-2xl font-extrabold text-emerald-400">₹{todayRevenue}</h3>
-          <p className="text-[11px] text-gray-400 mt-1 flex items-center gap-1">
-            <TrendingUp className="w-3 h-3 text-emerald-400" /> Real-time captured revenue
+        <div className="bg-white p-5 rounded-xl border border-outline-variant/50 shadow-sm space-y-1">
+          <span className="text-xs text-on-surface-variant font-headline font-bold uppercase tracking-wider">Today's Revenue</span>
+          <h3 className="text-3xl font-headline font-extrabold text-primary">₹{todayRevenue}</h3>
+          <p className="text-[11px] text-primary font-medium mt-1 flex items-center gap-1">
+            <TrendingUp className="w-3.5 h-3.5 text-primary" /> Real-time captured revenue
           </p>
         </div>
 
-        <div className="bg-[#131b2e] p-5 rounded-xl border border-[#24304f] space-y-1">
-          <span className="text-xs text-gray-400 font-semibold uppercase">Total Platform Revenue</span>
-          <h3 className="text-2xl font-extrabold text-white">₹{totalRevenue}</h3>
-          <p className="text-[11px] text-gray-400 mt-1">{confirmedBookings.length} confirmed sessions</p>
+        <div className="bg-white p-5 rounded-xl border border-outline-variant/50 shadow-sm space-y-1">
+          <span className="text-xs text-on-surface-variant font-headline font-bold uppercase tracking-wider">Total Platform Revenue</span>
+          <h3 className="text-3xl font-headline font-extrabold text-on-surface">₹{totalRevenue}</h3>
+          <p className="text-[11px] text-on-surface-variant font-medium mt-1">{confirmedBookings.length} confirmed sessions</p>
         </div>
 
-        <div className="bg-[#131b2e] p-5 rounded-xl border border-[#24304f] space-y-1">
-          <span className="text-xs text-gray-400 font-semibold uppercase">Booking Source Mix</span>
-          <div className="flex items-center gap-3 pt-2 text-xs font-bold">
-            <span className="text-red-400">Online: {onlineCount}</span>
-            <span className="text-amber-400">Walk-in: {offlineCount}</span>
+        <div className="bg-white p-5 rounded-xl border border-outline-variant/50 shadow-sm space-y-1">
+          <span className="text-xs text-on-surface-variant font-headline font-bold uppercase tracking-wider">Booking Mix</span>
+          <div className="flex items-center gap-3 pt-2 text-xs font-headline font-bold">
+            <span className="bg-primary/10 text-primary px-2.5 py-1 rounded-full border border-primary/20">Online: {onlineCount}</span>
+            <span className="bg-secondary-container text-on-secondary-container px-2.5 py-1 rounded-full">Walk-in: {offlineCount}</span>
           </div>
         </div>
       </div>
