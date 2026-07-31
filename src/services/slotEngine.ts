@@ -108,10 +108,13 @@ export class SlotEngine {
         return cursor >= bStart && cursor < bEnd;
       });
 
-      // Check Existing DB Active Bookings
-      const existingBooking = bookings.find(b => 
-        b.start_time === slotStart && (b.status === 'confirmed' || b.status === 'pending_payment')
-      );
+      // Check Existing DB Active Bookings (including multi-slot spans)
+      const existingBooking = bookings.find(b => {
+        if (b.status !== 'confirmed' && b.status !== 'pending_payment') return false;
+        const bStart = this.timeToMinutes(b.start_time);
+        const bEnd = this.timeToMinutes(b.end_time);
+        return cursor >= bStart && cursor < bEnd;
+      });
 
       // Check Redis Lock
       const redisLock = RedisLockService.getLock(court.id, dateStr, slotStart);

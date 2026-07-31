@@ -84,8 +84,8 @@ export class RazorpayService {
       // 2. Confirm Booking via PostgresEngine state machine
       PostgresEngine.updateBookingStatus(booking.id, 'confirmed');
 
-      // 3. Release Redis Lock
-      RedisLockService.releaseLock(booking.court_id, booking.booking_date, booking.start_time);
+      // 3. Release Redis Locks for all slots in booking span
+      RedisLockService.releaseLocksForBooking(booking.court_id, booking.booking_date, booking.start_time, booking.end_time);
 
       // 4. Trigger Outbound WhatsApp / SMS Confirmation Notification Job
       NotificationService.enqueueNotification(booking, 'confirmation');

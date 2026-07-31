@@ -367,13 +367,7 @@ class AppStore {
         );
         this.customers = parsed.customers || DEFAULT_CUSTOMERS;
         this.adminUsers = parsed.adminUsers || DEFAULT_ADMIN_USERS;
-        const loadedBookings: Booking[] = parsed.bookings || DEFAULT_BOOKINGS;
-        for (const defaultB of DEFAULT_BOOKINGS) {
-          if (!loadedBookings.some(b => b.id === defaultB.id)) {
-            loadedBookings.push(defaultB);
-          }
-        }
-        this.bookings = loadedBookings;
+        this.bookings = parsed.bookings || [];
         this.payments = parsed.payments || [];
         this.slotLocks = parsed.slotLocks || [];
         this.blockedSlots = parsed.blockedSlots || DEFAULT_BLOCKED_SLOTS;
@@ -432,6 +426,10 @@ class AppStore {
   public setCourts(courts: Court[]) { this.courts = courts; this.saveToStorage(); }
   public setPricingRules(rules: PricingRule[]) { this.pricingRules = rules; this.saveToStorage(); }
   public setCustomers(customers: Customer[]) { this.customers = customers; this.saveToStorage(); }
+  public addCustomer(customer: Customer) { 
+    this.customers.push(customer); 
+    this.saveToStorage(); 
+  }
   public setBookings(bookings: Booking[]) { this.bookings = bookings; this.saveToStorage(); }
   public setPayments(payments: Payment[]) { this.payments = payments; this.saveToStorage(); }
   public setSlotLocks(locks: SlotLock[]) { this.slotLocks = locks; this.saveToStorage(); }
@@ -447,7 +445,7 @@ class AppStore {
     this.pricingRules = DEFAULT_PRICING_RULES;
     this.customers = DEFAULT_CUSTOMERS;
     this.adminUsers = DEFAULT_ADMIN_USERS;
-    this.bookings = DEFAULT_BOOKINGS;
+    this.bookings = [];
     this.payments = [];
     this.slotLocks = [];
     this.blockedSlots = DEFAULT_BLOCKED_SLOTS;
@@ -456,6 +454,28 @@ class AppStore {
     this.notificationLogs = [];
     this.auditLogs = [];
     this.saveToStorage();
+  }
+
+  // Completely clear database
+  public clearAllData() {
+    this.venue = DEFAULT_VENUE;
+    this.sports = DEFAULT_SPORTS;
+    this.courts = DEFAULT_COURTS;
+    this.pricingRules = DEFAULT_PRICING_RULES;
+    this.customers = DEFAULT_CUSTOMERS;
+    this.adminUsers = DEFAULT_ADMIN_USERS;
+    this.bookings = [];
+    this.payments = [];
+    this.slotLocks = [];
+    this.blockedSlots = [];
+    this.cancellationPolicies = DEFAULT_CANCELLATION_POLICIES;
+    this.coupons = DEFAULT_COUPONS;
+    this.notificationLogs = [];
+    this.auditLogs = [];
+    this.saveToStorage();
+    localStorage.removeItem('turfflow_admin_session');
+    localStorage.removeItem('turfflow_customer_session');
+    localStorage.removeItem('TURFFLOW_STORE_V1');
   }
 }
 

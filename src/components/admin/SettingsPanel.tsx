@@ -21,8 +21,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin }) =>
   };
 
   const handleReset = () => {
-    if (confirm('Reset entire platform database to seed defaults? This will erase custom bookings.')) {
-      store.resetToDefaults();
+    if (confirm('Completely clear entire database? This will erase all bookings, payments, locks, and custom records.')) {
+      store.clearAllData();
+      alert('Database cleared successfully!');
       window.location.reload();
     }
   };

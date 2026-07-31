@@ -5,7 +5,7 @@ import { AuditLogger } from '../../services/auditLogger';
 import { AdminUser, BookingStatus, Booking } from '../../types/schema';
 import { ConfirmModal } from '../common/ConfirmModal';
 import { formatTimeRange12h } from '../../utils/formatters';
-import { Search, Filter, CheckCircle, XCircle, UserX, Calendar, ArrowUpDown, X } from 'lucide-react';
+import { Search, Filter, CheckCircle, XCircle, UserX, Calendar, ArrowUpDown, X, Clock, MapPin, Tag } from 'lucide-react';
 
 interface BookingListViewProps {
   currentAdmin: AdminUser;
@@ -60,92 +60,72 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
       const timeB = new Date(`${b.booking_date}T${b.start_time}:00`).getTime();
 
       if (sortOrder === 'latest') {
-        return timeB - timeA; // Newest first
+        return timeB - timeA;
       } else {
-        return timeA - timeB; // Oldest first
+        return timeA - timeB;
       }
     });
 
   const requestStatusUpdate = (b: Booking, targetStatus: BookingStatus) => {
     const cust = customers.find(c => c.id === b.customer_id);
-    const court = courts.find(c => c.id === b.court_id);
-
-    let title = 'Confirm Status Change';
-    let message = `Are you sure you want to update status for booking ${b.booking_ref}?`;
-    let variant: 'danger' | 'warning' | 'success' | 'info' = 'info';
-    let confirmText = 'Confirm Update';
-
-    if (targetStatus === 'completed') {
-      title = 'Mark Booking as Completed';
-      message = `Confirm customer "${cust?.name || 'Customer'}" has checked in and played at "${court?.name || 'Pitch'}" on ${b.booking_date} (${b.start_time})?`;
-      variant = 'success';
-      confirmText = 'Mark Completed';
-    } else if (targetStatus === 'no_show') {
-      title = 'Mark Customer as No-Show';
-      message = `Confirm customer "${cust?.name || 'Customer'}" did NOT show up for slot ${b.start_time} - ${b.end_time}? This will update the customer CRM profile.`;
-      variant = 'warning';
-      confirmText = 'Mark No-Show';
-    } else if (targetStatus === 'cancelled') {
-      title = 'Cancel Booking Reservation';
-      message = `Are you sure you want to CANCEL booking ${b.booking_ref} (${b.booking_date} @ ${b.start_time})? This will release the slot back to the public pool.`;
-      variant = 'danger';
-      confirmText = 'Cancel Reservation';
-    }
+    const actionLabel =
+      targetStatus === 'completed' ? 'Mark Completed (Checked-In)' :
+      targetStatus === 'no_show' ? 'Mark No-Show' : 'Cancel Reservation';
 
     setConfirmState({
       isOpen: true,
-      title,
-      message,
-      confirmText,
-      variant,
+      title: `${actionLabel}: ${b.booking_ref}`,
+      message: `Update reservation for "${cust?.name || 'Customer'}" (${b.booking_date} | ${formatTimeRange12h(b.start_time, b.end_time)}) to status "${targetStatus.toUpperCase()}"?`,
+      confirmText: actionLabel,
+      variant: targetStatus === 'cancelled' ? 'danger' : targetStatus === 'no_show' ? 'warning' : 'success',
       onConfirm: () => {
         const res = PostgresEngine.updateBookingStatus(b.id, targetStatus);
         if (res.success) {
-          AuditLogger.log(currentAdmin.id, `UPDATE_STATUS_${targetStatus}`, 'Booking', b.id);
-          setSearchQuery(q => q);
+          AuditLogger.log(currentAdmin.id, `UPDATE_BOOKING_${targetStatus.toUpperCase()}`, 'Booking', b.id);
+          closeConfirm();
+          window.location.reload();
         } else {
           alert(res.message);
         }
-        closeConfirm();
       }
     });
   };
 
   return (
     <div className="space-y-4 text-on-surface">
-      {/* Universal Confirmation Modal */}
-      <ConfirmModal
-        isOpen={confirmState.isOpen}
-        title={confirmState.title}
-        message={confirmState.message}
-        confirmText={confirmState.confirmText}
-        variant={confirmState.variant}
-        onConfirm={confirmState.onConfirm}
-        onCancel={closeConfirm}
-      />
-
-      {/* Search & Filter Bar */}
-      <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/40 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
-        <div className="flex items-center gap-2 flex-1 max-w-md">
-          <Search className="w-4 h-4 text-primary" />
-          <input
-            type="text"
-            placeholder="Search by 4-digit Gate OTP, Ref #, Name or Phone..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="form-input py-1.5 font-medium"
-          />
+      {/* Header & Filter Controls Bar */}
+      <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/40 space-y-3">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+          <h2 className="font-headline font-bold text-lg text-primary flex items-center gap-2">
+            <Calendar className="w-5 h-5 text-primary shrink-0" /> Bookings Audit Directory
+          </h2>
+          <span className="text-xs text-on-surface-variant font-bold bg-white px-3 py-1 rounded-full border border-outline-variant/40">
+            {filteredBookings.length} Record{filteredBookings.length !== 1 ? 's' : ''} Found
+          </span>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
+        {/* Filter Inputs Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+          {/* Search Box */}
+          <div className="relative">
+            <Search className="w-4 h-4 text-primary absolute left-3 top-2.5 shrink-0" />
+            <input
+              type="text"
+              placeholder="Search Ref, Gate OTP, Name, Phone..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="form-input pl-9 py-1.5 text-xs font-medium w-full"
+            />
+          </div>
+
           {/* Date Filter */}
-          <div className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-lg border border-outline-variant/40">
-            <Calendar className="w-3.5 h-3.5 text-primary shrink-0" />
+          <div className="flex items-center gap-1.5 bg-white px-2.5 py-1.5 rounded-lg border border-outline-variant/40">
+            <Calendar className="w-4 h-4 text-primary shrink-0" />
             <input
               type="date"
               value={dateFilter}
               onChange={e => setDateFilter(e.target.value)}
-              className="bg-transparent text-xs font-bold text-on-surface focus:outline-none"
+              className="bg-transparent text-xs font-bold text-on-surface focus:outline-none w-full"
             />
             {dateFilter && (
               <button
@@ -158,26 +138,13 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
             )}
           </div>
 
-          {/* Sort Order */}
-          <div className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-lg border border-outline-variant/40">
-            <ArrowUpDown className="w-3.5 h-3.5 text-primary shrink-0" />
-            <select
-              value={sortOrder}
-              onChange={e => setSortOrder(e.target.value as 'latest' | 'oldest')}
-              className="bg-transparent text-xs font-headline font-bold text-on-surface focus:outline-none cursor-pointer"
-            >
-              <option value="latest">Sort: Latest to Oldest</option>
-              <option value="oldest">Sort: Oldest to Latest</option>
-            </select>
-          </div>
-
           {/* Status Filter */}
           <div className="flex items-center gap-1.5">
-            <Filter className="w-3.5 h-3.5 text-primary shrink-0" />
+            <Filter className="w-4 h-4 text-primary shrink-0 hidden lg:block" />
             <select
               value={statusFilter}
               onChange={e => setStatusFilter(e.target.value)}
-              className="form-input py-1.5 font-headline font-bold text-xs"
+              className="form-input py-1.5 font-headline font-bold text-xs w-full"
             >
               <option value="all">All Statuses</option>
               <option value="confirmed">Confirmed</option>
@@ -193,7 +160,7 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
           <select
             value={sourceFilter}
             onChange={e => setSourceFilter(e.target.value)}
-            className="form-input py-1.5"
+            className="form-input py-1.5 text-xs font-medium w-full"
           >
             <option value="all">All Sources</option>
             <option value="online">Online</option>
@@ -203,9 +170,95 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-white border border-outline-variant/40 rounded-xl overflow-hidden shadow-sm">
-        <table className="w-full text-left text-xs">
+      {/* MOBILE CARDS VIEW (Displayed on screens < 768px) */}
+      <div className="grid grid-cols-1 gap-3 md:hidden">
+        {filteredBookings.length === 0 ? (
+          <div className="bg-white p-6 rounded-xl text-center text-on-surface-variant font-medium text-xs border border-outline-variant/40">
+            No bookings found matching filters.
+          </div>
+        ) : (
+          filteredBookings.map(b => {
+            const cust = customers.find(c => c.id === b.customer_id);
+            const court = courts.find(c => c.id === b.court_id);
+            const otpCode = b.booking_ref.slice(-4);
+
+            return (
+              <div
+                key={b.id}
+                className="bg-white rounded-2xl p-4 border border-outline-variant/50 shadow-xs space-y-3"
+              >
+                {/* Header */}
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-extrabold text-xs text-primary">{b.booking_ref}</span>
+                      <span className="bg-secondary-container/40 text-on-secondary-container border border-secondary-container/60 px-1.5 py-0.5 rounded text-[10px] font-black tracking-widest">
+                        OTP: {otpCode}
+                      </span>
+                    </div>
+                    <h3 className="font-headline font-bold text-base text-on-surface mt-1">{cust?.name || 'Unknown'}</h3>
+                    <p className="text-xs text-on-surface-variant font-mono">+91 {cust?.phone}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-headline font-extrabold text-lg text-primary">₹{b.total_amount}</p>
+                    <span className={`px-2 py-0.5 rounded-full font-headline font-bold text-[9px] uppercase block mt-0.5 ${
+                      b.status === 'confirmed' ? 'bg-emerald-100 text-emerald-900 border border-emerald-300' :
+                      b.status === 'pending_payment' ? 'bg-sky-100 text-sky-900 border border-sky-300' :
+                      b.status === 'completed' ? 'bg-gray-100 text-gray-800' : 'bg-red-100 text-red-900'
+                    }`}>
+                      {b.status.replace('_', ' ')}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Session Details */}
+                <div className="bg-surface-container-low p-2.5 rounded-xl border border-outline-variant/30 text-xs space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-on-surface-variant font-medium">Court:</span>
+                    <strong className="text-on-surface font-bold">{court?.name}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-on-surface-variant font-medium">Date & Slot:</span>
+                    <strong className="text-primary font-bold">{b.booking_date} ({formatTimeRange12h(b.start_time, b.end_time)})</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-on-surface-variant font-medium">Channel Source:</span>
+                    <span className="font-headline uppercase text-[10px] font-bold text-secondary">{b.source.replace('_', ' ')}</span>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                {b.status === 'confirmed' && (
+                  <div className="grid grid-cols-3 gap-1.5 pt-1">
+                    <button
+                      onClick={() => requestStatusUpdate(b, 'completed')}
+                      className="px-2 py-1.5 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-lg font-bold text-[10px] hover:bg-emerald-100 flex items-center justify-center gap-1"
+                    >
+                      <CheckCircle className="w-3.5 h-3.5" /> Complete
+                    </button>
+                    <button
+                      onClick={() => requestStatusUpdate(b, 'no_show')}
+                      className="px-2 py-1.5 bg-amber-50 text-amber-900 border border-amber-300 rounded-lg font-bold text-[10px] hover:bg-amber-100 flex items-center justify-center gap-1"
+                    >
+                      <UserX className="w-3.5 h-3.5" /> No-Show
+                    </button>
+                    <button
+                      onClick={() => requestStatusUpdate(b, 'cancelled')}
+                      className="px-2 py-1.5 bg-red-50 text-red-800 border border-red-200 rounded-lg font-bold text-[10px] hover:bg-red-100 flex items-center justify-center gap-1"
+                    >
+                      <XCircle className="w-3.5 h-3.5" /> Cancel
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* DESKTOP DATA TABLE (Displayed on screens >= 768px) */}
+      <div className="hidden md:block bg-white border border-outline-variant/40 rounded-xl overflow-x-auto shadow-sm">
+        <table className="w-full text-left text-xs min-w-[750px]">
           <thead className="bg-surface-container-low border-b border-outline-variant/40 font-headline font-bold text-on-surface-variant uppercase tracking-wider">
             <tr>
               <th className="p-3">Ref & Gate OTP</th>
@@ -289,30 +342,11 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
                             className="px-2 py-1 bg-red-50 text-red-800 border border-red-200 rounded-lg font-bold text-[10px] hover:bg-red-100 flex items-center gap-1 transition-colors shadow-2xs"
                             title="Cancel Reservation"
                           >
-                            <XCircle className="w-3.5 h-3.5 text-red-600" /> Cancel
-                          </button>
-                        </div>
-                      ) : b.status === 'pending_payment' ? (
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => requestStatusUpdate(b, 'confirmed')}
-                            className="px-2.5 py-1 bg-sky-600 text-white hover:bg-sky-700 rounded-lg font-bold text-[10px] flex items-center gap-1 transition-colors shadow-sm"
-                            title="Confirm Manual Payment Received"
-                          >
-                            <CheckCircle className="w-3.5 h-3.5" /> Confirm Payment
-                          </button>
-                          <button
-                            onClick={() => requestStatusUpdate(b, 'cancelled')}
-                            className="px-2 py-1 bg-red-50 text-red-800 border border-red-200 rounded-lg font-bold text-[10px] hover:bg-red-100 flex items-center gap-1 transition-colors shadow-2xs"
-                            title="Cancel Pending Booking"
-                          >
-                            <XCircle className="w-3.5 h-3.5 text-red-600" /> Cancel
+                            <XCircle className="w-3.5 h-3.5 text-red-700" /> Cancel
                           </button>
                         </div>
                       ) : (
-                        <span className="text-[11px] text-on-surface-variant font-medium italic">
-                          Closed ({b.status})
-                        </span>
+                        <span className="text-[10px] text-on-surface-variant font-medium italic">No action</span>
                       )}
                     </td>
                   </tr>
@@ -322,6 +356,17 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
           </tbody>
         </table>
       </div>
+
+      {/* Confirmation Modal */}
+      <ConfirmModal
+        isOpen={confirmState.isOpen}
+        title={confirmState.title}
+        message={confirmState.message}
+        confirmText={confirmState.confirmText}
+        variant={confirmState.variant}
+        onConfirm={confirmState.onConfirm}
+        onCancel={closeConfirm}
+      />
     </div>
   );
 };

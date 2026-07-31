@@ -80,7 +80,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
           </button>
         </div>
 
-        <div className="flex items-center gap-3 text-xs text-on-surface-variant font-medium">
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 text-xs text-on-surface-variant font-medium">
           <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-500"></span> Online</span>
           <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span> Walk-in</span>
           <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-sky-500"></span> 2-Min Hold</span>

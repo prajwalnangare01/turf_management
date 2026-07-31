@@ -4,6 +4,14 @@ import { SlotLock } from '../types/schema';
 const LOCK_TTL_SECONDS = 120; // 2 minutes hold time
 
 export class RedisLockService {
+  /**
+   * Helper to convert HH:mm string to minutes from midnight
+   */
+  private static timeToMinutes(timeStr: string): number {
+    const [h, m] = timeStr.split(':').map(Number);
+    return h * 60 + m;
+  }
+
   // Purge expired locks from simulated Redis store
   private static cleanExpiredLocks(): SlotLock[] {
     const now = Date.now();
@@ -72,6 +80,25 @@ export class RedisLockService {
     const updated = locks.filter(
       l => !(l.court_id === courtId && l.date === date && l.start_time === startTime && (!sessionId || l.locked_by === sessionId))
     );
+    store.setSlotLocks(updated);
+  }
+
+  /**
+   * Release all locks for a booking time range (e.g. 18:00 to 20:00)
+   */
+  public static releaseLocksForBooking(courtId: string, date: string, startTime: string, endTime: string, sessionId?: string) {
+    const startMins = this.timeToMinutes(startTime);
+    const endMins = this.timeToMinutes(endTime);
+    const locks = store.getSlotLocks();
+
+    const updated = locks.filter(l => {
+      if (l.court_id !== courtId || l.date !== date) return true;
+      if (sessionId && l.locked_by !== sessionId) return true;
+      const lMins = this.timeToMinutes(l.start_time);
+      // Keep lock if it's outside the booking range
+      return !(lMins >= startMins && lMins < endMins);
+    });
+
     store.setSlotLocks(updated);
   }
 

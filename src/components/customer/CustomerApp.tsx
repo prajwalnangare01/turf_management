@@ -1,15 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { store } from '../../services/store';
-import { Sport, Court, DynamicSlot } from '../../types/schema';
+import { Sport, Court, DynamicSlot, Customer } from '../../types/schema';
 import { SlotEngine } from '../../services/slotEngine';
 import { RedisLockService } from '../../services/redisLockService';
+import { CustomerAuthService } from '../../services/customerAuthService';
+import { CustomerAuthModal } from './CustomerAuthModal';
+import { CustomerProfilePage } from './CustomerProfilePage';
 import { SlotGrid } from './SlotGrid';
 import { CheckoutModal } from './CheckoutModal';
 import { BookingConfirmationModal } from './BookingConfirmationModal';
 import { BookingLookupModal } from './BookingLookupModal';
 import { ActiveCustomerHoldModal } from '../common/ActiveCustomerHoldModal';
 import { formatTimeRange12h } from '../../utils/formatters';
-import { ChevronRight, Search, UserCheck } from 'lucide-react';
+import { ChevronRight, Search, UserCheck, User, LogOut, ShieldCheck, Ticket } from 'lucide-react';
 
 interface CustomerAppProps {
   onSwitchToAdmin: () => void;
@@ -19,6 +22,9 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
   const venue = store.getVenue();
   const allSports = store.getSports();
   const allCourts = store.getCourts();
+
+  // View state: 'booking' vs 'profile'
+  const [customerView, setCustomerView] = useState<'booking' | 'profile'>('booking');
 
   // Filter sports to only those that have active courts configured at this venue
   const activeCourts = allCourts.filter(c => c.status === 'active');
@@ -30,6 +36,12 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
 
   // Quick filter state
   const [activeFilter, setActiveFilter] = useState<'today' | 'tomorrow' | 'weekend' | 'all'>('today');
+
+  // Customer authentication state
+  const [currentCustomer, setCurrentCustomer] = useState<Customer | null>(() => {
+    return CustomerAuthService.getAuthenticatedCustomer();
+  });
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
   // Date strip setup (next 14 days)
   const todayStr = new Date().toISOString().split('T')[0];
@@ -126,6 +138,20 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
     setSelectedSlots([]);
   };
 
+  const handleProceedCheckout = () => {
+    if (!currentCustomer) {
+      setShowAuthModal(true);
+      return;
+    }
+    setShowCheckout(true);
+  };
+
+  const handleCustomerLogout = () => {
+    CustomerAuthService.logout();
+    setCurrentCustomer(null);
+    setCustomerView('booking');
+  };
+
   const totalPrice = selectedSlots.reduce((sum, s) => sum + s.price, 0);
 
   // Sport card image map matching Stitch mockups
@@ -157,19 +183,31 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
     }
   };
 
+  // If customer is viewing Profile page
+  if (customerView === 'profile' && currentCustomer) {
+    return (
+      <CustomerProfilePage
+        currentCustomer={currentCustomer}
+        onBackToBooking={() => setCustomerView('booking')}
+        onLogout={handleCustomerLogout}
+        onUpdateCustomer={(updated) => setCurrentCustomer(updated)}
+      />
+    );
+  }
+
   return (
     <div className="bg-background text-on-surface min-h-screen pb-28">
       {/* Stitch TopAppBar Header */}
-      <header className="sticky top-0 w-full z-50 bg-white/95 backdrop-blur-md border-b border-outline-variant/40 shadow-sm flex items-center justify-between px- margin-desktop max-w-[1200px] mx-auto h-16 px-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-white shadow-sm">
-            <span className="material-symbols-outlined" style={{ fontSize: '26px' }}>sports_soccer</span>
+      <header className="sticky top-0 w-full z-50 bg-white/95 backdrop-blur-md border-b border-outline-variant/40 shadow-sm flex items-center justify-between max-w-[1200px] mx-auto min-h-16 px-3 sm:px-4 py-2">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-primary flex items-center justify-center text-white shadow-sm shrink-0 cursor-pointer" onClick={() => setCustomerView('booking')}>
+            <span className="material-symbols-outlined" style={{ fontSize: '24px' }}>sports_soccer</span>
           </div>
           <div>
-            <h1 className="font-headline font-bold text-2xl text-primary leading-none tracking-tight">
+            <h1 className="font-headline font-bold text-lg sm:text-2xl text-primary leading-none tracking-tight cursor-pointer" onClick={() => setCustomerView('booking')}>
               {venue.name}
             </h1>
-            <p className="text-xs text-on-surface-variant font-medium mt-0.5 flex items-center gap-1">
+            <p className="text-[11px] sm:text-xs text-on-surface-variant font-medium mt-0.5 hidden sm:flex items-center gap-1">
               <span className="material-symbols-outlined text-primary text-xs" style={{ fontSize: '14px' }}>location_on</span>
               HSR Layout, Bengaluru • 4.9 ★ Rating
             </p>
@@ -177,12 +215,34 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowLookup(true)}
-            className="btn-primary px-4 py-2 text-xs font-headline font-bold flex items-center gap-1.5 shadow-sm"
-          >
-            <Search className="w-3.5 h-3.5 text-white" /> Find My Booking
-          </button>
+          {currentCustomer ? (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCustomerView('profile')}
+                className="btn-primary px-3 sm:px-4 py-1.5 sm:py-2 text-xs font-headline font-bold flex items-center gap-1.5 shadow-sm"
+                title="View Profile & Bookings Dashboard"
+              >
+                <Ticket className="w-4 h-4 text-white shrink-0" />
+                <span>{currentCustomer.name}</span>
+                <span className="opacity-80 text-[10px] hidden sm:inline">(My Bookings)</span>
+              </button>
+
+              <button
+                onClick={handleCustomerLogout}
+                title="Sign Out"
+                className="p-1.5 sm:p-2 rounded-xl text-on-surface-variant hover:text-error hover:bg-error/10 transition border border-outline-variant/40"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowAuthModal(true)}
+              className="btn-cta px-3.5 sm:px-4 py-1.5 sm:py-2 text-xs font-headline font-bold flex items-center gap-1.5 shadow-sm"
+            >
+              <User className="w-4 h-4" /> Sign In / My Bookings
+            </button>
+          )}
         </div>
       </header>
 
@@ -223,56 +283,52 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
           </div>
         </section>
 
-        {/* STEP 1: Select Your Sport (Stitch Bento Cards) */}
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-headline text-2xl font-bold text-on-surface flex items-center gap-2">
-              <span className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-extrabold">1</span>
-              Select Your Sport
-            </h3>
-            <span className="text-xs font-semibold text-on-surface-variant">
-              Showing courts for {selectedSport.name}
-            </span>
+        {/* Stitch Sport Selection Cards Section */}
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-headline font-bold text-xl text-primary tracking-tight">Select Sport</h3>
+            <span className="text-xs text-on-surface-variant font-medium">Showing active sports courts</span>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            {availableSports.map(sport => {
-              const isActive = selectedSport?.id === sport.id;
-              const courtCount = activeCourts.filter(c => c.sport_ids.includes(sport.id)).length;
-              const courtsLabel = `${courtCount} Court${courtCount === 1 ? '' : 's'} Available`;
-
-              const meta = sportImages[sport.id] || {
-                img: 'https://images.unsplash.com/photo-1529900748604-07564a03e7a6?auto=format&fit=crop&w=600&q=80',
-                subtitle: 'Professional Arenas',
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+            {availableSports.map(s => {
+              const isSelected = selectedSport?.id === s.id;
+              const key = s.name.toLowerCase();
+              const meta = sportImages[key] || {
+                img: 'https://images.unsplash.com/photo-1517649763962-0c623266010b?auto=format&fit=crop&w=600&q=80',
+                subtitle: 'Professional Facilities',
+                courts: 'Multiple Courts'
               };
 
               return (
                 <div
-                  key={sport.id}
-                  onClick={() => setSelectedSport(sport)}
-                  className={`group relative bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all cursor-pointer border flex flex-col aspect-[4/5] ${
-                    isActive ? 'border-2 border-primary ring-2 ring-primary/20' : 'border-outline-variant/50'
+                  key={s.id}
+                  onClick={() => setSelectedSport(s)}
+                  className={`group relative rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 border ${
+                    isSelected
+                      ? 'border-primary ring-2 ring-primary/20 shadow-md translate-y-[-2px]'
+                      : 'border-outline-variant/50 hover:border-primary/50 hover:shadow-sm'
                   }`}
                 >
-                  <div className="h-1/2 overflow-hidden relative">
-                    <div className="absolute inset-0 bg-black/20 group-hover:bg-black/0 transition-colors z-10"></div>
+                  <div className="h-28 w-full relative overflow-hidden">
                     <img
                       src={meta.img}
-                      alt={sport.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      alt={s.name}
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                     />
-                    <div className="absolute top-2 right-2 bg-secondary-container text-on-secondary-container px-2 py-0.5 rounded-md font-headline font-bold text-[10px] z-20 shadow-sm">
-                      {courtsLabel}
+                    <div className={`absolute inset-0 transition-opacity ${isSelected ? 'bg-primary/40' : 'bg-black/35 group-hover:bg-black/20'}`} />
+                    <div className="absolute top-2 left-2 text-xl bg-white/90 backdrop-blur-xs p-1 rounded-xl shadow-xs">
+                      {s.icon}
                     </div>
                   </div>
-                  <div className="p-3 flex flex-col flex-1 justify-between bg-white">
-                    <div>
-                      <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center mb-1.5">
-                        <span className="text-lg">{sport.icon}</span>
-                      </div>
-                      <h4 className="font-headline font-bold text-lg text-on-surface leading-snug">{sport.name}</h4>
-                    </div>
-                    <p className="text-[11px] text-on-surface-variant font-medium">{meta.subtitle}</p>
+
+                  <div className="p-3 bg-white space-y-0.5">
+                    <h4 className="font-headline font-bold text-sm text-on-surface flex items-center justify-between">
+                      <span>{s.name}</span>
+                      {isSelected && <span className="w-2 h-2 rounded-full bg-primary" />}
+                    </h4>
+                    <p className="text-[11px] text-on-surface-variant font-medium line-clamp-1">{meta.subtitle}</p>
+                    <p className="text-[10px] text-primary font-bold pt-1">{meta.courts}</p>
                   </div>
                 </div>
               );
@@ -280,75 +336,104 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
           </div>
         </section>
 
-        {/* STEP 2: Court Selection Cards */}
-        {availableCourts.length > 0 && (
-          <section id="court-selection">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-headline text-2xl font-bold text-on-surface flex items-center gap-2">
-                <span className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-extrabold">2</span>
-                Select Arena & Pitch
-              </h3>
+        {/* Available Pitch & Courts Section */}
+        <section id="court-selection" className="space-y-4 pt-2">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-headline font-bold text-xl text-primary tracking-tight">Available Pitch & Courts</h3>
+              <p className="text-xs text-on-surface-variant font-medium mt-0.5">Select a court pitch to view real-time available time slots</p>
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {availableCourts.map(court => {
-                const isSelected = selectedCourt?.id === court.id;
-                return (
-                  <div
-                    key={court.id}
-                    onClick={() => setSelectedCourt(court)}
-                    className={`bg-white rounded-xl p-5 cursor-pointer border transition-all relative overflow-hidden shadow-sm hover:shadow-md ${
-                      isSelected
-                        ? 'border-2 border-primary ring-2 ring-primary/20 bg-surface-container-low'
-                        : 'border-outline-variant/60'
-                    }`}
-                  >
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <span className="bg-primary/10 text-primary px-2.5 py-0.5 rounded-full font-headline font-bold text-[11px] uppercase tracking-wider inline-block mb-1">
-                          FIFA Standard Surface
-                        </span>
-                        <h4 className="font-headline font-bold text-xl text-on-surface">{court.name}</h4>
-                      </div>
-                      <div className="text-right">
-                        <span className="bg-secondary-container text-on-secondary-container px-3 py-1 rounded-lg font-headline font-bold text-sm inline-block shadow-sm">
-                          ₹{court.base_price_per_hour}/hr
-                        </span>
-                        <span className="block text-[11px] text-on-surface-variant mt-1">Base Hourly Rate</span>
-                      </div>
-                    </div>
-
-                    <div className="pt-3 border-t border-outline-variant/30 text-xs text-on-surface-variant flex items-center justify-between">
-                      <span className="flex items-center gap-1 font-medium">
-                        <span className="material-symbols-outlined text-primary text-base">schedule</span> {court.slot_duration_minutes}m Slot Duration
-                      </span>
-                      <span className="flex items-center gap-1 font-medium">
-                        <span className="material-symbols-outlined text-primary text-base">published_with_changes</span> {court.buffer_minutes}m Buffer
-                      </span>
-                      <span className="flex items-center gap-1 font-medium text-amber-700">
-                        ⭐ 4.9 (140+ reviews)
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        )}
-
-        {/* STEP 3: Date Picker Strip */}
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-headline text-2xl font-bold text-on-surface flex items-center gap-2">
-              <span className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-extrabold">3</span>
-              Select Booking Date
-            </h3>
-            <span className="text-xs text-primary font-headline font-bold bg-primary/10 px-3 py-1 rounded-full border border-primary/20">
-              Selected: {selectedDate}
+            <span className="text-xs text-primary font-bold bg-primary/10 px-3 py-1 rounded-full border border-primary/20">
+              {availableCourts.length} Pitch{availableCourts.length !== 1 ? 'es' : ''} Configured
             </span>
           </div>
 
-          <div className="flex gap-2.5 overflow-x-auto pb-3 scrollbar-none">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            {availableCourts.map(c => {
+              const isSelected = selectedCourt?.id === c.id;
+
+              return (
+                <div
+                  key={c.id}
+                  onClick={() => {
+                    setSelectedCourt(c);
+                    setSelectedSlots([]);
+                  }}
+                  className={`p-5 rounded-3xl cursor-pointer transition-all duration-300 border space-y-3.5 bg-white relative ${
+                    isSelected
+                      ? 'border-primary ring-2 ring-primary/20 shadow-md translate-y-[-2px]'
+                      : 'border-outline-variant/60 hover:border-primary/50 hover:shadow-sm'
+                  }`}
+                >
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <span className="text-[10px] font-headline font-bold uppercase tracking-wider text-primary bg-primary/10 px-2.5 py-0.5 rounded-full border border-primary/20">
+                        {c.slot_duration_minutes} MIN SESSIONS
+                      </span>
+                      <h4 className="font-headline font-bold text-base text-on-surface mt-2 leading-tight">
+                        {c.name}
+                      </h4>
+                    </div>
+                    {isSelected && (
+                      <div className="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs">
+                        ✓
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs text-on-surface-variant pt-1 border-t border-outline-variant/30">
+                    <span className="flex items-center gap-1 font-medium">
+                      ⏰ {c.opening_time} - {c.closing_time}
+                    </span>
+                    <span className="font-headline font-extrabold text-primary text-sm">
+                      ₹{c.base_price_per_hour} <span className="text-[10px] font-normal text-on-surface-variant">/hr</span>
+                    </span>
+                  </div>
+
+                  {c.peak_enabled && (
+                    <div className="text-[11px] text-amber-900 bg-amber-50 px-2.5 py-1 rounded-xl border border-amber-200/80 flex items-center justify-between font-medium">
+                      <span>🔥 Evening Peak ({c.peak_start_time}-{c.peak_end_time})</span>
+                      <strong className="font-extrabold">₹{c.peak_price_per_hour}/hr</strong>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* Stitch Quick Filter & 14-Day Date Strip */}
+        <section className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="font-headline font-bold text-sm text-primary">Quick Date Filter:</span>
+              <div className="flex gap-1.5 bg-surface-container-low p-1 rounded-2xl text-xs font-headline font-bold">
+                {[
+                  { id: 'today', label: 'Today' },
+                  { id: 'tomorrow', label: 'Tomorrow' },
+                  { id: 'weekend', label: 'This Weekend' }
+                ].map(f => (
+                  <button
+                    key={f.id}
+                    onClick={() => handleFilterClick(f.id as any)}
+                    className={`px-3 py-1.5 rounded-xl transition ${
+                      activeFilter === f.id
+                        ? 'bg-primary text-white shadow-xs'
+                        : 'text-on-surface-variant hover:text-on-surface'
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="text-xs text-on-surface-variant font-semibold">
+              Selected Date: <span className="text-primary font-headline font-bold">{selectedDate}</span>
+            </div>
+          </div>
+
+          <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
             {dateStrip.map(d => {
               const isSelected = selectedDate === d.iso;
               return (
@@ -356,42 +441,38 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
                   key={d.iso}
                   onClick={() => {
                     setSelectedDate(d.iso);
+                    setActiveFilter('all');
                     setSelectedSlots([]);
                   }}
-                  className={`flex flex-col items-center justify-center p-3 min-w-[80px] rounded-xl border transition-all ${
+                  className={`min-w-[72px] p-3 rounded-2xl text-center font-headline transition-all border flex flex-col items-center justify-center gap-0.5 ${
                     isSelected
-                      ? 'bg-primary border-primary text-white font-bold shadow-md transform scale-105'
-                      : 'bg-white text-on-surface border-outline-variant/60 hover:border-primary'
+                      ? 'bg-primary text-white border-primary shadow-md scale-105'
+                      : 'bg-white text-on-surface-variant hover:border-primary/40 border-outline-variant/40 hover:bg-surface-container-low'
                   }`}
                 >
-                  <span className={`text-[11px] uppercase font-headline font-bold ${isSelected ? 'text-white' : 'text-on-surface-variant'}`}>{d.dayName}</span>
-                  <span className="text-xl font-headline font-extrabold my-0.5">{d.dayNum}</span>
-                  <span className="text-[10px] opacity-80 font-medium">{d.monthName}</span>
+                  <span className="text-[10px] uppercase tracking-wider opacity-80">{d.dayName}</span>
+                  <span className="text-xl font-extrabold">{d.dayNum}</span>
+                  <span className="text-[10px] opacity-80">{d.monthName}</span>
                 </button>
               );
             })}
           </div>
         </section>
 
-        {/* STEP 4: Time Slot Picker Grid */}
+        {/* Slot Grid Container */}
         {selectedCourt && (
-          <section className="bg-white rounded-2xl p-6 border border-outline-variant/50 shadow-sm">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 pb-4 border-b border-outline-variant/30">
+          <section className="bg-white rounded-3xl p-6 border border-outline-variant/50 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-outline-variant/40 pb-4">
               <div>
-                <h3 className="font-headline text-2xl font-bold text-on-surface flex items-center gap-2">
-                  <span className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-extrabold">4</span>
-                  Select Time Slots for {selectedCourt.name}
+                <h3 className="font-headline font-bold text-xl text-primary flex items-center gap-2">
+                  <span>Available Time Slots</span>
+                  <span className="text-xs font-normal text-on-surface-variant bg-surface-container-low px-2.5 py-0.5 rounded-full border border-outline-variant/40">
+                    {selectedCourt.slot_duration_minutes} Min Sessions
+                  </span>
                 </h3>
-                <p className="text-xs text-on-surface-variant mt-1">
-                  Click on available slots to hold them for your booking session.
+                <p className="text-xs text-on-surface-variant font-medium mt-0.5">
+                  Click available slots to reserve with real-time Redis locking
                 </p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-3 text-xs text-on-surface-variant font-medium">
-                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-white border border-outline-variant"></span> Available</span>
-                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-secondary-container"></span> Selected</span>
-                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-sky-200 border border-sky-400"></span> Locked</span>
-                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-red-100 border border-red-300"></span> Booked</span>
               </div>
             </div>
 
@@ -430,7 +511,7 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
             </div>
 
             <button
-              onClick={() => setShowCheckout(true)}
+              onClick={handleProceedCheckout}
               className="btn-cta text-sm px-8 py-3.5 font-headline font-bold uppercase tracking-wider flex items-center gap-2 shadow-lg"
             >
               Proceed to Checkout <ChevronRight className="w-5 h-5" />
@@ -439,13 +520,28 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
         </div>
       )}
 
-      {/* Modals */}
+      {/* Customer Auth Modal (Login / Register) */}
+      {showAuthModal && (
+        <CustomerAuthModal
+          onSuccess={(customer) => {
+            setCurrentCustomer(customer);
+            setShowAuthModal(false);
+            if (selectedSlots.length > 0) {
+              setShowCheckout(true);
+            }
+          }}
+          onClose={() => setShowAuthModal(false)}
+        />
+      )}
+
+      {/* Checkout Modal */}
       {showCheckout && selectedCourt && (
         <CheckoutModal
           court={selectedCourt}
           dateStr={selectedDate}
           selectedSlots={selectedSlots}
           sessionId={sessionId}
+          currentCustomer={currentCustomer}
           onClose={() => setShowCheckout(false)}
           onSuccess={(ref) => {
             setShowCheckout(false);
@@ -463,8 +559,11 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
         />
       )}
 
-      {showLookup && (
-        <BookingLookupModal onClose={() => setShowLookup(false)} />
+      {showLookup && currentCustomer && (
+        <BookingLookupModal
+          currentCustomer={currentCustomer}
+          onClose={() => setShowLookup(false)}
+        />
       )}
 
       {selectedHoldSlot && (

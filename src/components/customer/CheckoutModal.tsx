@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Court, DynamicSlot, Coupon } from '../../types/schema';
+import { Customer, Court, DynamicSlot, Coupon, Booking } from '../../types/schema';
 import { store } from '../../services/store';
 import { PostgresEngine } from '../../services/postgresEngine';
 import { RazorpayService } from '../../services/razorpayService';
+import { RedisLockService } from '../../services/redisLockService';
 import { ShieldCheck, Tag, CreditCard, Smartphone, AlertTriangle, X, Timer, PersonStanding } from 'lucide-react';
-
 import { formatTimeRange12h } from '../../utils/formatters';
 
 interface CheckoutModalProps {
@@ -12,8 +12,52 @@ interface CheckoutModalProps {
   dateStr: string;
   selectedSlots: DynamicSlot[];
   sessionId: string;
+  currentCustomer?: Customer | null;
   onClose: () => void;
   onSuccess: (bookingRef: string) => void;
+}
+
+export interface ContiguousSlotBlock {
+  start_time: string;
+  end_time: string;
+  slots: DynamicSlot[];
+  blockPrice: number;
+}
+
+/**
+ * Group non-contiguous slots into contiguous time blocks
+ */
+export function groupContiguousSlots(slots: DynamicSlot[]): ContiguousSlotBlock[] {
+  if (slots.length === 0) return [];
+  
+  const sorted = [...slots].sort((a, b) => a.start_time.localeCompare(b.start_time));
+  const blocks: ContiguousSlotBlock[] = [];
+
+  let currentBlock: ContiguousSlotBlock = {
+    start_time: sorted[0].start_time,
+    end_time: sorted[0].end_time,
+    slots: [sorted[0]],
+    blockPrice: sorted[0].price
+  };
+
+  for (let i = 1; i < sorted.length; i++) {
+    const slot = sorted[i];
+    if (slot.start_time === currentBlock.end_time) {
+      currentBlock.end_time = slot.end_time;
+      currentBlock.slots.push(slot);
+      currentBlock.blockPrice += slot.price;
+    } else {
+      blocks.push(currentBlock);
+      currentBlock = {
+        start_time: slot.start_time,
+        end_time: slot.end_time,
+        slots: [slot],
+        blockPrice: slot.price
+      };
+    }
+  }
+  blocks.push(currentBlock);
+  return blocks;
 }
 
 export const CheckoutModal: React.FC<CheckoutModalProps> = ({
@@ -21,12 +65,13 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   dateStr,
   selectedSlots,
   sessionId,
+  currentCustomer,
   onClose,
   onSuccess
 }) => {
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
+  const [name, setName] = useState(currentCustomer?.name || '');
+  const [phone, setPhone] = useState(currentCustomer?.phone || '');
+  const [email, setEmail] = useState(currentCustomer?.email || '');
   const [couponCode, setCouponCode] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
   const [couponError, setCouponError] = useState('');
@@ -67,17 +112,25 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     : 0;
   const finalTotal = Math.max(0, rawTotal - discount);
 
+  const contiguousBlocks = groupContiguousSlots(selectedSlots);
+  const formattedSlotsSummary = contiguousBlocks
+    .map(b => formatTimeRange12h(b.start_time, b.end_time))
+    .join(', ');
+
   const handleApplyCoupon = () => {
     setCouponError('');
-    const coupon = store.getCoupons().find(c => c.code.toUpperCase() === couponCode.trim().toUpperCase());
+    const coupons = store.getCoupons();
+    const coupon = coupons.find(c => c.code.toUpperCase() === couponCode.trim().toUpperCase() && new Date(c.valid_to) >= new Date());
 
     if (!coupon) {
-      setCouponError('Invalid coupon code');
+      setCouponError('Invalid or expired coupon code.');
+      setAppliedCoupon(null);
       return;
     }
 
-    if (rawTotal < coupon.min_amount) {
-      setCouponError(`Minimum booking total of ₹${coupon.min_amount} required for this coupon`);
+    if (coupon.min_amount && rawTotal < coupon.min_amount) {
+      setCouponError(`Minimum booking amount of ₹${coupon.min_amount} required for this coupon.`);
+      setAppliedCoupon(null);
       return;
     }
 
@@ -86,14 +139,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   const handleSendOtp = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) {
-      alert('Please enter your full name');
-      return;
-    }
-    if (phone.length < 10) {
-      alert('Please enter a valid 10-digit mobile number');
-      return;
-    }
+    if (phone.length < 10) return;
     setStep('otp');
   };
 
@@ -133,36 +179,44 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       const sports = store.getSports();
       const courtSportId = court.sport_ids[0] || sports[0].id;
 
-      // 2. Create pending DB Booking
-      const firstSlot = selectedSlots[0];
-      const lastSlot = selectedSlots[selectedSlots.length - 1];
-      const bookingRef = `TRF-${dateStr.replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
+      // 2. Create pending DB Bookings for EACH contiguous block
+      const createdBookings: Booking[] = [];
 
-      const dbResult = PostgresEngine.createBooking({
-        booking_ref: bookingRef,
-        customer_id: customer.id,
-        court_id: court.id,
-        sport_id: courtSportId,
-        booking_date: dateStr,
-        start_time: firstSlot.start_time,
-        end_time: lastSlot.end_time,
-        source: 'online',
-        status: 'pending_payment',
-        total_amount: finalTotal,
-        discount_amount: discount,
-        coupon_id: appliedCoupon?.id
-      });
+      for (let i = 0; i < contiguousBlocks.length; i++) {
+        const block = contiguousBlocks[i];
+        const blockRawRatio = rawTotal > 0 ? block.blockPrice / rawTotal : 1 / contiguousBlocks.length;
+        const blockDiscount = Math.round(discount * blockRawRatio);
+        const blockTotal = Math.max(0, block.blockPrice - blockDiscount);
 
-      if (!dbResult.success || !dbResult.booking) {
-        setIsProcessingPayment(false);
-        setPaymentError(dbResult.message);
-        return;
+        const bookingRef = `TRF-${dateStr.replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+        const dbResult = PostgresEngine.createBooking({
+          booking_ref: bookingRef,
+          customer_id: customer.id,
+          court_id: court.id,
+          sport_id: courtSportId,
+          booking_date: dateStr,
+          start_time: block.start_time,
+          end_time: block.end_time,
+          source: 'online',
+          status: 'pending_payment',
+          total_amount: blockTotal,
+          discount_amount: blockDiscount,
+          coupon_id: appliedCoupon?.id
+        });
+
+        if (!dbResult.success || !dbResult.booking) {
+          setIsProcessingPayment(false);
+          setPaymentError(dbResult.message);
+          return;
+        }
+        createdBookings.push(dbResult.booking);
       }
 
-      const booking = dbResult.booking;
+      const primaryBooking = createdBookings[0];
 
       // 3. Create Razorpay order
-      const order = RazorpayService.createOrder(booking.id, finalTotal);
+      const order = RazorpayService.createOrder(primaryBooking.id, finalTotal);
 
       // 4. Simulate Razorpay Webhook Callback
       const webhookResult = RazorpayService.processWebhook({
@@ -176,7 +230,17 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       setIsProcessingPayment(false);
 
       if (webhookResult.success) {
-        onSuccess(booking.booking_ref);
+        // Confirm any secondary contiguous block bookings
+        for (let i = 1; i < createdBookings.length; i++) {
+          PostgresEngine.updateBookingStatus(createdBookings[i].id, 'confirmed');
+        }
+
+        // Release Redis locks for all contiguous blocks
+        for (const block of contiguousBlocks) {
+          RedisLockService.releaseLocksForBooking(court.id, dateStr, block.start_time, block.end_time, sessionId);
+        }
+
+        onSuccess(primaryBooking.booking_ref);
       } else {
         setPaymentError(webhookResult.message);
       }
@@ -196,43 +260,24 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         <div className="p-4 bg-surface-container-low border-b border-outline-variant/40 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-primary" style={{ fontSize: '24px' }}>sports_soccer</span>
-            <h3 className="font-headline font-bold text-xl text-primary">Checkout & Payment</h3>
+            <h3 className="font-headline font-bold text-xl text-primary">Confirm Pitch Reservation</h3>
           </div>
-          <button onClick={onClose} className="text-on-surface-variant hover:text-on-surface p-1 rounded-full hover:bg-surface-container transition-colors">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
 
-        {/* Stitch Step Tracker */}
-        <div className="px-6 pt-4 pb-2 bg-white">
-          <div className="flex items-center justify-between text-xs font-headline font-bold uppercase tracking-wider mb-2">
-            <span className={step === 'details' ? 'text-primary' : 'text-on-surface-variant'}>1. Details</span>
-            <span className={step === 'otp' ? 'text-primary' : 'text-on-surface-variant'}>2. OTP Verification</span>
-            <span className={step === 'payment' ? 'text-primary' : 'text-on-surface-variant'}>3. Payment</span>
-          </div>
-          <div className="h-1.5 w-full bg-surface-container-high rounded-full overflow-hidden">
-            <div
-              className="h-full bg-primary transition-all duration-300"
-              style={{
-                width: step === 'details' ? '33%' : step === 'otp' ? '66%' : '100%'
-              }}
-            ></div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 bg-amber-100 text-amber-900 border border-amber-300 px-3 py-1 rounded-full text-xs font-mono font-bold">
+              <Timer className="w-3.5 h-3.5 text-amber-700 animate-pulse" /> Hold Expires: {formatTimer(timeLeft)}
+            </div>
+
+            <button
+              onClick={onClose}
+              className="text-on-surface-variant hover:text-on-surface p-1 rounded-full hover:bg-surface-container-high transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
         </div>
 
-        {/* Stitch Slot Hold Timer Banner */}
-        <div className="bg-primary/10 border-y border-primary/20 px-6 py-2.5 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Timer className="w-4 h-4 text-primary" />
-            <span className="font-headline font-bold text-xs text-primary">Slot held exclusively for you</span>
-          </div>
-          <div className="font-headline text-base font-extrabold text-primary countdown-pulse bg-white px-3 py-0.5 rounded-md border border-primary/30 shadow-sm">
-            {formatTimer(timeLeft)}
-          </div>
-        </div>
-
-        {/* Modal Content */}
-        <div className="p-6 max-h-[70vh] overflow-y-auto space-y-6">
+        <div className="p-6 space-y-6">
           {/* Summary Box */}
           <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/40 space-y-2">
             <div className="flex justify-between text-xs text-on-surface-variant">
@@ -241,8 +286,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             </div>
             <div className="flex justify-between text-xs text-on-surface-variant">
               <span className="font-medium">Date & Slot Time:</span>
-              <span className="font-headline font-bold text-primary text-xs">
-                {dateStr} | {formatTimeRange12h(selectedSlots[0]?.start_time, selectedSlots[selectedSlots.length - 1]?.end_time)} ({selectedSlots.length} slot)
+              <span className="font-headline font-bold text-primary text-xs text-right max-w-[280px]">
+                {dateStr} | {formattedSlotsSummary} ({selectedSlots.length} slot{selectedSlots.length > 1 ? 's' : ''})
               </span>
             </div>
             <div className="border-t border-outline-variant/30 pt-2 flex justify-between items-center">
@@ -266,102 +311,118 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     placeholder="e.g. Rahul Sharma"
                     value={name}
                     onChange={e => setName(e.target.value)}
-                    className="form-input"
+                    className="form-input text-xs"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-headline font-bold text-on-surface-variant mb-1">Mobile Number (WhatsApp) *</label>
-                  <div className="flex gap-2">
-                    <span className="bg-surface-container-high border border-outline-variant px-3 py-2.5 rounded-lg text-xs font-bold text-on-surface flex items-center">+91</span>
-                    <input
-                      type="tel"
-                      required
-                      maxLength={10}
-                      placeholder="9876543210"
-                      value={phone}
-                      onChange={e => setPhone(e.target.value.replace(/\D/g, ''))}
-                      className="form-input flex-1"
-                    />
-                  </div>
+                  <label className="block text-xs font-headline font-bold text-on-surface-variant mb-1">Mobile Phone (+91) *</label>
+                  <input
+                    type="tel"
+                    required
+                    maxLength={10}
+                    placeholder="10-digit mobile number"
+                    value={phone}
+                    onChange={e => setPhone(e.target.value.replace(/\D/g, ''))}
+                    className="form-input text-xs"
+                  />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-headline font-bold text-on-surface-variant mb-1">Email Address (Optional)</label>
+                <label className="block text-xs font-headline font-bold text-on-surface-variant mb-1">Email (For e-receipt & calendar invite)</label>
                 <input
                   type="email"
                   placeholder="rahul@example.com"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  className="form-input"
+                  className="form-input text-xs"
                 />
               </div>
 
-              {/* Coupon Section */}
-              <div className="pt-3 border-t border-outline-variant/30">
-                <label className="block text-xs font-headline font-bold text-on-surface-variant mb-1">Apply Coupon Code</label>
+              {/* Coupon Code Input */}
+              <div className="pt-2 border-t border-outline-variant/30">
+                <label className="block text-xs font-headline font-bold text-on-surface-variant mb-1">Have a Promo / Coupon Code?</label>
                 <div className="flex gap-2">
                   <input
                     type="text"
-                    placeholder="WELCOME100 or TURF20"
+                    placeholder="e.g. TURF100 or WEEKEND20"
                     value={couponCode}
-                    onChange={e => setCouponCode(e.target.value)}
-                    className="form-input uppercase font-mono text-xs"
+                    onChange={e => setCouponCode(e.target.value.toUpperCase())}
+                    className="form-input text-xs uppercase font-mono tracking-wider flex-1"
                   />
                   <button
                     type="button"
                     onClick={handleApplyCoupon}
-                    className="btn-secondary px-4 py-2 text-xs font-bold shrink-0 flex items-center gap-1"
+                    className="btn-secondary text-xs px-4 py-2 font-bold"
                   >
-                    <Tag className="w-3.5 h-3.5 text-primary" /> Apply
+                    Apply
                   </button>
                 </div>
                 {appliedCoupon && (
                   <p className="text-xs text-primary font-bold mt-1.5 flex items-center gap-1">
-                    ✓ Coupon '{appliedCoupon.code}' applied (-₹{discount})
+                    <Tag className="w-3.5 h-3.5" /> Coupon '{appliedCoupon.code}' applied! Saved ₹{discount}
                   </p>
                 )}
-                {couponError && <p className="text-xs text-red-600 font-semibold mt-1.5">{couponError}</p>}
+                {couponError && (
+                  <p className="text-xs text-error font-medium mt-1">{couponError}</p>
+                )}
               </div>
 
-              <button type="submit" className="btn-cta w-full py-3 text-sm font-headline uppercase tracking-wider shadow-md">
-                Proceed to Mobile Verification
-              </button>
+              <div className="pt-4 flex justify-end">
+                <button
+                  type="submit"
+                  className="btn-cta text-xs px-6 py-3 font-headline font-bold uppercase tracking-wider shadow-md"
+                >
+                  Verify Mobile via OTP →
+                </button>
+              </div>
             </form>
           )}
 
           {/* STEP 2: Phone OTP Verification */}
           {step === 'otp' && (
-            <form onSubmit={handleVerifyOtp} className="space-y-4 text-center py-2">
-              <div className="bg-primary/10 p-4 rounded-xl border border-primary/20 text-xs text-on-surface">
-                Enter the 4-digit verification code sent via WhatsApp to <strong>+91 {phone}</strong>
-                <p className="text-[11px] text-on-surface-variant mt-1.5 font-medium">
-                  (Demo Master OTP: <code className="bg-white px-2 py-0.5 rounded border border-primary/30 font-bold text-primary">1234</code>)
+            <form onSubmit={handleVerifyOtp} className="space-y-4">
+              <div className="bg-primary/5 p-4 rounded-xl border border-primary/20 text-xs text-primary space-y-1">
+                <p className="font-bold flex items-center gap-1.5">
+                  <Smartphone className="w-4 h-4" /> SMS OTP Sent to +91 {phone}
+                </p>
+                <p className="text-on-surface-variant">
+                  Enter the 4-digit verification code sent to your mobile. <strong className="text-primary font-bold">(Demo OTP: 1234)</strong>
                 </p>
               </div>
 
-              <input
-                type="text"
-                maxLength={4}
-                autoFocus
-                placeholder="1234"
-                value={otpInput}
-                onChange={e => setOtpInput(e.target.value)}
-                className="form-input text-center font-mono text-2xl tracking-[0.5em] py-3 max-w-xs mx-auto block"
-              />
+              {otpError && (
+                <div className="text-xs text-error font-medium bg-error/10 p-2.5 rounded-lg">
+                  {otpError}
+                </div>
+              )}
 
-              {otpError && <p className="text-xs text-red-600 font-semibold">{otpError}</p>}
+              <div>
+                <label className="block text-xs font-headline font-bold text-on-surface-variant mb-1">Enter 4-Digit OTP Code</label>
+                <input
+                  type="text"
+                  required
+                  maxLength={4}
+                  placeholder="1234"
+                  value={otpInput}
+                  onChange={e => setOtpInput(e.target.value)}
+                  className="form-input text-lg font-mono font-bold tracking-widest text-center"
+                />
+              </div>
 
-              <div className="flex gap-3 pt-2">
+              <div className="flex justify-between items-center pt-2">
                 <button
                   type="button"
                   onClick={() => setStep('details')}
-                  className="btn-secondary flex-1 py-2.5 text-xs font-bold"
+                  className="btn-secondary text-xs px-4 py-2 font-bold"
                 >
-                  Back
+                  ← Back to Details
                 </button>
-                <button type="submit" className="btn-primary flex-1 py-2.5 text-xs font-bold">
-                  Verify OTP & Proceed
+                <button
+                  type="submit"
+                  className="btn-cta text-xs px-6 py-2.5 font-headline font-bold uppercase tracking-wider shadow-md"
+                >
+                  Verify & Proceed to Payment
                 </button>
               </div>
             </form>
@@ -369,61 +430,74 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
           {/* STEP 3: Razorpay Payment Simulation */}
           {step === 'payment' && (
-            <div className="space-y-4 text-center py-2">
-              <div className="flex items-center justify-between p-4 bg-surface-container-low border border-outline-variant/40 rounded-xl text-left">
-                <div className="flex items-center gap-3">
-                  <ShieldCheck className="w-7 h-7 text-primary" />
-                  <div>
-                    <p className="font-headline font-bold text-sm text-on-surface">Razorpay Gateway Simulation</p>
-                    <p className="text-xs text-on-surface-variant">Amount: ₹{finalTotal}</p>
-                  </div>
-                </div>
-                <span className="bg-primary text-white text-[10px] px-2.5 py-0.5 rounded-full font-headline font-bold uppercase tracking-wider">
-                  TEST MODE
+            <div className="space-y-5">
+              <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 p-3.5 rounded-xl text-xs flex items-center justify-between">
+                <span className="font-bold flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" /> Phone Verified (+91 {phone})
                 </span>
+                <span className="bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded font-mono font-bold text-[10px]">VERIFIED</span>
               </div>
 
               {paymentError && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 text-left flex items-start gap-2">
-                  <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-                  <div className="font-medium">{paymentError}</div>
+                <div className="bg-error/10 border border-error/30 text-error p-3 rounded-xl text-xs font-medium flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{paymentError}</span>
                 </div>
               )}
 
-              {isProcessingPayment ? (
-                <div className="py-8 space-y-3">
-                  <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
-                  <p className="text-sm font-headline font-bold text-on-surface">Verifying Payment & Syncing DB Lock...</p>
-                  <p className="text-xs text-on-surface-variant">HMAC Webhook verification in progress...</p>
+              <div className="space-y-3">
+                <h4 className="font-headline font-bold text-sm text-primary">Select Razorpay Payment Gateway Method:</h4>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    disabled={isProcessingPayment}
+                    onClick={() => handleExecutePayment('upi')}
+                    className="p-4 rounded-xl border border-outline-variant hover:border-primary hover:bg-primary/5 transition text-left space-y-1 shadow-xs"
+                  >
+                    <div className="flex items-center justify-between font-headline font-bold text-xs text-primary">
+                      <span className="flex items-center gap-1.5"><Smartphone className="w-4 h-4 text-primary" /> Instant UPI</span>
+                      <span className="text-[10px] bg-secondary-container text-on-secondary-container px-2 py-0.5 rounded font-bold">RECOMMENDED</span>
+                    </div>
+                    <p className="text-[11px] text-on-surface-variant font-medium">GPay, PhonePe, Paytm, BHIM UPI</p>
+                  </button>
+
+                  <button
+                    disabled={isProcessingPayment}
+                    onClick={() => handleExecutePayment('card')}
+                    className="p-4 rounded-xl border border-outline-variant hover:border-primary hover:bg-primary/5 transition text-left space-y-1 shadow-xs"
+                  >
+                    <div className="flex items-center justify-between font-headline font-bold text-xs text-primary">
+                      <span className="flex items-center gap-1.5"><CreditCard className="w-4 h-4 text-primary" /> Credit / Debit Card</span>
+                    </div>
+                    <p className="text-[11px] text-on-surface-variant font-medium">Visa, Mastercard, RuPay, Amex</p>
+                  </button>
                 </div>
-              ) : (
-                <div className="space-y-3 pt-2">
-                  <p className="text-xs text-on-surface-variant font-medium">Select instant payment method:</p>
 
-                  <button
-                    onClick={() => handleExecutePayment('upi', false)}
-                    className="btn-cta w-full text-xs font-headline font-bold uppercase tracking-wider flex items-center justify-center gap-2 py-3 shadow-md"
-                  >
-                    <Smartphone className="w-4 h-4" /> Pay via UPI / GooglePay / PhonePe (Simulate Success)
-                  </button>
+                {/* Simulation controls for decline/failure */}
+                <div className="pt-4 border-t border-outline-variant/30 text-[11px] text-on-surface-variant space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-on-surface">Razorpay Sandbox Simulator Controls:</span>
+                    <button
+                      disabled={isProcessingPayment}
+                      onClick={() => handleExecutePayment('upi', true)}
+                      className="text-error underline hover:text-error/80 font-bold"
+                    >
+                      Simulate Payment Failure Path 🛑
+                    </button>
+                  </div>
+                </div>
+              </div>
 
-                  <button
-                    onClick={() => handleExecutePayment('card', false)}
-                    className="btn-secondary w-full text-xs font-bold flex items-center justify-center gap-2 py-3"
-                  >
-                    <CreditCard className="w-4 h-4 text-primary" /> Pay via Credit / Debit Card (Simulate Success)
-                  </button>
-
-                  <button
-                    onClick={() => handleExecutePayment('upi', true)}
-                    className="w-full py-2.5 bg-red-50 border border-red-200 text-red-700 text-xs font-bold rounded-lg hover:bg-red-100 transition-colors flex items-center justify-center gap-2"
-                  >
-                    <AlertTriangle className="w-4 h-4" /> Simulate Payment Failure / Bank Decline
-                  </button>
+              {isProcessingPayment && (
+                <div className="py-6 text-center space-y-2">
+                  <div className="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+                  <p className="font-headline font-bold text-xs text-primary">Connecting to Razorpay Secure Gateway...</p>
+                  <p className="text-[11px] text-on-surface-variant">Processing webhook payload and updating PostgreSQL transaction log</p>
                 </div>
               )}
             </div>
           )}
+
         </div>
       </div>
     </div>

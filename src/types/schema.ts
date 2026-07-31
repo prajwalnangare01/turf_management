@@ -78,6 +78,7 @@ export interface Customer {
   name: string;
   phone: string;
   email?: string;
+  password?: string;
   created_at: string;
   total_bookings: number;
   total_spent: number;
