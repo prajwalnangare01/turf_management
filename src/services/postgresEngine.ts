@@ -39,9 +39,11 @@ export class PostgresEngine {
     }
 
     const now = new Date().toISOString();
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
     const newBooking: Booking = {
       ...booking,
-      id: `bk-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      id: `bk-${Date.now()}-${randomSuffix}`,
+      booking_ref: booking.booking_ref || `TRF-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${randomSuffix}`,
       created_at: now,
       updated_at: now
     };

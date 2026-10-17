@@ -34,8 +34,8 @@ export const SlotGrid: React.FC<SlotGridProps> = ({ slots, selectedSlots, onTogg
               }
             }}
             className={`slot-item ${isSelected ? 'selected' : ''} ${
-              slot.status === 'booked_online' ? 'booked-online' : ''
-            } ${slot.status === 'booked_offline' ? 'booked-offline' : ''} ${
+              (slot.status === 'booked_online' || slot.status === 'booked_offline') ? 'booked-online' : ''
+            } ${
               slot.status === 'blocked' ? 'blocked' : ''
             } ${slot.status === 'locked' && !isSelected ? 'locked' : ''} ${
               slot.status === 'past' ? 'past' : ''
@@ -92,15 +92,9 @@ export const SlotGrid: React.FC<SlotGridProps> = ({ slots, selectedSlots, onTogg
                 </>
               )}
 
-              {slot.status === 'booked_online' && (
+              {(slot.status === 'booked_online' || slot.status === 'booked_offline') && (
                 <span className="bg-red-100 text-red-800 text-[9px] px-2 py-0.5 rounded-full font-bold border border-red-200">
                   Booked
-                </span>
-              )}
-
-              {slot.status === 'booked_offline' && (
-                <span className="bg-amber-100 text-amber-900 text-[9px] px-2 py-0.5 rounded-full font-bold border border-amber-200">
-                  Walk-in
                 </span>
               )}
 

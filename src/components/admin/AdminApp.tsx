@@ -27,7 +27,32 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onSwitchToCustomer }) => {
     return AuthService.getAuthenticatedAdmin();
   });
 
-  const [activeTab, setActiveTab] = useState<'calendar' | 'bookings' | 'courts' | 'crm' | 'reports' | 'audit' | 'settings'>('calendar');
+  const getInitialTab = (): 'calendar' | 'bookings' | 'courts' | 'crm' | 'reports' | 'audit' | 'settings' => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      if (tabParam && ['calendar', 'bookings', 'courts', 'crm', 'reports', 'audit', 'settings'].includes(tabParam)) {
+        return tabParam as any;
+      }
+      const saved = localStorage.getItem('TURFFLOW_ADMIN_TAB');
+      if (saved && ['calendar', 'bookings', 'courts', 'crm', 'reports', 'audit', 'settings'].includes(saved)) {
+        return saved as any;
+      }
+    } catch {}
+    return 'calendar';
+  };
+
+  const [activeTab, setActiveTab] = useState<'calendar' | 'bookings' | 'courts' | 'crm' | 'reports' | 'audit' | 'settings'>(getInitialTab);
+
+  const handleTabChange = (tab: 'calendar' | 'bookings' | 'courts' | 'crm' | 'reports' | 'audit' | 'settings') => {
+    setActiveTab(tab);
+    try {
+      localStorage.setItem('TURFFLOW_ADMIN_TAB', tab);
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', tab);
+      window.history.replaceState({}, '', url.toString());
+    } catch {}
+  };
   const [showOfflineModal, setShowOfflineModal] = useState(false);
   const [pendingSwitchAdmin, setPendingSwitchAdmin] = useState<AdminUser | null>(null);
 
@@ -106,12 +131,14 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onSwitchToCustomer }) => {
               </button>
 
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 sm:w-9 sm:h-9 bg-primary text-white rounded-xl flex items-center justify-center font-bold text-base sm:text-lg shadow-sm shrink-0">
-                  🛡️
-                </div>
+                <img
+                  src="/logo.png"
+                  alt="TurfFlow Logo"
+                  className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl object-contain shadow-sm shrink-0 p-0.5 bg-white border border-outline-variant/40"
+                />
                 <div>
                   <div className="flex items-center gap-1.5">
-                    <h1 className="font-headline font-bold text-base sm:text-xl text-primary leading-none">Apex Operations</h1>
+                    <h1 className="font-headline font-bold text-base sm:text-xl text-primary leading-none">TurfFlow Operations</h1>
                     <span className="bg-secondary-container text-on-secondary-container px-1.5 py-0.5 rounded-full font-headline font-bold text-[9px]">
                       EXECUTIVE
                     </span>
@@ -228,7 +255,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onSwitchToCustomer }) => {
           </label>
           <select
             value={activeTab}
-            onChange={e => setActiveTab(e.target.value as any)}
+            onChange={e => handleTabChange(e.target.value as any)}
             className="w-full form-input font-headline font-extrabold text-xs text-primary py-2.5 bg-surface-container-low border-primary/40 rounded-xl"
           >
             <option value="calendar">📅 Schedule Calendar Matrix</option>
@@ -259,7 +286,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onSwitchToCustomer }) => {
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
+                onClick={() => handleTabChange(tab.id as any)}
                 className={`px-4 py-2.5 rounded-xl text-xs font-headline font-bold flex items-center gap-2 whitespace-nowrap transition-all shrink-0 ${
                   isActive
                     ? 'bg-primary text-white shadow-md'

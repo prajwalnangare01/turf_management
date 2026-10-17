@@ -7,8 +7,8 @@ import {
 // Initial Mock Seed Data
 const DEFAULT_VENUE: Venue = {
   id: 'ven-001',
-  name: 'Apex Turf & Arena',
-  address: 'Plot 42, Sports Enclave, HSR Layout, Bengaluru',
+  name: 'TurfFlow Arena',
+  address: 'Plot 42, Sports Enclave, Pune',
   timezone: 'Asia/Kolkata',
   gst_number: '29ABCDE1234F1Z5',
   contact_phone: '+91 98765 43210',
@@ -139,9 +139,9 @@ const DEFAULT_CUSTOMERS: Customer[] = [
 ];
 
 const DEFAULT_ADMIN_USERS: AdminUser[] = [
-  { id: 'adm-001', name: 'Sanjay Kumar (Owner)', email: 'owner@apexturf.com', phone: '9876500001', role: 'owner', is_active: true },
-  { id: 'adm-002', name: 'Priya Mehta (Manager)', email: 'manager@apexturf.com', phone: '9876500002', role: 'manager', is_active: true },
-  { id: 'adm-003', name: 'Arjun Das (FrontDesk Staff)', email: 'staff@apexturf.com', phone: '9876500003', role: 'staff', is_active: true }
+  { id: 'adm-001', name: 'Sanjay Kumar (Owner)', email: 'owner@turfflow.com', phone: '9876500001', role: 'owner', is_active: true },
+  { id: 'adm-002', name: 'Priya Mehta (Manager)', email: 'manager@turfflow.com', phone: '9876500002', role: 'manager', is_active: true },
+  { id: 'adm-003', name: 'Arjun Das (FrontDesk Staff)', email: 'staff@turfflow.com', phone: '9876500003', role: 'staff', is_active: true }
 ];
 
 const TODAY = new Date().toISOString().split('T')[0];
@@ -359,6 +359,12 @@ class AppStore {
       if (data) {
         const parsed = JSON.parse(data);
         this.venue = parsed.venue || DEFAULT_VENUE;
+        if (this.venue.name === 'Apex Turf & Arena') {
+          this.venue.name = 'TurfFlow Arena';
+        }
+        if (this.venue.address && this.venue.address.includes('Bengaluru')) {
+          this.venue.address = 'Plot 42, Sports Enclave, Pune';
+        }
         this.sports = parsed.sports || DEFAULT_SPORTS;
         this.courts = parsed.courts || DEFAULT_COURTS;
         const rawRules: PricingRule[] = parsed.pricingRules || DEFAULT_PRICING_RULES;
@@ -366,8 +372,18 @@ class AppStore {
           r => !(r.day_type === 'weekend' && r.start_time === '06:00' && r.end_time === '23:00')
         );
         this.customers = parsed.customers || DEFAULT_CUSTOMERS;
-        this.adminUsers = parsed.adminUsers || DEFAULT_ADMIN_USERS;
-        this.bookings = parsed.bookings || [];
+        const rawAdmins: AdminUser[] = parsed.adminUsers || DEFAULT_ADMIN_USERS;
+        this.adminUsers = rawAdmins.map(a => ({
+          ...a,
+          email: a.email.replace('@apexturf.com', '@turfflow.com')
+        }));
+        const rawBookings: Booking[] = Array.isArray(parsed.bookings) ? parsed.bookings : [];
+        this.bookings = rawBookings.map((b, idx) => ({
+          ...b,
+          booking_ref: b.booking_ref || `TRF-2026-${String(idx + 1).padStart(4, '0')}`,
+          status: b.status || 'confirmed',
+          source: b.source || 'online'
+        }));
         this.payments = parsed.payments || [];
         this.slotLocks = parsed.slotLocks || [];
         this.blockedSlots = parsed.blockedSlots || DEFAULT_BLOCKED_SLOTS;

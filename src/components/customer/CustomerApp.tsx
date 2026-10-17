@@ -200,16 +200,19 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
       {/* Stitch TopAppBar Header */}
       <header className="sticky top-0 w-full z-50 bg-white/95 backdrop-blur-md border-b border-outline-variant/40 shadow-sm flex items-center justify-between max-w-[1200px] mx-auto min-h-16 px-3 sm:px-4 py-2">
         <div className="flex items-center gap-2 sm:gap-3">
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-primary flex items-center justify-center text-white shadow-sm shrink-0 cursor-pointer" onClick={() => setCustomerView('booking')}>
-            <span className="material-symbols-outlined" style={{ fontSize: '24px' }}>sports_soccer</span>
-          </div>
+          <img
+            src="/logo.png"
+            alt="TurfFlow Logo"
+            className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl object-contain shadow-sm shrink-0 cursor-pointer p-0.5 bg-white border border-outline-variant/40"
+            onClick={() => setCustomerView('booking')}
+          />
           <div>
             <h1 className="font-headline font-bold text-lg sm:text-2xl text-primary leading-none tracking-tight cursor-pointer" onClick={() => setCustomerView('booking')}>
               {venue.name}
             </h1>
             <p className="text-[11px] sm:text-xs text-on-surface-variant font-medium mt-0.5 hidden sm:flex items-center gap-1">
               <span className="material-symbols-outlined text-primary text-xs" style={{ fontSize: '14px' }}>location_on</span>
-              HSR Layout, Bengaluru • 4.9 ★ Rating
+              Pune • 4.9 ★ Rating
             </p>
           </div>
         </div>

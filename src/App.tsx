@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { CustomerApp } from './components/customer/CustomerApp';
 import { AdminApp } from './components/admin/AdminApp';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 
 export const App: React.FC = () => {
   const checkIsAdminRoute = () => {
@@ -41,12 +42,14 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div>
-      {view === 'customer' ? (
-        <CustomerApp onSwitchToAdmin={handleSwitchToAdmin} />
-      ) : (
-        <AdminApp onSwitchToCustomer={handleSwitchToCustomer} />
-      )}
-    </div>
+    <ErrorBoundary>
+      <div>
+        {view === 'customer' ? (
+          <CustomerApp onSwitchToAdmin={handleSwitchToAdmin} />
+        ) : (
+          <AdminApp onSwitchToCustomer={handleSwitchToCustomer} />
+        )}
+      </div>
+    </ErrorBoundary>
   );
 };

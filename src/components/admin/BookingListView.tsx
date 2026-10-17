@@ -35,19 +35,22 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
 
   const closeConfirm = () => setConfirmState(prev => ({ ...prev, isOpen: false }));
 
-  const bookings = store.getBookings();
+  const [bookings, setBookings] = useState<Booking[]>(() => store.getBookings());
   const customers = store.getCustomers();
   const courts = store.getCourts();
 
   const filteredBookings = bookings
     .filter(b => {
       const cust = customers.find(c => c.id === b.customer_id);
-      const otpCode = b.booking_ref.slice(-4);
+      const bRef = b.booking_ref || '';
+      const otpCode = bRef ? bRef.slice(-4) : '----';
+      const q = searchQuery.toLowerCase();
       const matchesSearch =
-        b.booking_ref.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        otpCode.includes(searchQuery) ||
-        cust?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        cust?.phone.includes(searchQuery);
+        !q ||
+        (bRef && bRef.toLowerCase().includes(q)) ||
+        otpCode.includes(q) ||
+        (cust?.name && cust.name.toLowerCase().includes(q)) ||
+        (cust?.phone && cust.phone.includes(q));
 
       const matchesStatus = statusFilter === 'all' || b.status === statusFilter;
       const matchesSource = sourceFilter === 'all' || b.source === sourceFilter;
@@ -56,8 +59,8 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
       return matchesSearch && matchesStatus && matchesSource && matchesDate;
     })
     .sort((a, b) => {
-      const timeA = new Date(`${a.booking_date}T${a.start_time}:00`).getTime();
-      const timeB = new Date(`${b.booking_date}T${b.start_time}:00`).getTime();
+      const timeA = new Date(`${a.booking_date || ''}T${a.start_time || '00:00'}:00`).getTime() || 0;
+      const timeB = new Date(`${b.booking_date || ''}T${b.start_time || '00:00'}:00`).getTime() || 0;
 
       if (sortOrder === 'latest') {
         return timeB - timeA;
@@ -74,7 +77,7 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
 
     setConfirmState({
       isOpen: true,
-      title: `${actionLabel}: ${b.booking_ref}`,
+      title: `${actionLabel}: ${b.booking_ref || b.id || 'Booking'}`,
       message: `Update reservation for "${cust?.name || 'Customer'}" (${b.booking_date} | ${formatTimeRange12h(b.start_time, b.end_time)}) to status "${targetStatus.toUpperCase()}"?`,
       confirmText: actionLabel,
       variant: targetStatus === 'cancelled' ? 'danger' : targetStatus === 'no_show' ? 'warning' : 'success',
@@ -83,7 +86,8 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
         if (res.success) {
           AuditLogger.log(currentAdmin.id, `UPDATE_BOOKING_${targetStatus.toUpperCase()}`, 'Booking', b.id);
           closeConfirm();
-          window.location.reload();
+          // Update in-place to stay on Bookings Directory without reloading or redirecting to Schedule Calendar
+          setBookings([...store.getBookings()]);
         } else {
           alert(res.message);
         }
@@ -180,7 +184,8 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
           filteredBookings.map(b => {
             const cust = customers.find(c => c.id === b.customer_id);
             const court = courts.find(c => c.id === b.court_id);
-            const otpCode = b.booking_ref.slice(-4);
+            const bRef = b.booking_ref || b.id || 'N/A';
+            const otpCode = bRef.length >= 4 ? bRef.slice(-4) : '----';
 
             return (
               <div
@@ -191,22 +196,22 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
                 <div className="flex items-start justify-between">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-mono font-extrabold text-xs text-primary">{b.booking_ref}</span>
+                      <span className="font-mono font-extrabold text-xs text-primary">{bRef}</span>
                       <span className="bg-secondary-container/40 text-on-secondary-container border border-secondary-container/60 px-1.5 py-0.5 rounded text-[10px] font-black tracking-widest">
                         OTP: {otpCode}
                       </span>
                     </div>
                     <h3 className="font-headline font-bold text-base text-on-surface mt-1">{cust?.name || 'Unknown'}</h3>
-                    <p className="text-xs text-on-surface-variant font-mono">+91 {cust?.phone}</p>
+                    <p className="text-xs text-on-surface-variant font-mono">+91 {cust?.phone || 'N/A'}</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-headline font-extrabold text-lg text-primary">₹{b.total_amount}</p>
+                    <p className="font-headline font-extrabold text-lg text-primary">₹{b.total_amount || 0}</p>
                     <span className={`px-2 py-0.5 rounded-full font-headline font-bold text-[9px] uppercase block mt-0.5 ${
                       b.status === 'confirmed' ? 'bg-emerald-100 text-emerald-900 border border-emerald-300' :
                       b.status === 'pending_payment' ? 'bg-sky-100 text-sky-900 border border-sky-300' :
                       b.status === 'completed' ? 'bg-gray-100 text-gray-800' : 'bg-red-100 text-red-900'
                     }`}>
-                      {b.status.replace('_', ' ')}
+                      {(b.status || 'unknown').replace('_', ' ')}
                     </span>
                   </div>
                 </div>
@@ -282,21 +287,22 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
               filteredBookings.map(b => {
                 const cust = customers.find(c => c.id === b.customer_id);
                 const court = courts.find(c => c.id === b.court_id);
-                const otpCode = b.booking_ref.slice(-4);
+                const bRef = b.booking_ref || b.id || 'N/A';
+                const otpCode = bRef.length >= 4 ? bRef.slice(-4) : '----';
 
                 return (
                   <tr key={b.id} className="hover:bg-surface-container-low/50">
                     <td className="p-3 font-mono">
-                      <div className="font-bold text-primary text-xs">{b.booking_ref}</div>
+                      <div className="font-bold text-primary text-xs">{bRef}</div>
                       <span className="inline-block bg-secondary-container/40 text-on-secondary-container border border-secondary-container/60 px-1.5 py-0.5 rounded text-[10px] font-black tracking-widest mt-0.5 shadow-2xs">
                         OTP: {otpCode}
                       </span>
                     </td>
                     <td className="p-3">
                       <div className="font-headline font-bold text-on-surface">{cust?.name || 'Unknown'}</div>
-                      <div className="text-[10px] text-on-surface-variant">+91 {cust?.phone}</div>
+                      <div className="text-[10px] text-on-surface-variant">+91 {cust?.phone || 'N/A'}</div>
                     </td>
-                    <td className="p-3 font-semibold text-on-surface">{court?.name}</td>
+                    <td className="p-3 font-semibold text-on-surface">{court?.name || 'Unknown Court'}</td>
                     <td className="p-3 font-mono">
                       <div>{b.booking_date}</div>
                       <div className="text-[11px] text-primary font-bold">{formatTimeRange12h(b.start_time, b.end_time)}</div>
@@ -305,7 +311,7 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
                       <span className={`px-2 py-0.5 rounded-full font-headline font-bold text-[10px] uppercase ${
                         b.source === 'online' ? 'bg-primary/10 text-primary border border-primary/20' : 'bg-amber-100 text-amber-900 border border-amber-300'
                       }`}>
-                        {b.source}
+                        {(b.source || 'online').replace('_', ' ')}
                       </span>
                     </td>
                     <td className="p-3">
@@ -314,10 +320,10 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
                         b.status === 'pending_payment' ? 'bg-sky-100 text-sky-900 border border-sky-300 animate-pulse font-extrabold' :
                         b.status === 'completed' ? 'bg-gray-100 text-gray-800' : 'bg-red-100 text-red-900'
                       }`}>
-                        {b.status === 'pending_payment' ? 'Pending Payment' : b.status}
+                        {b.status === 'pending_payment' ? 'Pending Payment' : (b.status || 'unknown').replace('_', ' ')}
                       </span>
                     </td>
-                    <td className="p-3 font-headline font-extrabold text-on-surface">₹{b.total_amount}</td>
+                    <td className="p-3 font-headline font-extrabold text-on-surface">₹{b.total_amount || 0}</td>
                     <td className="p-3 text-right">
                       {b.status === 'confirmed' ? (
                         <div className="flex items-center justify-end gap-1.5">

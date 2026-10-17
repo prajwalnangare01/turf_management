@@ -12,7 +12,7 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
   onLoginSuccess,
   onSwitchToCustomer
 }) => {
-  const [identity, setIdentity] = useState('owner@apexturf.com');
+  const [identity, setIdentity] = useState('owner@turfflow.com');
   const [password, setPassword] = useState('admin123');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -65,11 +65,13 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
         <div className="bg-white rounded-3xl p-8 border border-outline-variant/60 shadow-xl space-y-6">
           {/* Header Badge */}
           <div className="text-center space-y-2">
-            <div className="w-16 h-16 bg-primary/10 text-primary rounded-2xl flex items-center justify-center mx-auto mb-4 text-2xl shadow-inner">
-              🛡️
-            </div>
+            <img
+              src="/logo.png"
+              alt="TurfFlow Logo"
+              className="w-20 h-20 rounded-2xl object-contain mx-auto mb-3 p-1 bg-white border border-outline-variant/40 shadow-sm"
+            />
             <h1 className="font-headline font-extrabold text-2xl text-primary tracking-tight">
-              Apex Turf Operations
+              TurfFlow Operations
             </h1>
             <p className="text-xs text-on-surface-variant font-medium">
               Authorized Management & Staff Access Portal
@@ -94,7 +96,7 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
                 required
                 value={identity}
                 onChange={e => setIdentity(e.target.value)}
-                placeholder="e.g. owner@apexturf.com or admin"
+                placeholder="e.g. owner@turfflow.com or admin"
                 className="w-full px-4 py-3 rounded-2xl border border-outline-variant text-xs focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 bg-surface-container-lowest font-medium transition"
               />
             </div>
@@ -141,21 +143,21 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
             <div className="grid grid-cols-3 gap-2 text-[11px]">
               <button
                 type="button"
-                onClick={() => handleQuickFill('owner@apexturf.com', 'admin123')}
+                onClick={() => handleQuickFill('owner@turfflow.com', 'admin123')}
                 className="p-2 rounded-xl bg-surface-container-low hover:bg-primary/10 border border-outline-variant/40 text-center transition font-semibold text-primary"
               >
                 👑 Owner
               </button>
               <button
                 type="button"
-                onClick={() => handleQuickFill('manager@apexturf.com', 'manager123')}
+                onClick={() => handleQuickFill('manager@turfflow.com', 'manager123')}
                 className="p-2 rounded-xl bg-surface-container-low hover:bg-primary/10 border border-outline-variant/40 text-center transition font-semibold text-primary"
               >
                 💼 Manager
               </button>
               <button
                 type="button"
-                onClick={() => handleQuickFill('staff@apexturf.com', 'staff123')}
+                onClick={() => handleQuickFill('staff@turfflow.com', 'staff123')}
                 className="p-2 rounded-xl bg-surface-container-low hover:bg-primary/10 border border-outline-variant/40 text-center transition font-semibold text-primary"
               >
                 📋 Staff
@@ -167,7 +169,7 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
 
       {/* Footer */}
       <footer className="text-center py-4 text-[11px] text-on-surface-variant z-10">
-        Apex Turf Operations Management — Multi-Role Security Module
+        TurfFlow Operations Management — Multi-Role Security Module
       </footer>
     </div>
   );

@@ -155,9 +155,9 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
                           </div>
                           <div className="flex items-center justify-between text-[10px]">
                             <span className="font-mono font-bold bg-white/90 px-1 py-0.5 rounded border border-black/10 text-on-surface">
-                              OTP: {booking.booking_ref.slice(-4)}
+                              OTP: {(booking.booking_ref || booking.id || '').slice(-4) || '----'}
                             </span>
-                            <span className="font-headline font-bold">₹{booking.total_amount}</span>
+                            <span className="font-headline font-bold">₹{booking.total_amount || 0}</span>
                           </div>
                         </div>
                       )}
@@ -200,7 +200,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
           <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl animate-modalScaleIn text-on-surface">
             <div className="flex justify-between items-center border-b border-outline-variant/40 pb-3">
               <h3 className="font-headline font-bold text-lg text-primary">Booking Details</h3>
-              <span className="font-mono text-xs text-primary font-bold bg-primary/10 px-2 py-0.5 rounded">{selectedBooking.booking_ref}</span>
+              <span className="font-mono text-xs text-primary font-bold bg-primary/10 px-2 py-0.5 rounded">{selectedBooking.booking_ref || selectedBooking.id}</span>
             </div>
 
             {/* Prominent Gate Check-in OTP Display */}
@@ -210,7 +210,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
                 <span>Gate Verification OTP:</span>
               </div>
               <span className="font-mono font-black text-2xl tracking-[0.2em] bg-white text-on-secondary-container px-3 py-1 rounded shadow-sm border border-secondary-container/40">
-                {selectedBooking.booking_ref.slice(-4)}
+                {(selectedBooking.booking_ref || selectedBooking.id || '').slice(-4) || '----'}
               </span>
             </div>
 

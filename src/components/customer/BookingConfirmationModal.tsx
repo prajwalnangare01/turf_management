@@ -16,7 +16,7 @@ export const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> =
 
   if (!booking) return null;
 
-  const otpCode = booking.booking_ref.slice(-4);
+  const otpCode = (booking.booking_ref || booking.id || '').slice(-4) || '----';
   const customer = store.getCustomers().find(c => c.id === booking.customer_id);
 
   const handleDownloadPdfPass = () => {
