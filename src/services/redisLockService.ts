@@ -67,7 +67,7 @@ export class RedisLockService {
 
     return {
       success: true,
-      message: 'Slot locked for 5 minutes',
+      message: 'Slot locked for 2 minutes',
       lock: newLock
     };
   }

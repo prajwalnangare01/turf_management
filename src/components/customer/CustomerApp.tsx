@@ -343,8 +343,8 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
         <section id="court-selection" className="space-y-4 pt-2">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="font-headline font-bold text-xl text-primary tracking-tight">Available Pitch & Courts</h3>
-              <p className="text-xs text-on-surface-variant font-medium mt-0.5">Select a court pitch to view real-time available time slots</p>
+              <h3 className="font-headline font-bold text-xl text-primary tracking-tight">Select Pitch / Court</h3>
+              <p className="text-xs text-on-surface-variant font-medium mt-0.5">Choose your preferred court configuration</p>
             </div>
             <span className="text-xs text-primary font-bold bg-primary/10 px-3 py-1 rounded-full border border-primary/20">
               {availableCourts.length} Pitch{availableCourts.length !== 1 ? 'es' : ''} Configured
@@ -378,65 +378,57 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
                       </h4>
                     </div>
                     {isSelected && (
-                      <div className="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs">
-                        ✓
-                      </div>
+                      <span className="bg-primary text-white p-1 rounded-full">
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                          <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                      </span>
                     )}
                   </div>
 
-                  <div className="flex items-center justify-between text-xs text-on-surface-variant pt-1 border-t border-outline-variant/30">
-                    <span className="flex items-center gap-1 font-medium">
-                      ⏰ {c.opening_time} - {c.closing_time}
-                    </span>
-                    <span className="font-headline font-extrabold text-primary text-sm">
-                      ₹{c.base_price_per_hour} <span className="text-[10px] font-normal text-on-surface-variant">/hr</span>
-                    </span>
+                  <div className="flex items-baseline gap-1.5 pt-1 border-t border-outline-variant/30">
+                    <span className="text-xl font-headline font-extrabold text-primary">₹{c.base_price_per_hour}</span>
+                    <span className="text-xs text-on-surface-variant font-medium">/ hour base</span>
+                    {c.peak_enabled && (
+                      <span className="ml-auto text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md font-bold border border-amber-200">
+                        Peak: ₹{c.peak_price_per_hour}
+                      </span>
+                    )}
                   </div>
-
-                  {c.peak_enabled && (
-                    <div className="text-[11px] text-amber-900 bg-amber-50 px-2.5 py-1 rounded-xl border border-amber-200/80 flex items-center justify-between font-medium">
-                      <span>🔥 Evening Peak ({c.peak_start_time}-{c.peak_end_time})</span>
-                      <strong className="font-extrabold">₹{c.peak_price_per_hour}/hr</strong>
-                    </div>
-                  )}
                 </div>
               );
             })}
           </div>
         </section>
 
-        {/* Stitch Quick Filter & 14-Day Date Strip */}
-        <section className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <span className="font-headline font-bold text-sm text-primary">Quick Date Filter:</span>
-              <div className="flex gap-1.5 bg-surface-container-low p-1 rounded-2xl text-xs font-headline font-bold">
-                {[
-                  { id: 'today', label: 'Today' },
-                  { id: 'tomorrow', label: 'Tomorrow' },
-                  { id: 'weekend', label: 'This Weekend' }
-                ].map(f => (
-                  <button
-                    key={f.id}
-                    onClick={() => handleFilterClick(f.id as any)}
-                    className={`px-3 py-1.5 rounded-xl transition ${
-                      activeFilter === f.id
-                        ? 'bg-primary text-white shadow-xs'
-                        : 'text-on-surface-variant hover:text-on-surface'
-                    }`}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
+        {/* Date Selector Section */}
+        <section className="space-y-4 pt-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h3 className="font-headline font-bold text-xl text-primary tracking-tight">Choose Date</h3>
+              <p className="text-xs text-on-surface-variant font-medium mt-0.5">Slots calculated dynamically up to 14 days ahead</p>
             </div>
 
-            <div className="text-xs text-on-surface-variant font-semibold">
-              Selected Date: <span className="text-primary font-headline font-bold">{selectedDate}</span>
+            {/* Quick Filter Buttons */}
+            <div className="flex items-center gap-1.5 bg-surface-container-low p-1 rounded-2xl border border-outline-variant/40 self-start sm:self-auto">
+              {(['today', 'tomorrow', 'weekend', 'all'] as const).map(f => (
+                <button
+                  key={f}
+                  onClick={() => handleFilterClick(f)}
+                  className={`text-xs px-3 py-1.5 rounded-xl font-headline font-bold capitalize transition-all ${
+                    activeFilter === f
+                      ? 'bg-primary text-white shadow-xs'
+                      : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'
+                  }`}
+                >
+                  {f}
+                </button>
+              ))}
             </div>
           </div>
 
-          <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+          {/* Horizontal Scrolling Date Strip */}
+          <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-none">
             {dateStrip.map(d => {
               const isSelected = selectedDate === d.iso;
               return (
@@ -562,13 +554,15 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
         />
       )}
 
+      {/* Booking Lookup Self-Serve Modal */}
       {showLookup && currentCustomer && (
-        <BookingLookupModal
+        <BookingLookupModal 
           currentCustomer={currentCustomer}
-          onClose={() => setShowLookup(false)}
+          onClose={() => setShowLookup(false)} 
         />
       )}
 
+      {/* Active Customer Hold Modal */}
       {selectedHoldSlot && (
         <ActiveCustomerHoldModal
           court={selectedHoldSlot.court}

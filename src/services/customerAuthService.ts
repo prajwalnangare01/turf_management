@@ -12,9 +12,19 @@ export interface CustomerSession {
 
 export class CustomerAuthService {
   /**
+   * Check if phone number is already registered
+   */
+  public static checkPhoneExists(phone: string): boolean {
+    const cleanPhone = phone.replace(/\D/g, '');
+    if (!cleanPhone) return false;
+    const customers = store.getCustomers();
+    return customers.some(c => c.phone.replace(/\D/g, '') === cleanPhone);
+  }
+
+  /**
    * Send simulated OTP to phone number
    */
-  public static sendOtp(phone: string): { success: boolean; message: string } {
+  public static sendOtp(phone: string): { success: boolean; message: string; otp?: string } {
     const cleanPhone = phone.replace(/\D/g, '');
     if (cleanPhone.length < 10) {
       return { success: false, message: 'Please enter a valid 10-digit mobile number.' };
@@ -22,7 +32,8 @@ export class CustomerAuthService {
 
     return {
       success: true,
-      message: `OTP sent to +91 ${cleanPhone}. Demo verification code: 1234`
+      message: `OTP sent to +91 ${cleanPhone}. Demo verification code: 1234`,
+      otp: '1234'
     };
   }
 
@@ -96,7 +107,70 @@ export class CustomerAuthService {
   }
 
   /**
-   * Register new customer account with optional password
+   * Register new customer account after verifying phone OTP
+   */
+  public static registerWithOtp(
+    name: string,
+    phone: string,
+    otp: string,
+    email?: string,
+    password?: string
+  ): { success: boolean; session?: CustomerSession; error?: string } {
+    const cleanPhone = phone.replace(/\D/g, '');
+
+    if (!name.trim()) {
+      return { success: false, error: 'Full name is required for registration.' };
+    }
+
+    if (cleanPhone.length < 10) {
+      return { success: false, error: 'A valid 10-digit phone number is required.' };
+    }
+
+    const cleanOtp = otp.trim();
+    if (!cleanOtp) {
+      return { success: false, error: 'Please enter the 4-digit verification code.' };
+    }
+
+    if (cleanOtp !== '1234' && cleanOtp.length !== 4) {
+      return { success: false, error: 'Invalid verification code. Use demo code: 1234' };
+    }
+
+    const customers = store.getCustomers();
+    let existing = customers.find(c => c.phone.replace(/\D/g, '') === cleanPhone);
+
+    if (existing) {
+      if (existing.is_blacklisted) {
+        return {
+          success: false,
+          error: 'Your account has been suspended due to no-show policy violations. Please contact venue admin.'
+        };
+      }
+      existing.name = name.trim();
+      if (email) existing.email = email.trim();
+      if (password) existing.password = password.trim();
+      store.saveToStorage();
+      return this.createSession(existing);
+    }
+
+    const newCustomer: Customer = {
+      id: `cust-${Date.now().toString().substring(6)}`,
+      name: name.trim(),
+      phone: cleanPhone,
+      email: email?.trim() || undefined,
+      password: password?.trim() || 'pass123',
+      created_at: new Date().toISOString(),
+      total_bookings: 0,
+      total_spent: 0,
+      no_show_count: 0,
+      is_blacklisted: false
+    };
+
+    store.addCustomer(newCustomer);
+    return this.createSession(newCustomer);
+  }
+
+  /**
+   * Register new customer account with optional password (legacy fallback)
    */
   public static register(name: string, phone: string, email?: string, password?: string): { success: boolean; session?: CustomerSession; error?: string } {
     const cleanPhone = phone.replace(/\D/g, '');
