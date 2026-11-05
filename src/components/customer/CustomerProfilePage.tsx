@@ -3,9 +3,10 @@ import { store } from '../../services/store';
 import { PostgresEngine } from '../../services/postgresEngine';
 import { Customer, Booking } from '../../types/schema';
 import { formatTimeRange12h } from '../../utils/formatters';
+import { CancelBookingConfirmModal } from './CancelBookingConfirmModal';
 import { 
   User, Phone, Mail, Calendar, ArrowLeft, ShieldCheck, Ticket, 
-  XCircle, CheckCircle2, Clock, Award, LogOut, Edit2, Save, X, KeyRound
+  XCircle, CheckCircle2, Clock, Award, LogOut, Edit2, Save, X, KeyRound, RotateCcw
 } from 'lucide-react';
 
 interface CustomerProfilePageProps {
@@ -30,14 +31,22 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
 
   // Selected booking for Entry Pass Modal
   const [passModalBooking, setPassModalBooking] = useState<Booking | null>(null);
+  // Selected booking for Cancellation & Refund Confirmation Popup
+  const [cancelModalBooking, setCancelModalBooking] = useState<Booking | null>(null);
 
   // Get customer's bookings from store (match by ID or Phone number)
+  const currentDigits = currentCustomer.phone.replace(/\D/g, '').slice(-10);
   const customerIds = new Set(
-    store.getCustomers().filter(c => c.phone === currentCustomer.phone).map(c => c.id)
+    store.getCustomers().filter(c => 
+      c.id === currentCustomer.id || 
+      (currentDigits && c.phone.replace(/\D/g, '').slice(-10) === currentDigits)
+    ).map(c => c.id)
   );
   customerIds.add(currentCustomer.id);
 
-  const allBookings = store.getBookings().filter(b => customerIds.has(b.customer_id));
+  const [bookingsList, setBookingsList] = useState<Booking[]>(() => 
+    store.getBookings().filter(b => customerIds.has(b.customer_id))
+  );
   const courts = store.getCourts();
   const sports = store.getSports();
 
@@ -49,7 +58,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
   const currentMins = now.getHours() * 60 + now.getMinutes();
 
   // Categorize bookings
-  const upcomingBookings = allBookings.filter(b => {
+  const upcomingBookings = bookingsList.filter(b => {
     if (b.status === 'cancelled' || b.status === 'refunded' || b.status === 'completed') return false;
     if (b.booking_date > todayStr) return true;
     if (b.booking_date === todayStr) {
@@ -59,7 +68,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
     return false;
   });
 
-  const completedBookings = allBookings.filter(b => {
+  const completedBookings = bookingsList.filter(b => {
     if (b.status === 'cancelled' || b.status === 'refunded') return false;
     if (b.status === 'completed') return true;
     if (b.booking_date < todayStr) return true;
@@ -70,7 +79,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
     return false;
   });
 
-  const cancelledBookings = allBookings.filter(b => b.status === 'cancelled' || b.status === 'refunded');
+  const cancelledBookings = bookingsList.filter(b => b.status === 'cancelled' || b.status === 'refunded');
 
   const displayedBookings = 
     activeTab === 'upcoming' ? upcomingBookings :
@@ -97,15 +106,46 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
   };
 
   const handleCancelBooking = (booking: Booking) => {
-    const { refundPct, refundAmount } = calculateRefund(booking);
+    // Open dedicated Cancellation & Refund Breakdown Modal instead of window.confirm
+    setCancelModalBooking(booking);
+  };
 
-    const confirmMsg = `Cancel booking ${booking.booking_ref}?\n\nRefund Policy:\n- Refund percentage: ${refundPct}%\n- Estimated refund: ₹${refundAmount}`;
-    if (!confirm(confirmMsg)) return;
+  const handleExecuteCancellation = (
+    refundAmount: number, 
+    refundReason: string, 
+    metTerms: boolean, 
+    noticeHours: number
+  ) => {
+    if (!cancelModalBooking) return;
+    const targetBooking = cancelModalBooking;
+    const nextStatus = refundAmount > 0 ? 'refunded' : 'cancelled';
 
-    const result = PostgresEngine.updateBookingStatus(booking.id, refundPct > 0 ? 'refunded' : 'cancelled');
+    const result = PostgresEngine.updateBookingStatus(targetBooking.id, nextStatus, {
+      refundAmount,
+      refundReason,
+      cancelledBy: 'customer',
+      noticeHours,
+      metTerms
+    });
+
     if (result.success) {
-      alert(`Booking ${booking.booking_ref} cancelled. Refund of ₹${refundAmount} initiated.`);
-      window.location.reload();
+      const businessDays = store.getCancellationSettings().processing_business_days || '5-7';
+      if (refundAmount > 0) {
+        alert(`Booking ${targetBooking.booking_ref} cancelled successfully!\n\nA refund of ₹${refundAmount} has been initiated and will reach your original payment method within ${businessDays} business days.`);
+      } else {
+        alert(`Booking ${targetBooking.booking_ref} cancelled.\n\nUnder venue terms, cancellations made within ${store.getCancellationSettings().cutoff_hours} hours of booking time are non-refundable (₹0 refund).`);
+      }
+
+      setBookingsList(prev => prev.map(b => b.id === targetBooking.id ? { 
+        ...b, 
+        status: nextStatus,
+        refund_amount: refundAmount,
+        refund_reason: refundReason,
+        cancelled_by: 'customer',
+        cancellation_notice_hours: noticeHours,
+        cancellation_met_terms: metTerms
+      } : b));
+      setCancelModalBooking(null);
     } else {
       alert(result.message);
     }
@@ -131,7 +171,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
     alert('Profile details updated successfully!');
   };
 
-  const totalSpent = allBookings
+  const totalSpent = bookingsList
     .filter(b => b.status === 'confirmed' || b.status === 'completed')
     .reduce((sum, b) => sum + b.total_amount, 0);
 
@@ -179,7 +219,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
                 </div>
                 <div className="flex flex-wrap items-center gap-4 text-xs text-on-surface-variant mt-1 font-medium">
                   <span className="flex items-center gap-1">
-                    <Phone className="w-3.5 h-3.5 text-primary" /> +91 {currentCustomer.phone}
+                    <Phone className="w-3.5 h-3.5 text-primary" /> {currentCustomer.phone.startsWith('+91') ? currentCustomer.phone : `+91 ${currentCustomer.phone}`}
                   </span>
                   {currentCustomer.email && (
                     <span className="flex items-center gap-1">
@@ -240,7 +280,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
               <span className="text-[11px] font-headline font-bold text-on-surface-variant uppercase tracking-wider block">
                 Total Bookings
               </span>
-              <p className="text-2xl font-headline font-extrabold text-primary">{allBookings.length}</p>
+              <p className="text-2xl font-headline font-extrabold text-primary">{bookingsList.length}</p>
             </div>
             <div className="bg-surface-container-low p-4 rounded-2xl border border-outline-variant/30 space-y-1">
               <span className="text-[11px] font-headline font-bold text-on-surface-variant uppercase tracking-wider block">
@@ -339,7 +379,12 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
                       </div>
                       <div className="text-right">
                         <p className="font-headline font-extrabold text-lg text-primary">₹{b.total_amount}</p>
-                        <span className="text-[10px] text-on-surface-variant font-bold uppercase bg-surface-container-low px-2 py-0.5 rounded-full border border-outline-variant/30">
+                        {b.status === 'refunded' && b.refund_amount !== undefined && (
+                          <span className="block text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 mt-0.5">
+                            Refund: ₹{b.refund_amount}
+                          </span>
+                        )}
+                        <span className="text-[10px] text-on-surface-variant font-bold uppercase bg-surface-container-low px-2 py-0.5 rounded-full border border-outline-variant/30 mt-0.5 inline-block">
                           {b.source.replace('_', ' ')}
                         </span>
                       </div>
@@ -429,6 +474,14 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
           </div>
         </div>
       )}
+
+      {/* Cancellation & Refund Confirmation Popup */}
+      <CancelBookingConfirmModal
+        booking={cancelModalBooking}
+        isOpen={!!cancelModalBooking}
+        onClose={() => setCancelModalBooking(null)}
+        onConfirmed={handleExecuteCancellation}
+      />
 
     </div>
   );

@@ -2,6 +2,7 @@ import { store } from './store';
 import { PostgresEngine } from './postgresEngine';
 import { RedisLockService } from './redisLockService';
 import { NotificationService } from './notificationService';
+import { AuditLogger } from './auditLogger';
 import { Payment } from '../types/schema';
 
 export interface RazorpayOrder {
@@ -46,6 +47,8 @@ export class RazorpayService {
 
   /**
    * Process Razorpay Webhook Event (Source of Truth, Idempotent)
+   * CC-P01: Idempotency protection via gateway_payment_id
+   * CC-P02: Late payment capture on expired lock with taken slot (automatic conflict detection & 100% refund)
    */
   public static processWebhook(payload: {
     event: 'payment.captured' | 'payment.failed';
@@ -53,7 +56,7 @@ export class RazorpayService {
     order_id: string;
     method: 'upi' | 'card' | 'netbanking';
     signature: string;
-  }): { success: boolean; message: string } {
+  }): { success: boolean; message: string; conflictRefunded?: boolean } {
     const payments = store.getPayments();
     const payment = payments.find(p => p.gateway_order_id === payload.order_id);
 
@@ -61,7 +64,7 @@ export class RazorpayService {
       return { success: false, message: 'Payment record not found for order' };
     }
 
-    // Idempotency check: if payment already captured, return success without re-processing
+    // CC-P01: Idempotency check: if payment already captured with this payment_id, return success without re-processing
     if (payment.status === 'captured' && payment.gateway_payment_id === payload.payment_id) {
       return { success: true, message: 'Webhook already processed (Idempotent replay)' };
     }
@@ -80,6 +83,44 @@ export class RazorpayService {
       payment.method = payload.method;
       payment.raw_webhook_payload = payload;
       payment.updated_at = new Date().toISOString();
+
+      // CC-P02: Late Payment Capture Conflict Detection
+      // Check if another booking on the same court and date took this slot interval while the lock expired
+      const conflictingBooking = bookings.find(b => 
+        b.id !== booking.id &&
+        b.court_id === booking.court_id &&
+        b.booking_date === booking.booking_date &&
+        (b.status === 'confirmed' || b.status === 'pending_payment') &&
+        PostgresEngine.isTimeOverlap(booking.start_time, booking.end_time, b.start_time, b.end_time)
+      );
+
+      if (conflictingBooking) {
+        // Slot was taken by someone else! Issue 100% automatic conflict refund
+        payment.status = 'refunded';
+        store.setPayments(payments);
+
+        PostgresEngine.updateBookingStatus(booking.id, 'refunded', {
+          refundAmount: booking.total_amount,
+          refundReason: `Automatic conflict refund: late payment captured after hold expired; slot was reserved by ${conflictingBooking.booking_ref}`,
+          cancelledBy: 'admin',
+          metTerms: true
+        });
+
+        AuditLogger.log(
+          'SYSTEM',
+          'LATE_PAYMENT_SLOT_CONFLICT_REFUND',
+          'Booking',
+          booking.id,
+          { booking_ref: booking.booking_ref, payment_id: payload.payment_id, slot: `${booking.start_time} - ${booking.end_time}` },
+          { conflicting_booking_ref: conflictingBooking.booking_ref, refund_amount: booking.total_amount }
+        );
+
+        return {
+          success: false,
+          conflictRefunded: true,
+          message: `Late payment captured after hold expired. Slot was already booked by another player. 100% instant refund (₹${booking.total_amount}) initiated automatically.`
+        };
+      }
 
       // 2. Confirm Booking via PostgresEngine state machine
       PostgresEngine.updateBookingStatus(booking.id, 'confirmed');

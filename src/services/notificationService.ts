@@ -20,7 +20,11 @@ export class NotificationService {
     } else if (type === 'reminder') {
       message = `⏰ Reminder: Your game at ${venue.name} starts in 2 hours (${booking.start_time}). Court: ${court?.name}. Have a great match!`;
     } else if (type === 'cancellation') {
-      message = `❌ Booking Cancelled: Ref ${booking.booking_ref} for ${booking.booking_date} @ ${booking.start_time}. Any refund due will be processed per venue policy.`;
+      if (booking.refund_amount && booking.refund_amount > 0) {
+        message = `❌ Booking Cancelled: Ref ${booking.booking_ref} (${booking.booking_date} @ ${booking.start_time}). A refund of ₹${booking.refund_amount} has been initiated to your original payment method.`;
+      } else {
+        message = `❌ Booking Cancelled: Ref ${booking.booking_ref} for ${booking.booking_date} @ ${booking.start_time}. Per venue cancellation window policy, no refund is due.`;
+      }
     }
 
     const log: NotificationLog = {

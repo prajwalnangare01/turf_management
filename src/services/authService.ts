@@ -68,7 +68,9 @@ export class AuthService {
       expiresAt: Date.now() + 24 * 60 * 60 * 1000 // 24 hours validity
     };
 
-    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    }
     return { success: true, session };
   }
 
@@ -77,6 +79,7 @@ export class AuthService {
    */
   public static getSession(): AdminSession | null {
     try {
+      if (typeof localStorage === 'undefined') return null;
       const raw = localStorage.getItem(SESSION_KEY);
       if (!raw) return null;
 
@@ -103,6 +106,8 @@ export class AuthService {
    * Logout active session
    */
   public static logout(): void {
-    localStorage.removeItem(SESSION_KEY);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(SESSION_KEY);
+    }
   }
 }

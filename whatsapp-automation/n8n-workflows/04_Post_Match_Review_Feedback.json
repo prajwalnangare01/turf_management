@@ -1,0 +1,108 @@
+{
+  "name": "TurfFlow — Post-Match Player Feedback WhatsApp Cron",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "node-hourly-cron",
+      "name": "Every Hour",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://localhost:5000/api/bookings"
+      },
+      "id": "node-fetch-all-bookings",
+      "name": "Fetch Bookings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const bookings = $input.first().json.bookings || [];\nconst now = new Date();\nconst todayStr = now.toISOString().slice(0, 10);\nconst nowMins = now.getHours() * 60 + now.getMinutes();\n\nconst completedRecently = [];\n\nfor (const b of bookings) {\n  if (b.status !== 'confirmed' || b.booking_date !== todayStr) continue;\n  const [h, m] = b.end_time.split(':').map(Number);\n  const endMins = h * 60 + m;\n  const diff = nowMins - endMins;\n\n  // Finished between 30 and 90 mins ago\n  if (diff >= 30 && diff <= 90) {\n    completedRecently.push({\n      bookingRef: b.booking_ref,\n      customerPhone: b.customer_phone,\n      customerName: b.customer_name,\n      courtName: b.court_name\n    });\n  }\n}\n\nreturn completedRecently.map(item => ({ json: item }));"
+      },
+      "id": "node-filter-completed",
+      "name": "Filter Matches Finished 1h Ago",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v21.0/{{ $env.WHATSAPP_PHONE_NUMBER_ID }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.WHATSAPP_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"recipient_type\": \"individual\",\n  \"to\": \"{{ $json.customerPhone.replace('+', '') }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": \"⭐ *HOW WAS YOUR MATCH?* ⭐\\n━━━━━━━━━━━━━━━━━━━━━━━━━\\nHey \" + $json.customerName + \"! Hope your game on \" + $json.courtName + \" was thrilling!\\n\\nHow would you rate your pitch & lighting experience today?\\n\\n⭐ 5 - Excellent\\n⭐ 4 - Good\\n⭐ 3 - Average\\n⭐ 1-2 - Needs Improvement\\n\\nReply with your rating number or any feedback! As a thank you, use code *TURFPLAY10* for 10% off your next match. 🏆\"\n  }\n}"
+      },
+      "id": "node-send-feedback-wa",
+      "name": "Send Feedback Prompt on WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 300]
+    }
+  ],
+  "connections": {
+    "Every Hour": {
+      "main": [
+        [
+          {
+            "node": "Fetch Bookings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Bookings": {
+      "main": [
+        [
+          {
+            "node": "Filter Matches Finished 1h Ago",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Matches Finished 1h Ago": {
+      "main": [
+        [
+          {
+            "node": "Send Feedback Prompt on WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

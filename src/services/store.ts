@@ -1,6 +1,6 @@
 import { 
   Venue, Sport, Court, PricingRule, Customer, AdminUser, Booking, 
-  Payment, SlotLock, BlockedSlot, CancellationPolicy, Coupon, 
+  Payment, SlotLock, BlockedSlot, CancellationPolicy, CancellationSettings, Coupon, 
   NotificationLog, AuditLog 
 } from '../types/schema';
 
@@ -305,6 +305,13 @@ const DEFAULT_CANCELLATION_POLICIES: CancellationPolicy[] = [
   { id: 'cp-003', hours_before_start: 0, refund_percentage: 0 }
 ];
 
+const DEFAULT_CANCELLATION_SETTINGS: CancellationSettings = {
+  cutoff_hours: 6,
+  refund_percentage: 100,
+  processing_business_days: '5-7',
+  allow_cancellation_after_cutoff: true
+};
+
 const DEFAULT_COUPONS: Coupon[] = [
   {
     id: 'cpn-001',
@@ -345,16 +352,36 @@ class AppStore {
   private slotLocks: SlotLock[] = [];
   private blockedSlots: BlockedSlot[] = DEFAULT_BLOCKED_SLOTS;
   private cancellationPolicies: CancellationPolicy[] = DEFAULT_CANCELLATION_POLICIES;
+  private cancellationSettings: CancellationSettings = DEFAULT_CANCELLATION_SETTINGS;
   private coupons: Coupon[] = DEFAULT_COUPONS;
   private notificationLogs: NotificationLog[] = [];
   private auditLogs: AuditLog[] = [];
 
   constructor() {
     this.loadFromStorage();
+    this.initReconnectListener();
+  }
+
+  // CC-DB2: Supabase Realtime & Network Reconnection Sync Listener
+  public syncOnReconnect() {
+    this.loadFromStorage();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('turfflow_store_synced'));
+    }
+  }
+
+  public initReconnectListener() {
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', () => {
+        console.log('🌐 [Network Reconnect] Online event detected. Resyncing store state...');
+        this.syncOnReconnect();
+      });
+    }
   }
 
   private loadFromStorage() {
     try {
+      if (typeof localStorage === 'undefined') return;
       const data = localStorage.getItem('TURFFLOW_STORE_V1');
       if (data) {
         const parsed = JSON.parse(data);
@@ -388,6 +415,7 @@ class AppStore {
         this.slotLocks = parsed.slotLocks || [];
         this.blockedSlots = parsed.blockedSlots || DEFAULT_BLOCKED_SLOTS;
         this.cancellationPolicies = parsed.cancellationPolicies || DEFAULT_CANCELLATION_POLICIES;
+        this.cancellationSettings = parsed.cancellationSettings || DEFAULT_CANCELLATION_SETTINGS;
         this.coupons = parsed.coupons || DEFAULT_COUPONS;
         this.notificationLogs = parsed.notificationLogs || [];
         this.auditLogs = parsed.auditLogs || [];
@@ -399,6 +427,7 @@ class AppStore {
 
   public saveToStorage() {
     try {
+      if (typeof localStorage === 'undefined') return;
       localStorage.setItem('TURFFLOW_STORE_V1', JSON.stringify({
         venue: this.venue,
         sports: this.sports,
@@ -411,6 +440,7 @@ class AppStore {
         slotLocks: this.slotLocks,
         blockedSlots: this.blockedSlots,
         cancellationPolicies: this.cancellationPolicies,
+        cancellationSettings: this.cancellationSettings,
         coupons: this.coupons,
         notificationLogs: this.notificationLogs,
         auditLogs: this.auditLogs
@@ -432,6 +462,7 @@ class AppStore {
   public getSlotLocks() { return this.slotLocks; }
   public getBlockedSlots() { return this.blockedSlots; }
   public getCancellationPolicies() { return this.cancellationPolicies; }
+  public getCancellationSettings() { return this.cancellationSettings; }
   public getCoupons() { return this.coupons; }
   public getNotificationLogs() { return this.notificationLogs; }
   public getAuditLogs() { return this.auditLogs; }
@@ -452,6 +483,14 @@ class AppStore {
   public setBlockedSlots(blocked: BlockedSlot[]) { this.blockedSlots = blocked; this.saveToStorage(); }
   public setNotificationLogs(logs: NotificationLog[]) { this.notificationLogs = logs; this.saveToStorage(); }
   public setAuditLogs(logs: AuditLog[]) { this.auditLogs = logs; this.saveToStorage(); }
+  public setCancellationPolicies(policies: CancellationPolicy[]) { 
+    this.cancellationPolicies = policies; 
+    this.saveToStorage(); 
+  }
+  public setCancellationSettings(settings: CancellationSettings) {
+    this.cancellationSettings = settings;
+    this.saveToStorage();
+  }
 
   // Reset to default
   public resetToDefaults() {
@@ -466,6 +505,7 @@ class AppStore {
     this.slotLocks = [];
     this.blockedSlots = DEFAULT_BLOCKED_SLOTS;
     this.cancellationPolicies = DEFAULT_CANCELLATION_POLICIES;
+    this.cancellationSettings = DEFAULT_CANCELLATION_SETTINGS;
     this.coupons = DEFAULT_COUPONS;
     this.notificationLogs = [];
     this.auditLogs = [];
@@ -485,13 +525,16 @@ class AppStore {
     this.slotLocks = [];
     this.blockedSlots = [];
     this.cancellationPolicies = DEFAULT_CANCELLATION_POLICIES;
+    this.cancellationSettings = DEFAULT_CANCELLATION_SETTINGS;
     this.coupons = DEFAULT_COUPONS;
     this.notificationLogs = [];
     this.auditLogs = [];
     this.saveToStorage();
-    localStorage.removeItem('turfflow_admin_session');
-    localStorage.removeItem('turfflow_customer_session');
-    localStorage.removeItem('TURFFLOW_STORE_V1');
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('turfflow_admin_session');
+      localStorage.removeItem('turfflow_customer_session');
+      localStorage.removeItem('TURFFLOW_STORE_V1');
+    }
   }
 }
 

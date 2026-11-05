@@ -31,8 +31,17 @@ export const CustomerCRM: React.FC<CustomerCRMProps> = ({ currentAdmin }) => {
   const closeConfirm = () => setConfirmState(prev => ({ ...prev, isOpen: false }));
 
   const filtered = customers.filter(
-    c => c.name.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search)
+    c => c.name.toLowerCase().includes(search.toLowerCase()) || 
+         c.phone.includes(search) || 
+         c.phone.replace(/\D/g, '').includes(search.replace(/\D/g, ''))
   );
+
+  const formatDisplayPhone = (phone: string) => {
+    if (!phone) return '';
+    const cleanDigits = phone.replace(/\D/g, '');
+    const last10 = cleanDigits.slice(-10);
+    return `+91 ${last10}`;
+  };
 
   const executeToggleBlacklist = (customer: Customer) => {
     const nextState = !customer.is_blacklisted;
@@ -114,7 +123,7 @@ export const CustomerCRM: React.FC<CustomerCRMProps> = ({ currentAdmin }) => {
                     href={`tel:${c.phone}`}
                     className="text-xs text-primary font-mono font-medium flex items-center gap-1 mt-0.5"
                   >
-                    <Phone className="w-3.5 h-3.5" /> +91 {c.phone}
+                    <Phone className="w-3.5 h-3.5" /> {formatDisplayPhone(c.phone)}
                   </a>
                 </div>
                 <span
@@ -192,7 +201,7 @@ export const CustomerCRM: React.FC<CustomerCRMProps> = ({ currentAdmin }) => {
                   <td className="p-3 font-headline font-bold text-on-surface">{c.name}</td>
                   <td className="p-3 font-mono font-medium text-on-surface-variant">
                     <a href={`tel:${c.phone}`} className="flex items-center gap-1 hover:text-primary">
-                      <Phone className="w-3 h-3 text-primary shrink-0" /> +91 {c.phone}
+                      <Phone className="w-3 h-3 text-primary shrink-0" /> {formatDisplayPhone(c.phone)}
                     </a>
                   </td>
                   <td className="p-3 font-bold text-on-surface">{c.total_bookings}</td>

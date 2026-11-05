@@ -4,8 +4,9 @@ import { RedisLockService } from '../../services/redisLockService';
 import { PostgresEngine } from '../../services/postgresEngine';
 import { AuditLogger } from '../../services/auditLogger';
 import { SlotEngine } from '../../services/slotEngine';
-import { AdminUser, BookingSource, PaymentMethod } from '../../types/schema';
-import { AlertTriangle, ShieldAlert, PlusCircle, X } from 'lucide-react';
+import { AdminUser, BookingSource, PaymentMethod, Payment } from '../../types/schema';
+import { normalizeIndianPhone } from '../../utils/venueTime';
+import { AlertTriangle, ShieldAlert, PlusCircle, X, Split, KeyRound, Clock } from 'lucide-react';
 
 interface OfflineBookingModalProps {
   initialCourtId?: string;
@@ -47,12 +48,16 @@ export const OfflineBookingModal: React.FC<OfflineBookingModalProps> = ({
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [source, setSource] = useState<BookingSource>('offline_walkin');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | 'split'>('cash');
+  const [splitCash, setSplitCash] = useState<number>(0);
+  const [splitUpi, setSplitUpi] = useState<number>(0);
+  const [splitUpiRef, setSplitUpiRef] = useState<string>('');
   const [notes, setNotes] = useState('');
 
   // Lock check
   const conflictInfo = RedisLockService.checkAdminConflict(courtId, dateStr, startTime);
   const [overrideLock, setOverrideLock] = useState(false);
+  const [overrideReason, setOverrideReason] = useState('Counter walk-in customer paying immediately; online hold expired or abandoned');
   const [errorMsg, setErrorMsg] = useState('');
 
   const courtSportId = selectedCourt?.sport_ids[0] || sports[0]?.id || '';
@@ -61,27 +66,86 @@ export const OfflineBookingModal: React.FC<OfflineBookingModalProps> = ({
     e.preventDefault();
     setErrorMsg('');
 
-    if (!name.trim() || phone.length < 10) {
+    const cleanDigits = phone.replace(/\D/g, '');
+    if (!name.trim() || cleanDigits.length < 10) {
       setErrorMsg('Please enter customer full name and valid 10-digit phone number');
       return;
     }
 
-    if (conflictInfo.hasLock && !overrideLock) {
-      setErrorMsg('An active online checkout lock exists on this slot. Check the override box if you wish to proceed.');
+    const normalizedPhone = normalizeIndianPhone(phone);
+
+    // CC-D04: Multi-Tender Split Payment Validation
+    if (paymentMethod === 'split') {
+      const splitSum = (Number(splitCash) || 0) + (Number(splitUpi) || 0);
+      if (splitSum !== price) {
+        setErrorMsg(`Split payment sum (₹${splitSum}) must equal the exact slot price (₹${price}). Difference: ₹${price - splitSum}`);
+        return;
+      }
+    }
+
+    // EDGE CASE: Prevent creating bookings in the past
+    const now = new Date();
+    const nowY = now.getFullYear();
+    const nowM = String(now.getMonth() + 1).padStart(2, '0');
+    const nowD = String(now.getDate()).padStart(2, '0');
+    const localToday = `${nowY}-${nowM}-${nowD}`;
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const [slotH, slotM] = startTime.split(':').map(Number);
+    const slotMinutes = (slotH || 0) * 60 + (slotM || 0);
+
+    if (dateStr < localToday || (dateStr === localToday && slotMinutes < currentMinutes)) {
+      setErrorMsg('Cannot create offline walk-in bookings for past dates or elapsed time slots.');
       return;
     }
 
-    // 1. Get or Create Customer
+    // EDGE CASE: Check advance booking window limit
+    const venue = store.getVenue();
+    const maxDate = new Date(now);
+    maxDate.setDate(maxDate.getDate() + (venue.max_advance_days || 14));
+    const maxDateStr = `${maxDate.getFullYear()}-${String(maxDate.getMonth() + 1).padStart(2, '0')}-${String(maxDate.getDate()).padStart(2, '0')}`;
+    if (dateStr > maxDateStr) {
+      setErrorMsg(`Date exceeds the maximum advance booking window (${venue.max_advance_days || 14} days).`);
+      return;
+    }
+
+    // CC-D01: Active Hold & RBAC Override Protection
+    if (conflictInfo.hasLock && !overrideLock) {
+      setErrorMsg('An active online checkout lock exists on this slot. Check the manager override box if you wish to proceed.');
+      return;
+    }
+
+    if (conflictInfo.hasLock && overrideLock) {
+      if (currentAdmin.role === 'staff') {
+        setErrorMsg('Permission Denied: Staff cannot override active online checkout holds. Only Managers and Owners can perform hold overrides.');
+        return;
+      }
+      if (!overrideReason.trim()) {
+        setErrorMsg('Please specify an audit reason for overriding the active online hold.');
+        return;
+      }
+    }
+
+    // 1. Get or Create Customer with E.164 normalized phone
     const customers = store.getCustomers();
-    let customer = customers.find(c => c.phone === phone);
+    let customer = customers.find(c => 
+      normalizeIndianPhone(c.phone) === normalizedPhone || 
+      c.phone.replace(/\D/g, '').slice(-10) === cleanDigits.slice(-10)
+    );
+
+    // EDGE CASE: Alert staff if customer is blacklisted
+    if (customer && customer.is_blacklisted) {
+      const proceed = confirm(`⚠️ Warning: Customer ${customer.name} (${customer.phone}) is currently BLACKLISTED (${customer.no_show_count} no-shows recorded).\n\nDo you want to override and allow this counter walk-in reservation?`);
+      if (!proceed) return;
+    }
+
     if (!customer) {
       customer = {
         id: `cust-${Date.now()}`,
         name,
-        phone,
+        phone: normalizedPhone,
         created_at: new Date().toISOString(),
-        total_bookings: 1,
-        total_spent: price,
+        total_bookings: 0,
+        total_spent: 0,
         no_show_count: 0,
         is_blacklisted: false
       };
@@ -98,6 +162,10 @@ export const OfflineBookingModal: React.FC<OfflineBookingModalProps> = ({
     const endTime = `${endH}:${endM}`;
     const bookingRef = `TRF-${dateStr.replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
 
+    const effectiveNotes = paymentMethod === 'split'
+      ? `[Split Tender: Cash ₹${splitCash} + UPI ₹${splitUpi}${splitUpiRef ? ` (UTR: ${splitUpiRef})` : ''}] ${notes}`.trim()
+      : notes;
+
     // 2. Insert into DB via Postgres Engine (Unique constraint check)
     const result = PostgresEngine.createBooking({
       booking_ref: bookingRef,
@@ -112,7 +180,7 @@ export const OfflineBookingModal: React.FC<OfflineBookingModalProps> = ({
       total_amount: price,
       discount_amount: 0,
       created_by_admin_id: currentAdmin.id,
-      notes
+      notes: effectiveNotes
     });
 
     if (!result.success) {
@@ -120,8 +188,32 @@ export const OfflineBookingModal: React.FC<OfflineBookingModalProps> = ({
       return;
     }
 
+    // Create payment ledger record
+    const payments = store.getPayments();
+    payments.push({
+      id: `pay-${Date.now()}`,
+      booking_id: result.booking!.id,
+      gateway: paymentMethod === 'upi' ? 'razorpay' : 'cash',
+      amount: price,
+      status: 'captured',
+      method: (paymentMethod === 'split' ? 'cash' : paymentMethod) as any,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    });
+    store.setPayments(payments);
+
     // Release Redis lock if overwritten
-    RedisLockService.releaseLock(courtId, dateStr, startTime);
+    if (conflictInfo.hasLock) {
+      RedisLockService.releaseLock(courtId, dateStr, startTime);
+      AuditLogger.log(
+        currentAdmin.id,
+        'MANAGER_OVERRIDE_ACTIVE_HOLD',
+        'SlotLock',
+        `${courtId}_${dateStr}_${startTime}`,
+        { locked_by: conflictInfo.lock?.locked_by, remaining_seconds: conflictInfo.remainingSeconds },
+        { override_reason: overrideReason, booking_ref: bookingRef }
+      );
+    }
 
     // Audit Log
     AuditLogger.log(
@@ -151,25 +243,61 @@ export const OfflineBookingModal: React.FC<OfflineBookingModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs">
-          {/* Real-Time Redis Lock Warning */}
+          {/* Real-Time Redis Lock Warning (CC-D01) */}
           {conflictInfo.hasLock && (
-            <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl text-amber-900 space-y-2">
-              <div className="flex items-center gap-2 font-headline font-bold text-xs text-amber-950">
-                <AlertTriangle className="w-4 h-4 shrink-0 text-amber-700" />
-                <span>Customer Online Hold Lock Detected</span>
+            <div className="p-3.5 bg-amber-50 border-2 border-amber-300 rounded-2xl text-amber-900 space-y-2.5 shadow-xs">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 font-headline font-bold text-xs text-amber-950">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-amber-700 animate-pulse" />
+                  <span>Slot Held in Online/WhatsApp Checkout</span>
+                </div>
+                <span className="font-mono font-black text-xs bg-amber-200/80 text-amber-950 px-2 py-0.5 rounded">
+                  {Math.floor(conflictInfo.remainingSeconds / 60)}:{(conflictInfo.remainingSeconds % 60).toString().padStart(2, '0')}
+                </span>
               </div>
-              <p className="text-[11px] leading-relaxed font-medium">
-                A customer is currently checking out this slot online (hold expires in <strong>{conflictInfo.remainingSeconds}s</strong>).
-              </p>
-              <label className="flex items-center gap-2 text-[11px] font-bold text-amber-950 cursor-pointer mt-1">
-                <input
-                  type="checkbox"
-                  checked={overrideLock}
-                  onChange={e => setOverrideLock(e.target.checked)}
-                  className="rounded accent-secondary"
-                />
-                Override online hold lock & force walk-in reservation
-              </label>
+
+              <div className="text-[11px] leading-relaxed font-medium bg-white/70 p-2.5 rounded-xl border border-amber-200/60 space-y-1">
+                <p>
+                  A customer is currently checking out this slot online. Hold expires in <strong>{conflictInfo.remainingSeconds}s</strong>.
+                </p>
+                {conflictInfo.lock?.locked_by && (
+                  <p className="text-[10px] text-amber-800 font-mono">
+                    Held by: <strong>{conflictInfo.lock.locked_by.length === 10 ? `+91 ${conflictInfo.lock.locked_by}` : conflictInfo.lock.locked_by}</strong>
+                  </p>
+                )}
+              </div>
+
+              {currentAdmin.role === 'staff' ? (
+                <div className="p-2 bg-red-50 border border-red-200 rounded-lg text-red-700 text-[10px] font-bold">
+                  ⚠️ Staff Restriction: Only Managers or Owners can override active customer checkout holds.
+                </div>
+              ) : (
+                <div className="space-y-2 pt-1 border-t border-amber-200">
+                  <label className="flex items-center gap-2 text-[11px] font-bold text-amber-950 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={overrideLock}
+                      onChange={e => setOverrideLock(e.target.checked)}
+                      className="rounded accent-amber-700 w-3.5 h-3.5"
+                    />
+                    Manager Override: Force-claim slot for counter walk-in
+                  </label>
+
+                  {overrideLock && (
+                    <div>
+                      <label className="block text-[10px] font-bold text-amber-900 mb-0.5">Override Audit Reason *</label>
+                      <input
+                        type="text"
+                        required
+                        value={overrideReason}
+                        onChange={e => setOverrideReason(e.target.value)}
+                        placeholder="e.g. Counter walk-in paying cash immediately"
+                        className="form-input text-xs py-1 px-2 border-amber-300 bg-white"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -280,15 +408,89 @@ export const OfflineBookingModal: React.FC<OfflineBookingModalProps> = ({
               <label className="block text-xs font-headline font-bold text-on-surface-variant mb-1">Payment Method</label>
               <select
                 value={paymentMethod}
-                onChange={e => setPaymentMethod(e.target.value as PaymentMethod)}
-                className="form-input"
+                onChange={e => {
+                  const val = e.target.value as any;
+                  setPaymentMethod(val);
+                  if (val === 'split') {
+                    setSplitCash(Math.floor(price / 2));
+                    setSplitUpi(price - Math.floor(price / 2));
+                  }
+                }}
+                className="form-input font-bold"
               >
-                <option value="cash">Cash Counter</option>
-                <option value="upi">Direct UPI Scan</option>
-                <option value="card">POS Card Machine</option>
+                <option value="cash">💵 Cash Counter</option>
+                <option value="upi">📱 Direct UPI Scan</option>
+                <option value="card">💳 POS Card Machine</option>
+                <option value="split">⚖️ Split Tender (Cash + UPI)</option>
               </select>
             </div>
           </div>
+
+          {/* CC-D04: Multi-Tender Split Payment Inputs */}
+          {paymentMethod === 'split' && (
+            <div className="p-3 bg-purple-50/80 border border-purple-200 rounded-xl space-y-3">
+              <div className="flex items-center justify-between text-purple-900">
+                <span className="font-headline font-bold text-xs flex items-center gap-1.5">
+                  <Split className="w-3.5 h-3.5 text-purple-700" /> Split Tender Breakdown
+                </span>
+                <span className="text-[10px] font-mono font-bold bg-purple-200/60 px-2 py-0.5 rounded">
+                  Target Total: ₹{price}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-[10px] font-bold text-purple-900 mb-1">Cash Tender (₹) *</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max={price}
+                    value={splitCash}
+                    onChange={e => {
+                      const val = Number(e.target.value) || 0;
+                      setSplitCash(val);
+                      setSplitUpi(Math.max(0, price - val));
+                    }}
+                    className="form-input text-xs py-1.5 px-2.5 bg-white border-purple-300 font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-purple-900 mb-1">UPI Tender (₹) *</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max={price}
+                    value={splitUpi}
+                    onChange={e => {
+                      const val = Number(e.target.value) || 0;
+                      setSplitUpi(val);
+                      setSplitCash(Math.max(0, price - val));
+                    }}
+                    className="form-input text-xs py-1.5 px-2.5 bg-white border-purple-300 font-bold"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-purple-900 mb-0.5">UPI Reference / UTR (Optional)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. UPI Ref / GooglePay txn id"
+                  value={splitUpiRef}
+                  onChange={e => setSplitUpiRef(e.target.value)}
+                  className="form-input text-xs py-1 px-2.5 bg-white border-purple-300"
+                />
+              </div>
+
+              <div className="flex justify-between items-center text-[10px] font-bold pt-1 border-t border-purple-200">
+                <span className="text-purple-800">Split Total Recorded:</span>
+                <span className={((Number(splitCash) || 0) + (Number(splitUpi) || 0)) === price ? 'text-emerald-700 font-black' : 'text-red-600 font-black'}>
+                  ₹{(Number(splitCash) || 0) + (Number(splitUpi) || 0)} / ₹{price}
+                  {((Number(splitCash) || 0) + (Number(splitUpi) || 0)) === price ? ' (Balanced ✅)' : ' (Unbalanced ⚠️)'}
+                </span>
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="block text-xs font-headline font-bold text-on-surface-variant mb-1">Notes / Instructions</label>

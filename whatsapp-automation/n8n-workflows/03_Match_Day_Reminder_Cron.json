@@ -1,0 +1,108 @@
+{
+  "name": "TurfFlow — Match Day 2-Hour WhatsApp Reminder Cron",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      },
+      "id": "node-cron-schedule",
+      "name": "Every 30 Minutes",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://localhost:5000/api/bookings"
+      },
+      "id": "node-fetch-bookings",
+      "name": "Fetch All Bookings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const bookings = $input.first().json.bookings || [];\nconst now = new Date();\nconst todayStr = now.toISOString().slice(0, 10);\nconst nowMins = now.getHours() * 60 + now.getMinutes();\n\nconst upcoming = [];\n\nfor (const b of bookings) {\n  if (b.status !== 'confirmed' || b.booking_date !== todayStr) continue;\n  const [h, m] = b.start_time.split(':').map(Number);\n  const startMins = h * 60 + m;\n  const diff = startMins - nowMins;\n\n  // Check if starting between 60 and 150 minutes from now\n  if (diff >= 60 && diff <= 150) {\n    upcoming.push({\n      bookingRef: b.booking_ref,\n      courtName: b.court_name,\n      customerPhone: b.customer_phone,\n      customerName: b.customer_name,\n      startTime: b.start_time,\n      diffMins: diff\n    });\n  }\n}\n\nreturn upcoming.map(item => ({ json: item }));"
+      },
+      "id": "node-filter-upcoming",
+      "name": "Filter Bookings Starting in 2h",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v21.0/{{ $env.WHATSAPP_PHONE_NUMBER_ID }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.WHATSAPP_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"recipient_type\": \"individual\",\n  \"to\": \"{{ $json.customerPhone.replace('+', '') }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": \"⏰ *MATCH REMINDER — Kick-off in ~2 Hours!* ⏰\\n━━━━━━━━━━━━━━━━━━━━━━━━━\\nHey \" + $json.customerName + \"! Your match starts at *\" + $json.startTime + \"* today.\\n🏟️ *Court:* \" + $json.courtName + \"\\n🎟️ *Ref:* `\" + $json.bookingRef + \"`\\n📍 *Location:* TurfFlow Arena, Pune\\n🗺️ *Maps:* https://maps.google.com/?q=18.5204,73.8567\\n\\nFresh bibs and footballs are ready at the dugout. Have an awesome match! ⚽🔥\"\n  }\n}"
+      },
+      "id": "node-send-reminder-wa",
+      "name": "Send Match Reminder on WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 300]
+    }
+  ],
+  "connections": {
+    "Every 30 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Fetch All Bookings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch All Bookings": {
+      "main": [
+        [
+          {
+            "node": "Filter Bookings Starting in 2h",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Bookings Starting in 2h": {
+      "main": [
+        [
+          {
+            "node": "Send Match Reminder on WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

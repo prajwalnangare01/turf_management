@@ -1,5 +1,6 @@
 import { Customer } from '../types/schema';
 import { store } from './store';
+import { normalizeIndianPhone } from '../utils/venueTime';
 
 const CUSTOMER_SESSION_KEY = 'turfflow_customer_session';
 
@@ -12,67 +13,29 @@ export interface CustomerSession {
 
 export class CustomerAuthService {
   /**
-   * Check if phone number is already registered
-   */
-  public static checkPhoneExists(phone: string): boolean {
-    const cleanPhone = phone.replace(/\D/g, '');
-    if (!cleanPhone) return false;
-    const customers = store.getCustomers();
-    return customers.some(c => c.phone.replace(/\D/g, '') === cleanPhone);
-  }
-
-  /**
    * Send simulated OTP to phone number
    */
-  public static sendOtp(phone: string): { success: boolean; message: string; otp?: string } {
-    const cleanPhone = phone.replace(/\D/g, '');
-    if (cleanPhone.length < 10) {
+  public static sendOtp(phone: string): { success: boolean; message: string } {
+    const normalizedPhone = normalizeIndianPhone(phone);
+    const cleanDigits = phone.replace(/\D/g, '');
+    if (cleanDigits.length < 10) {
       return { success: false, message: 'Please enter a valid 10-digit mobile number.' };
     }
 
     return {
       success: true,
-      message: `OTP sent to +91 ${cleanPhone}. Demo verification code: 1234`,
-      otp: '1234'
+      message: `OTP sent to ${normalizedPhone}. Demo verification code: 1234`
     };
   }
 
-  /**
-   * Login with phone and OTP
-   */
-  public static loginWithOtp(phone: string, otp: string): { success: boolean; session?: CustomerSession; error?: string } {
-    const cleanPhone = phone.replace(/\D/g, '');
-    
-    if (otp !== '1234' && otp.length !== 4) {
-      return { success: false, error: 'Invalid OTP code. Use demo code: 1234' };
-    }
-
-    const customers = store.getCustomers();
-    let customer = customers.find(c => c.phone.replace(/\D/g, '') === cleanPhone);
-
-    if (!customer) {
-      return { 
-        success: false, 
-        error: 'No account found with this phone number. Please register first.' 
-      };
-    }
-
-    if (customer.is_blacklisted) {
-      return {
-        success: false,
-        error: 'Your account has been suspended due to no-show policy violations. Please contact venue admin.'
-      };
-    }
-
-    return this.createSession(customer);
-  }
 
   /**
    * Login with phone/email and password
    */
   public static loginWithPassword(identity: string, password: string): { success: boolean; session?: CustomerSession; error?: string } {
     const cleanIdentity = identity.trim().toLowerCase();
-    const cleanPhone = identity.replace(/\D/g, '');
+    const normalizedPhone = normalizeIndianPhone(identity);
+    const cleanDigits = identity.replace(/\D/g, '');
 
     if (!password) {
       return { success: false, error: 'Please enter your password.' };
@@ -80,7 +43,9 @@ export class CustomerAuthService {
 
     const customers = store.getCustomers();
     let customer = customers.find(
-      c => c.phone.replace(/\D/g, '') === cleanPhone || (c.email && c.email.toLowerCase() === cleanIdentity)
+      c => normalizeIndianPhone(c.phone) === normalizedPhone || 
+           (cleanDigits.length >= 10 && c.phone.replace(/\D/g, '').slice(-10) === cleanDigits.slice(-10)) ||
+           (c.email && c.email.toLowerCase() === cleanIdentity)
     );
 
     if (!customer) {
@@ -107,99 +72,57 @@ export class CustomerAuthService {
   }
 
   /**
-   * Register new customer account after verifying phone OTP
+   * Register new customer account with required OTP verification
    */
-  public static registerWithOtp(
-    name: string,
-    phone: string,
-    otp: string,
-    email?: string,
-    password?: string
+  public static register(
+    name: string, 
+    phone: string, 
+    otp: string, 
+    password: string, 
+    email?: string
   ): { success: boolean; session?: CustomerSession; error?: string } {
-    const cleanPhone = phone.replace(/\D/g, '');
+    const cleanDigits = phone.replace(/\D/g, '');
+    const normalizedPhone = normalizeIndianPhone(phone);
 
     if (!name.trim()) {
       return { success: false, error: 'Full name is required for registration.' };
     }
 
-    if (cleanPhone.length < 10) {
-      return { success: false, error: 'A valid 10-digit phone number is required.' };
+    if (cleanDigits.length < 10) {
+      return { success: false, error: 'Valid 10-digit mobile phone number is required.' };
     }
 
-    const cleanOtp = otp.trim();
-    if (!cleanOtp) {
-      return { success: false, error: 'Please enter the 4-digit verification code.' };
+    const cleanOtp = (otp || '').trim();
+    if (!cleanOtp || cleanOtp !== '1234') {
+      return { 
+        success: false, 
+        error: 'Invalid verification code. Please enter the 4-digit OTP sent to your phone (Demo code: 1234).' 
+      };
     }
 
-    if (cleanOtp !== '1234' && cleanOtp.length !== 4) {
-      return { success: false, error: 'Invalid verification code. Use demo code: 1234' };
+    if (!password || password.length < 4) {
+      return { success: false, error: 'Please set a secure password with at least 4 characters.' };
     }
 
     const customers = store.getCustomers();
-    let existing = customers.find(c => c.phone.replace(/\D/g, '') === cleanPhone);
+    let existing = customers.find(c => 
+      normalizeIndianPhone(c.phone) === normalizedPhone || 
+      c.phone.replace(/\D/g, '').slice(-10) === cleanDigits.slice(-10)
+    );
 
     if (existing) {
-      if (existing.is_blacklisted) {
-        return {
-          success: false,
-          error: 'Your account has been suspended due to no-show policy violations. Please contact venue admin.'
-        };
-      }
-      existing.name = name.trim();
-      if (email) existing.email = email.trim();
-      if (password) existing.password = password.trim();
-      store.saveToStorage();
-      return this.createSession(existing);
+      return { 
+        success: false, 
+        error: 'An account with this mobile number already exists. Please select "Log In" to access your account.' 
+      };
     }
 
     const newCustomer: Customer = {
       id: `cust-${Date.now().toString().substring(6)}`,
       name: name.trim(),
-      phone: cleanPhone,
-      email: email?.trim() || undefined,
-      password: password?.trim() || 'pass123',
-      created_at: new Date().toISOString(),
-      total_bookings: 0,
-      total_spent: 0,
-      no_show_count: 0,
-      is_blacklisted: false
-    };
-
-    store.addCustomer(newCustomer);
-    return this.createSession(newCustomer);
-  }
-
-  /**
-   * Register new customer account with optional password (legacy fallback)
-   */
-  public static register(name: string, phone: string, email?: string, password?: string): { success: boolean; session?: CustomerSession; error?: string } {
-    const cleanPhone = phone.replace(/\D/g, '');
-
-    if (!name.trim()) {
-      return { success: false, error: 'Name is required for registration.' };
-    }
-
-    if (cleanPhone.length < 10) {
-      return { success: false, error: 'Valid 10-digit phone number is required.' };
-    }
-
-    const customers = store.getCustomers();
-    let existing = customers.find(c => c.phone.replace(/\D/g, '') === cleanPhone);
-
-    if (existing) {
-      existing.name = name;
-      if (email) existing.email = email;
-      if (password) existing.password = password;
-      store.saveToStorage();
-      return this.createSession(existing);
-    }
-
-    const newCustomer: Customer = {
-      id: `cust-${Date.now().toString().substring(6)}`,
-      name: name.trim(),
-      phone: cleanPhone,
+      phone: normalizedPhone,
       email: email?.trim(),
-      password: password?.trim() || 'pass123',
+      password: password.trim(),
       created_at: new Date().toISOString(),
       total_bookings: 0,
       total_spent: 0,
@@ -223,7 +146,9 @@ export class CustomerAuthService {
       expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000 // 30 days validity
     };
 
-    localStorage.setItem(CUSTOMER_SESSION_KEY, JSON.stringify(session));
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(CUSTOMER_SESSION_KEY, JSON.stringify(session));
+    }
     return { success: true, session };
   }
 
@@ -232,6 +157,7 @@ export class CustomerAuthService {
    */
   public static getAuthenticatedCustomer(): Customer | null {
     try {
+      if (typeof localStorage === 'undefined') return null;
       const raw = localStorage.getItem(CUSTOMER_SESSION_KEY);
       if (!raw) return null;
 
@@ -253,6 +179,8 @@ export class CustomerAuthService {
    * Logout customer
    */
   public static logout(): void {
-    localStorage.removeItem(CUSTOMER_SESSION_KEY);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(CUSTOMER_SESSION_KEY);
+    }
   }
 }

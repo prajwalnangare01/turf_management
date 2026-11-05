@@ -42,6 +42,8 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
     return CustomerAuthService.getAuthenticatedCustomer();
   });
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authPromptMessage, setAuthPromptMessage] = useState<string | null>(null);
+  const [pendingSlotToSelect, setPendingSlotToSelect] = useState<DynamicSlot | null>(null);
 
   // Date strip setup (next 14 days)
   const todayStr = new Date().toISOString().split('T')[0];
@@ -58,6 +60,7 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
   });
 
   const [sessionId] = useState(() => `sess_${Math.floor(Math.random() * 1000000)}`);
+  const effectiveSessionId = currentCustomer ? currentCustomer.id : sessionId;
   const [selectedSlots, setSelectedSlots] = useState<DynamicSlot[]>([]);
 
   // Modals
@@ -80,7 +83,7 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
 
   const refreshSlots = () => {
     if (selectedCourt) {
-      const slots = SlotEngine.computeSlotsForCourt(selectedCourt, selectedDate, sessionId);
+      const slots = SlotEngine.computeSlotsForCourt(selectedCourt, selectedDate, effectiveSessionId);
       setComputedSlots(slots);
     }
   };
@@ -89,14 +92,71 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
     refreshSlots();
     const interval = setInterval(refreshSlots, 15000);
     return () => clearInterval(interval);
-  }, [selectedCourt, selectedDate]);
+  }, [selectedCourt, selectedDate, effectiveSessionId]);
+
+  // CC-S03: Recover from Mobile UPI external app intent switch on tab resume
+  useEffect(() => {
+    const handleCheckPendingCheckout = () => {
+      if (typeof sessionStorage === 'undefined') return;
+      const raw = sessionStorage.getItem('turfflow_pending_checkout');
+      if (!raw) return;
+
+      try {
+        const pending = JSON.parse(raw);
+        if (pending.expiresAt && Date.now() > pending.expiresAt) {
+          sessionStorage.removeItem('turfflow_pending_checkout');
+          return;
+        }
+
+        const booking = store.getBookings().find(
+          b => b.booking_ref === pending.bookingRef || b.id === pending.bookingId
+        );
+
+        if (booking && booking.status === 'confirmed') {
+          sessionStorage.removeItem('turfflow_pending_checkout');
+          setShowCheckout(false);
+          setSelectedSlots([]);
+          setConfirmedBookingRef(booking.booking_ref);
+        }
+      } catch {}
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        handleCheckPendingCheckout();
+      }
+    };
+
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleCheckPendingCheckout);
+    handleCheckPendingCheckout();
+
+    return () => {
+      window.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleCheckPendingCheckout);
+    };
+  }, []);
 
   const handleToggleSlot = (slot: DynamicSlot) => {
     if (!selectedCourt) return;
 
+    // EDGE CASE: Require Login / Signup before reserving or locking slots
+    if (!currentCustomer) {
+      setAuthPromptMessage('Please sign in or create an account to reserve and lock pitch slots.');
+      setPendingSlotToSelect(slot);
+      setShowAuthModal(true);
+      return;
+    }
+
+    // EDGE CASE: Block suspended / blacklisted accounts from reserving slots
+    if (currentCustomer.is_blacklisted) {
+      alert(`Your account is currently suspended due to previous no-show violations. Online reservations are disabled. Please contact venue administration at ${venue.contact_phone}.`);
+      return;
+    }
+
     // If slot is currently locked by another customer, show Active Customer Hold Modal
     if (slot.status === 'locked') {
-      const isMyLock = slot.locked_by === sessionId;
+      const isMyLock = slot.locked_by === effectiveSessionId;
       if (!isMyLock) {
         setSelectedHoldSlot({ court: selectedCourt, date: selectedDate, time: slot.start_time });
         return;
@@ -105,11 +165,11 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
 
     const exists = selectedSlots.some(s => s.start_time === slot.start_time);
     if (exists) {
-      RedisLockService.releaseLock(selectedCourt.id, selectedDate, slot.start_time, sessionId);
+      RedisLockService.releaseLock(selectedCourt.id, selectedDate, slot.start_time, effectiveSessionId);
       setSelectedSlots(selectedSlots.filter(s => s.start_time !== slot.start_time));
       refreshSlots();
     } else {
-      const lockRes = RedisLockService.acquireLock(selectedCourt.id, selectedDate, slot.start_time, sessionId);
+      const lockRes = RedisLockService.acquireLock(selectedCourt.id, selectedDate, slot.start_time, effectiveSessionId);
       if (lockRes.success) {
         setSelectedSlots([...selectedSlots, slot].sort((a, b) => a.start_time.localeCompare(b.start_time)));
         refreshSlots();
@@ -135,21 +195,39 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
       sat.setDate(sat.getDate() + diffToSat);
       setSelectedDate(sat.toISOString().split('T')[0]);
     }
+    // Release locks for previously selected slots on date switch
+    if (selectedCourt && selectedSlots.length > 0) {
+      selectedSlots.forEach(s => {
+        RedisLockService.releaseLock(selectedCourt.id, selectedDate, s.start_time, effectiveSessionId);
+      });
+    }
     setSelectedSlots([]);
   };
 
   const handleProceedCheckout = () => {
     if (!currentCustomer) {
+      setAuthPromptMessage('Please sign in or create an account to proceed to checkout.');
       setShowAuthModal(true);
+      return;
+    }
+    if (currentCustomer.is_blacklisted) {
+      alert(`Your account is currently suspended due to previous no-show violations. Online reservations are disabled.`);
       return;
     }
     setShowCheckout(true);
   };
 
   const handleCustomerLogout = () => {
+    if (currentCustomer && selectedCourt && selectedSlots.length > 0) {
+      selectedSlots.forEach(s => {
+        RedisLockService.releaseLock(selectedCourt.id, selectedDate, s.start_time, currentCustomer.id);
+      });
+    }
+    setSelectedSlots([]);
     CustomerAuthService.logout();
     setCurrentCustomer(null);
     setCustomerView('booking');
+    refreshSlots();
   };
 
   const totalPrice = selectedSlots.reduce((sum, s) => sum + s.price, 0);
@@ -250,6 +328,23 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
       </header>
 
       <main className="max-w-[1200px] mx-auto px-4 pt-6 space-y-8">
+        {/* Blacklisted Account Warning Banner */}
+        {currentCustomer?.is_blacklisted && (
+          <div className="bg-red-50 border-2 border-red-300 rounded-2xl p-4 md:p-5 flex items-start gap-3.5 shadow-sm text-red-950 animate-in fade-in">
+            <div className="w-9 h-9 bg-red-100 text-red-700 rounded-xl flex items-center justify-center font-bold text-lg shrink-0">
+              ⚠️
+            </div>
+            <div className="space-y-1">
+              <h3 className="font-headline font-bold text-base text-red-900">
+                Online Reservation Privileges Suspended
+              </h3>
+              <p className="text-xs text-red-800 leading-relaxed font-medium">
+                Your customer account ({currentCustomer.phone}) has exceeded the venue no-show threshold ({currentCustomer.no_show_count} no-shows recorded). Online slot reservation is temporarily disabled. Please contact venue management at <strong>{venue.contact_phone}</strong> to resolve this hold.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Stitch Hero Banner Section */}
         <section className="relative rounded-2xl overflow-hidden shadow-md group border border-outline-variant/40">
           <div className="absolute inset-0 bg-gradient-to-r from-primary/95 via-primary/80 to-primary-container/40 z-10"></div>
@@ -343,8 +438,8 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
         <section id="court-selection" className="space-y-4 pt-2">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="font-headline font-bold text-xl text-primary tracking-tight">Select Pitch / Court</h3>
-              <p className="text-xs text-on-surface-variant font-medium mt-0.5">Choose your preferred court configuration</p>
+              <h3 className="font-headline font-bold text-xl text-primary tracking-tight">Available Pitch & Courts</h3>
+              <p className="text-xs text-on-surface-variant font-medium mt-0.5">Select a court pitch to view real-time available time slots</p>
             </div>
             <span className="text-xs text-primary font-bold bg-primary/10 px-3 py-1 rounded-full border border-primary/20">
               {availableCourts.length} Pitch{availableCourts.length !== 1 ? 'es' : ''} Configured
@@ -378,57 +473,65 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
                       </h4>
                     </div>
                     {isSelected && (
-                      <span className="bg-primary text-white p-1 rounded-full">
-                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                          <polyline points="20 6 9 17 4 12"></polyline>
-                        </svg>
-                      </span>
+                      <div className="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs">
+                        ✓
+                      </div>
                     )}
                   </div>
 
-                  <div className="flex items-baseline gap-1.5 pt-1 border-t border-outline-variant/30">
-                    <span className="text-xl font-headline font-extrabold text-primary">₹{c.base_price_per_hour}</span>
-                    <span className="text-xs text-on-surface-variant font-medium">/ hour base</span>
-                    {c.peak_enabled && (
-                      <span className="ml-auto text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md font-bold border border-amber-200">
-                        Peak: ₹{c.peak_price_per_hour}
-                      </span>
-                    )}
+                  <div className="flex items-center justify-between text-xs text-on-surface-variant pt-1 border-t border-outline-variant/30">
+                    <span className="flex items-center gap-1 font-medium">
+                      ⏰ {c.opening_time} - {c.closing_time}
+                    </span>
+                    <span className="font-headline font-extrabold text-primary text-sm">
+                      ₹{c.base_price_per_hour} <span className="text-[10px] font-normal text-on-surface-variant">/hr</span>
+                    </span>
                   </div>
+
+                  {c.peak_enabled && (
+                    <div className="text-[11px] text-amber-900 bg-amber-50 px-2.5 py-1 rounded-xl border border-amber-200/80 flex items-center justify-between font-medium">
+                      <span>🔥 Evening Peak ({c.peak_start_time}-{c.peak_end_time})</span>
+                      <strong className="font-extrabold">₹{c.peak_price_per_hour}/hr</strong>
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
         </section>
 
-        {/* Date Selector Section */}
-        <section className="space-y-4 pt-2">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div>
-              <h3 className="font-headline font-bold text-xl text-primary tracking-tight">Choose Date</h3>
-              <p className="text-xs text-on-surface-variant font-medium mt-0.5">Slots calculated dynamically up to 14 days ahead</p>
+        {/* Stitch Quick Filter & 14-Day Date Strip */}
+        <section className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="font-headline font-bold text-sm text-primary">Quick Date Filter:</span>
+              <div className="flex gap-1.5 bg-surface-container-low p-1 rounded-2xl text-xs font-headline font-bold">
+                {[
+                  { id: 'today', label: 'Today' },
+                  { id: 'tomorrow', label: 'Tomorrow' },
+                  { id: 'weekend', label: 'This Weekend' }
+                ].map(f => (
+                  <button
+                    key={f.id}
+                    onClick={() => handleFilterClick(f.id as any)}
+                    className={`px-3 py-1.5 rounded-xl transition ${
+                      activeFilter === f.id
+                        ? 'bg-primary text-white shadow-xs'
+                        : 'text-on-surface-variant hover:text-on-surface'
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* Quick Filter Buttons */}
-            <div className="flex items-center gap-1.5 bg-surface-container-low p-1 rounded-2xl border border-outline-variant/40 self-start sm:self-auto">
-              {(['today', 'tomorrow', 'weekend', 'all'] as const).map(f => (
-                <button
-                  key={f}
-                  onClick={() => handleFilterClick(f)}
-                  className={`text-xs px-3 py-1.5 rounded-xl font-headline font-bold capitalize transition-all ${
-                    activeFilter === f
-                      ? 'bg-primary text-white shadow-xs'
-                      : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'
-                  }`}
-                >
-                  {f}
-                </button>
-              ))}
+            <div className="text-xs text-on-surface-variant font-semibold">
+              Selected Date: <span className="text-primary font-headline font-bold">{selectedDate}</span>
             </div>
           </div>
 
-          {/* Horizontal Scrolling Date Strip */}
-          <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-none">
+          <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
             {dateStrip.map(d => {
               const isSelected = selectedDate === d.iso;
               return (
@@ -518,14 +621,37 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
       {/* Customer Auth Modal (Login / Register) */}
       {showAuthModal && (
         <CustomerAuthModal
+          customNotice={authPromptMessage}
           onSuccess={(customer) => {
             setCurrentCustomer(customer);
             setShowAuthModal(false);
-            if (selectedSlots.length > 0) {
+            setAuthPromptMessage(null);
+
+            if (customer.is_blacklisted) {
+              setPendingSlotToSelect(null);
+              alert(`Welcome back ${customer.name}. Notice: Your account is currently suspended for online bookings due to past no-shows. Please contact venue administration.`);
+              return;
+            }
+
+            if (pendingSlotToSelect && selectedCourt) {
+              const target = pendingSlotToSelect;
+              setPendingSlotToSelect(null);
+              const lockRes = RedisLockService.acquireLock(selectedCourt.id, selectedDate, target.start_time, customer.id);
+              if (lockRes.success) {
+                setSelectedSlots([target]);
+                refreshSlots();
+              } else {
+                setSelectedHoldSlot({ court: selectedCourt, date: selectedDate, time: target.start_time });
+              }
+            } else if (selectedSlots.length > 0) {
               setShowCheckout(true);
             }
           }}
-          onClose={() => setShowAuthModal(false)}
+          onClose={() => {
+            setShowAuthModal(false);
+            setAuthPromptMessage(null);
+            setPendingSlotToSelect(null);
+          }}
         />
       )}
 
@@ -535,7 +661,7 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
           court={selectedCourt}
           dateStr={selectedDate}
           selectedSlots={selectedSlots}
-          sessionId={sessionId}
+          sessionId={effectiveSessionId}
           currentCustomer={currentCustomer}
           onClose={() => setShowCheckout(false)}
           onSuccess={(ref) => {
@@ -554,15 +680,13 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
         />
       )}
 
-      {/* Booking Lookup Self-Serve Modal */}
       {showLookup && currentCustomer && (
-        <BookingLookupModal 
+        <BookingLookupModal
           currentCustomer={currentCustomer}
-          onClose={() => setShowLookup(false)} 
+          onClose={() => setShowLookup(false)}
         />
       )}
 
-      {/* Active Customer Hold Modal */}
       {selectedHoldSlot && (
         <ActiveCustomerHoldModal
           court={selectedHoldSlot.court}

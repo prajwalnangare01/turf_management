@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { store } from '../../services/store';
 import { PostgresEngine } from '../../services/postgresEngine';
 import { Booking, Customer } from '../../types/schema';
-import { Calendar, XCircle, AlertCircle, X, ShieldCheck, Tag } from 'lucide-react';
+import { CancelBookingConfirmModal } from './CancelBookingConfirmModal';
+import { Calendar, XCircle, AlertCircle, X, ShieldCheck, Tag, RotateCcw } from 'lucide-react';
 
 interface BookingLookupModalProps {
   currentCustomer: Customer;
@@ -13,41 +14,43 @@ export const BookingLookupModal: React.FC<BookingLookupModalProps> = ({ currentC
   const [userBookings, setUserBookings] = useState<Booking[]>(() => {
     return store.getBookings().filter(b => b.customer_id === currentCustomer.id);
   });
+  const [cancelModalBooking, setCancelModalBooking] = useState<Booking | null>(null);
 
   const refreshBookings = () => {
     setUserBookings(store.getBookings().filter(b => b.customer_id === currentCustomer.id));
   };
 
-  const calculateRefund = (booking: Booking) => {
-    const bookingTimeStr = `${booking.booking_date}T${booking.start_time}:00`;
-    const bookingDate = new Date(bookingTimeStr);
-    const now = new Date();
-    const diffHours = (bookingDate.getTime() - now.getTime()) / (1000 * 60 * 60);
-
-    const policies = store.getCancellationPolicies().sort((a, b) => b.hours_before_start - a.hours_before_start);
-    let refundPct = 0;
-
-    for (const p of policies) {
-      if (diffHours >= p.hours_before_start) {
-        refundPct = p.refund_percentage;
-        break;
-      }
-    }
-
-    const refundAmount = Math.round((booking.total_amount * refundPct) / 100);
-    return { diffHours, refundPct, refundAmount };
+  const handleCancelBooking = (booking: Booking) => {
+    setCancelModalBooking(booking);
   };
 
-  const handleCancelBooking = (booking: Booking) => {
-    const { refundPct, refundAmount } = calculateRefund(booking);
+  const handleExecuteCancellation = (
+    refundAmount: number,
+    refundReason: string,
+    metTerms: boolean,
+    noticeHours: number
+  ) => {
+    if (!cancelModalBooking) return;
+    const targetBooking = cancelModalBooking;
+    const nextStatus = refundAmount > 0 ? 'refunded' : 'cancelled';
 
-    const confirmMsg = `Are you sure you want to cancel booking ${booking.booking_ref}?\n\nCancellation Policy:\n- Refund percentage: ${refundPct}%\n- Estimated refund: ₹${refundAmount}`;
-    if (!confirm(confirmMsg)) return;
+    const result = PostgresEngine.updateBookingStatus(targetBooking.id, nextStatus, {
+      refundAmount,
+      refundReason,
+      cancelledBy: 'customer',
+      noticeHours,
+      metTerms
+    });
 
-    const result = PostgresEngine.updateBookingStatus(booking.id, refundPct > 0 ? 'refunded' : 'cancelled');
     if (result.success) {
-      alert(`Booking ${booking.booking_ref} has been cancelled. Refund of ₹${refundAmount} initiated.`);
+      const businessDays = store.getCancellationSettings().processing_business_days || '5-7';
+      if (refundAmount > 0) {
+        alert(`Booking ${targetBooking.booking_ref} cancelled successfully!\n\nA refund of ₹${refundAmount} has been initiated and will reach your original payment method within ${businessDays} business days.`);
+      } else {
+        alert(`Booking ${targetBooking.booking_ref} cancelled.\n\nUnder venue terms, cancellations made within ${store.getCancellationSettings().cutoff_hours} hours of booking time are non-refundable (₹0 refund).`);
+      }
       refreshBookings();
+      setCancelModalBooking(null);
     } else {
       alert(result.message);
     }
@@ -66,7 +69,7 @@ export const BookingLookupModal: React.FC<BookingLookupModalProps> = ({ currentC
             <div>
               <h3 className="font-headline font-bold text-lg text-primary leading-tight">My Verified Bookings</h3>
               <p className="text-[11px] text-on-surface-variant flex items-center gap-1 font-medium">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> Account: {currentCustomer.name} (+91 {currentCustomer.phone})
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> Account: {currentCustomer.name} ({currentCustomer.phone.startsWith('+91') ? currentCustomer.phone : `+91 ${currentCustomer.phone}`})
               </p>
             </div>
           </div>
@@ -94,8 +97,12 @@ export const BookingLookupModal: React.FC<BookingLookupModalProps> = ({ currentC
               {userBookings.map(b => {
                 const court = courts.find(c => c.id === b.court_id);
                 const sport = sports.find(s => s.id === b.sport_id);
-                const { refundPct, refundAmount } = calculateRefund(b);
-                const canCancel = b.status === 'confirmed' || b.status === 'pending_payment';
+                const bookingStart = new Date(`${b.booking_date}T${b.start_time}:00`);
+                const diffHours = (bookingStart.getTime() - Date.now()) / (1000 * 60 * 60);
+                const canCancel = diffHours > 0 && (b.status === 'confirmed' || b.status === 'pending_payment');
+                const settings = store.getCancellationSettings();
+                const metTerms = diffHours >= settings.cutoff_hours;
+                const refundAmt = metTerms ? Math.round((b.total_amount * settings.refund_percentage) / 100) : 0;
 
                 return (
                   <div
@@ -126,6 +133,9 @@ export const BookingLookupModal: React.FC<BookingLookupModalProps> = ({ currentC
                       </div>
                       <div className="text-right">
                         <div className="font-headline font-extrabold text-sm text-primary">₹{b.total_amount}</div>
+                        {b.status === 'refunded' && b.refund_amount !== undefined && (
+                          <div className="text-[11px] font-bold text-emerald-700">Refund: ₹{b.refund_amount}</div>
+                        )}
                         <span className="text-[10px] text-on-surface-variant uppercase font-medium">{b.source.replace('_', ' ')}</span>
                       </div>
                     </div>
@@ -146,8 +156,10 @@ export const BookingLookupModal: React.FC<BookingLookupModalProps> = ({ currentC
                     {canCancel && (
                       <div className="pt-2 border-t border-outline-variant/30 flex justify-between items-center text-xs">
                         <div className="text-[11px] text-on-surface-variant">
-                          <span>Refund Policy: </span>
-                          <strong className="text-primary font-bold">{refundPct}% (₹{refundAmount})</strong>
+                          <span>Cancellation Terms: </span>
+                          <strong className={metTerms ? 'text-emerald-700 font-bold' : 'text-amber-700 font-bold'}>
+                            {metTerms ? `${settings.refund_percentage}% Refund (₹${refundAmt})` : `Non-refundable (< ${settings.cutoff_hours}h)`}
+                          </strong>
                         </div>
                         <button
                           onClick={() => handleCancelBooking(b)}
@@ -163,6 +175,14 @@ export const BookingLookupModal: React.FC<BookingLookupModalProps> = ({ currentC
             </div>
           )}
         </div>
+
+        {/* Cancellation Confirmation Modal */}
+        <CancelBookingConfirmModal
+          booking={cancelModalBooking}
+          isOpen={!!cancelModalBooking}
+          onClose={() => setCancelModalBooking(null)}
+          onConfirmed={handleExecuteCancellation}
+        />
       </div>
     </div>
   );

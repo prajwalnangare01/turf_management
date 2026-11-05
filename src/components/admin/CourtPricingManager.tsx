@@ -222,6 +222,11 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
 
   const handleAddCourt = (e: React.FormEvent) => {
     e.preventDefault();
+    if (currentAdmin.role === 'staff') {
+      alert('Permission denied: Only Owners and Managers can add pitches.');
+      return;
+    }
+
     if (!newCourtName.trim()) {
       alert('Please enter a valid court / pitch name');
       return;
@@ -229,6 +234,26 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
 
     if (selectedSportIds.length === 0) {
       alert('Please select at least one sport for this court');
+      return;
+    }
+
+    if (newOpening >= newClosing) {
+      alert('Opening time must be earlier than closing time.');
+      return;
+    }
+
+    if (Number(newPrice) < 0 || Number(newSatPrice) < 0 || Number(newSunPrice) < 0) {
+      alert('Prices cannot be negative.');
+      return;
+    }
+
+    if (newPeakEnabled && newPeakStart >= newPeakEnd) {
+      alert('Peak start time must be earlier than peak end time.');
+      return;
+    }
+
+    if (Number(newDuration) <= 0 || Number(newBuffer) < 0) {
+      alert('Slot duration must be positive and buffer minutes cannot be negative.');
       return;
     }
 
@@ -293,8 +318,33 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
     e.preventDefault();
     if (!editingCourt) return;
 
+    if (currentAdmin.role === 'staff') {
+      alert('Permission denied: Only Owners and Managers can modify pitches.');
+      return;
+    }
+
     if (!editName.trim()) {
       alert('Please enter a valid pitch name');
+      return;
+    }
+
+    if (editOpening >= editClosing) {
+      alert('Opening time must be earlier than closing time.');
+      return;
+    }
+
+    if (Number(editPrice) < 0 || Number(editSatPrice) < 0 || Number(editSunPrice) < 0) {
+      alert('Prices cannot be negative.');
+      return;
+    }
+
+    if (editPeakEnabled && editPeakStart >= editPeakEnd) {
+      alert('Peak start time must be earlier than peak end time.');
+      return;
+    }
+
+    if (Number(editDuration) <= 0 || Number(editBuffer) < 0) {
+      alert('Slot duration must be positive and buffer minutes cannot be negative.');
       return;
     }
 
@@ -309,6 +359,11 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
   };
 
   const handleDeleteCourt = (courtId: string, courtName: string) => {
+    if (currentAdmin.role === 'staff') {
+      alert('Permission denied: Only Owners and Managers can delete pitches.');
+      return;
+    }
+
     const activeBookings = store.getBookings().filter(
       b => b.court_id === courtId && (b.status === 'confirmed' || b.status === 'pending_payment')
     );

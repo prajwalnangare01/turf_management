@@ -1,0 +1,335 @@
+{
+  "name": "TurfFlow WhatsApp AI Agent — Master Booking Concierge",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "turfflow-whatsapp",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-webhook-inbound",
+      "name": "WhatsApp Inbound Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [180, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize incoming message from Meta WhatsApp Cloud API or Twilio\nconst body = $input.first().json.body || $input.first().json;\n\nlet fromPhone = '';\nlet senderName = 'Customer';\nlet messageText = '';\n\nif (body.object === 'whatsapp_business_account') {\n  const message = body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];\n  const contact = body.entry?.[0]?.changes?.[0]?.value?.contacts?.[0];\n  fromPhone = '+' + (message?.from || '');\n  senderName = contact?.profile?.name || 'Customer';\n  if (message?.type === 'text') {\n    messageText = message.text.body;\n  } else if (message?.type === 'interactive') {\n    messageText = message.interactive?.button_reply?.title || message.interactive?.list_reply?.title || '';\n  }\n} else {\n  fromPhone = body.fromPhone || body.From || '+919876543210';\n  senderName = body.senderName || 'Customer';\n  messageText = body.messageText || body.Body || body.text || 'Hi';\n}\n\nreturn {\n  json: {\n    fromPhone,\n    senderName,\n    messageText,\n    receivedAt: new Date().toISOString()\n  }\n};"
+      },
+      "id": "node-payload-normalizer",
+      "name": "Normalize WhatsApp Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.messageText }}",
+        "options": {
+          "systemMessage": "You are TurfFlow Concierge, the 24/7 AI booking assistant for TurfFlow Arena (Pune, Maharashtra).\nHelp sports players check available slots, lock courts, reserve bookings, cancel/reschedule, and answer venue FAQs.\nAlways use Rupee (₹) symbol. Be polite, energetic, and concise for mobile screens.\nNever confirm a booking without booking initiation tool and payment link.\nAvailable sports: Football ⚽, Cricket 🏏, Badminton 🏸, Pickleball 🏓."
+        }
+      },
+      "id": "node-ai-agent",
+      "name": "TurfFlow AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "options": {
+          "temperature": 0.2
+        }
+      },
+      "id": "node-openai-chat-model",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAI",
+      "typeVersion": 1,
+      "position": [620, 520],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai_turfflow_creds",
+          "name": "OpenAI Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Normalize WhatsApp Payload').first().json.fromPhone }}",
+        "contextWindowLength": 10
+      },
+      "id": "node-memory-buffer",
+      "name": "Window Buffer Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [780, 520]
+    },
+    {
+      "parameters": {
+        "name": "check_available_slots",
+        "description": "Call this to check open time slots and dynamic pricing for a given sport and date (YYYY-MM-DD).",
+        "method": "GET",
+        "url": "=http://localhost:5000/api/slots",
+        "sendQuery": true,
+        "parametersQuery": {
+          "values": [
+            {
+              "name": "date",
+              "value": "={{ $fromAI('date', 'Target date in YYYY-MM-DD format') }}"
+            },
+            {
+              "name": "sport",
+              "value": "={{ $fromAI('sport', 'Sport name: football, cricket, badminton') }}"
+            }
+          ]
+        }
+      },
+      "id": "tool-check-slots",
+      "name": "Tool: check_available_slots",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [960, 180]
+    },
+    {
+      "parameters": {
+        "name": "lock_and_book_slot",
+        "description": "Initiates a slot reservation, sets a 5-minute temporary concurrency lock, and generates a Razorpay payment link.",
+        "method": "POST",
+        "url": "=http://localhost:5000/api/bookings/initiate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"courtId\": \"{{ $fromAI('court_id', 'Court ID or name (e.g. crt-001 or Turf A)') }}\",\n  \"date\": \"{{ $fromAI('date', 'Booking date YYYY-MM-DD') }}\",\n  \"startTime\": \"{{ $fromAI('start_time', 'Start time in HH:mm format, e.g. 19:00') }}\",\n  \"customerName\": \"{{ $('Normalize WhatsApp Payload').first().json.senderName }}\",\n  \"customerPhone\": \"{{ $('Normalize WhatsApp Payload').first().json.fromPhone }}\"\n}"
+      },
+      "id": "tool-lock-and-book",
+      "name": "Tool: lock_and_book_slot",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "name": "lookup_my_bookings",
+        "description": "Lookup existing active or past bookings for the customer using their phone number or booking reference.",
+        "method": "GET",
+        "url": "=http://localhost:5000/api/bookings/lookup",
+        "sendQuery": true,
+        "parametersQuery": {
+          "values": [
+            {
+              "name": "phone",
+              "value": "={{ $('Normalize WhatsApp Payload').first().json.fromPhone }}"
+            },
+            {
+              "name": "ref",
+              "value": "={{ $fromAI('ref', 'Optional booking reference code TRF-YYYYMMDD-XXXX') }}"
+            }
+          ]
+        }
+      },
+      "id": "tool-lookup-bookings",
+      "name": "Tool: lookup_my_bookings",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [960, 420]
+    },
+    {
+      "parameters": {
+        "name": "cancel_booking",
+        "description": "Cancel an active booking and compute the tiered cancellation policy refund amount.",
+        "method": "POST",
+        "url": "=http://localhost:5000/api/bookings/cancel",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"bookingRef\": \"{{ $fromAI('booking_ref', 'Booking Reference ID e.g. TRF-20261105-1001') }}\",\n  \"phone\": \"{{ $('Normalize WhatsApp Payload').first().json.fromPhone }}\",\n  \"reason\": \"{{ $fromAI('reason', 'Customer reason for cancellation') }}\"\n}"
+      },
+      "id": "tool-cancel-booking",
+      "name": "Tool: cancel_booking",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [960, 540]
+    },
+    {
+      "parameters": {
+        "name": "get_venue_details",
+        "description": "Retrieve venue address, operating hours, amenities, and ground rules.",
+        "method": "GET",
+        "url": "=http://localhost:5000/api/venue"
+      },
+      "id": "tool-venue-details",
+      "name": "Tool: get_venue_details",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [960, 660]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v21.0/{{ $env.WHATSAPP_PHONE_NUMBER_ID }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.WHATSAPP_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"recipient_type\": \"individual\",\n  \"to\": \"{{ $('Normalize WhatsApp Payload').first().json.fromPhone.replace('+', '') }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": {{ JSON.stringify($json.output) }}\n  }\n}"
+      },
+      "id": "node-dispatch-whatsapp",
+      "name": "Send WhatsApp Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"success\",\n  \"recipient\": \"{{ $('Normalize WhatsApp Payload').first().json.fromPhone }}\",\n  \"reply\": {{ JSON.stringify($('TurfFlow AI Agent').first().json.output) }}\n}",
+        "options": {}
+      },
+      "id": "node-webhook-response",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1400, 300]
+    }
+  ],
+  "connections": {
+    "WhatsApp Inbound Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize WhatsApp Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize WhatsApp Payload": {
+      "main": [
+        [
+          {
+            "node": "TurfFlow AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "TurfFlow AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Window Buffer Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "TurfFlow AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool: check_available_slots": {
+      "ai_tool": [
+        [
+          {
+            "node": "TurfFlow AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool: lock_and_book_slot": {
+      "ai_tool": [
+        [
+          {
+            "node": "TurfFlow AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool: lookup_my_bookings": {
+      "ai_tool": [
+        [
+          {
+            "node": "TurfFlow AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool: cancel_booking": {
+      "ai_tool": [
+        [
+          {
+            "node": "TurfFlow AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool: get_venue_details": {
+      "ai_tool": [
+        [
+          {
+            "node": "TurfFlow AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TurfFlow AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Send WhatsApp Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send WhatsApp Message": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

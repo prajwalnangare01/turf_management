@@ -4,6 +4,8 @@ import { store } from '../../services/store';
 import { PostgresEngine } from '../../services/postgresEngine';
 import { RazorpayService } from '../../services/razorpayService';
 import { RedisLockService } from '../../services/redisLockService';
+import { CouponService } from '../../services/couponService';
+import { normalizeIndianPhone } from '../../utils/venueTime';
 import { ShieldCheck, Tag, CreditCard, Smartphone, AlertTriangle, X, Timer, PersonStanding } from 'lucide-react';
 import { formatTimeRange12h } from '../../utils/formatters';
 
@@ -119,27 +121,23 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   const handleApplyCoupon = () => {
     setCouponError('');
-    const coupons = store.getCoupons();
-    const coupon = coupons.find(c => c.code.toUpperCase() === couponCode.trim().toUpperCase() && new Date(c.valid_to) >= new Date());
-
-    if (!coupon) {
-      setCouponError('Invalid or expired coupon code.');
+    const validation = CouponService.validateCoupon(couponCode, rawTotal, currentCustomer?.id);
+    if (!validation.valid || !validation.coupon) {
+      setCouponError(validation.message);
       setAppliedCoupon(null);
       return;
     }
-
-    if (coupon.min_amount && rawTotal < coupon.min_amount) {
-      setCouponError(`Minimum booking amount of ₹${coupon.min_amount} required for this coupon.`);
-      setAppliedCoupon(null);
-      return;
-    }
-
-    setAppliedCoupon(coupon);
+    setAppliedCoupon(validation.coupon);
   };
 
   const handleSendOtp = (e: React.FormEvent) => {
     e.preventDefault();
     if (phone.length < 10) return;
+    // If the customer is already logged in with this exact phone, skip redundant OTP
+    if (currentCustomer && currentCustomer.phone === phone) {
+      setStep('payment');
+      return;
+    }
     setStep('otp');
   };
 
@@ -158,22 +156,61 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
     setTimeout(() => {
       // 1. Get or Create Customer
+      const normalizedPhone = normalizeIndianPhone(phone);
+      const cleanDigits = phone.replace(/\D/g, '');
       const customers = store.getCustomers();
-      let customer = customers.find(c => c.phone === phone);
+      let customer = customers.find(c => 
+        normalizeIndianPhone(c.phone) === normalizedPhone || 
+        c.phone.replace(/\D/g, '').slice(-10) === cleanDigits.slice(-10)
+      );
+
+      // EDGE CASE: Check if customer is blacklisted
+      if ((currentCustomer && currentCustomer.is_blacklisted) || (customer && customer.is_blacklisted)) {
+        setIsProcessingPayment(false);
+        setPaymentError('Your customer account has been suspended due to previous no-show violations. Cannot complete reservation.');
+        return;
+      }
+
       if (!customer) {
         customer = {
           id: `cust-${Date.now()}`,
           name,
-          phone,
+          phone: normalizedPhone,
           email,
           created_at: new Date().toISOString(),
-          total_bookings: 1,
-          total_spent: finalTotal,
+          total_bookings: 0,
+          total_spent: 0,
           no_show_count: 0,
           is_blacklisted: false
         };
         customers.push(customer);
         store.setCustomers(customers);
+      }
+
+      // EDGE CASE: Pre-check locks and DB overlaps across ALL blocks before creating any booking
+      for (const block of contiguousBlocks) {
+        const hasConflict = store.getBookings().some(b =>
+          b.court_id === court.id &&
+          b.booking_date === dateStr &&
+          (b.status === 'pending_payment' || b.status === 'confirmed') &&
+          PostgresEngine.isTimeOverlap(block.start_time, block.end_time, b.start_time, b.end_time)
+        );
+
+        if (hasConflict) {
+          setIsProcessingPayment(false);
+          setPaymentError(`Slot interval ${block.start_time} - ${block.end_time} is no longer available. Please select another slot.`);
+          return;
+        }
+      }
+
+      // Pre-check Redis locks
+      for (const slot of selectedSlots) {
+        const lock = RedisLockService.getLock(court.id, dateStr, slot.start_time);
+        if (lock && lock.locked_by !== sessionId && (!currentCustomer || lock.locked_by !== currentCustomer.id)) {
+          setIsProcessingPayment(false);
+          setPaymentError(`Slot ${slot.start_time} reservation hold expired. Please return to grid and select again.`);
+          return;
+        }
       }
 
       const sports = store.getSports();
@@ -206,6 +243,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         });
 
         if (!dbResult.success || !dbResult.booking) {
+          // Rollback any earlier created bookings in this batch
+          for (const b of createdBookings) {
+            PostgresEngine.updateBookingStatus(b.id, 'cancelled');
+          }
           setIsProcessingPayment(false);
           setPaymentError(dbResult.message);
           return;
@@ -214,6 +255,30 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       }
 
       const primaryBooking = createdBookings[0];
+
+      // CC-S05: Concurrency Guard - Atomic Coupon Redemption
+      if (appliedCoupon) {
+        const couponRedeemRes = CouponService.atomicRedeem(appliedCoupon.id, primaryBooking.booking_ref);
+        if (!couponRedeemRes.success) {
+          for (const b of createdBookings) {
+            PostgresEngine.updateBookingStatus(b.id, 'cancelled');
+          }
+          setIsProcessingPayment(false);
+          setPaymentError(couponRedeemRes.message);
+          return;
+        }
+      }
+
+      // CC-S03: Persist pending checkout in sessionStorage for mobile UPI app switch recovery
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem('turfflow_pending_checkout', JSON.stringify({
+          bookingRef: primaryBooking.booking_ref,
+          bookingId: primaryBooking.id,
+          courtId: court.id,
+          dateStr,
+          expiresAt: Date.now() + 5 * 60 * 1000
+        }));
+      }
 
       // 3. Create Razorpay order
       const order = RazorpayService.createOrder(primaryBooking.id, finalTotal);
@@ -230,7 +295,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       setIsProcessingPayment(false);
 
       if (webhookResult.success) {
-        // Confirm any secondary contiguous block bookings
+        // Clear pending checkout on successful payment
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.removeItem('turfflow_pending_checkout');
+        }
+
+        // Confirm ALL created contiguous block bookings
         for (let i = 1; i < createdBookings.length; i++) {
           PostgresEngine.updateBookingStatus(createdBookings[i].id, 'confirmed');
         }
@@ -238,10 +308,27 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         // Release Redis locks for all contiguous blocks
         for (const block of contiguousBlocks) {
           RedisLockService.releaseLocksForBooking(court.id, dateStr, block.start_time, block.end_time, sessionId);
+          if (currentCustomer) {
+            RedisLockService.releaseLocksForBooking(court.id, dateStr, block.start_time, block.end_time, currentCustomer.id);
+          }
         }
 
         onSuccess(primaryBooking.booking_ref);
       } else {
+        // Release redeemed coupon usage if payment failed
+        if (appliedCoupon) {
+          CouponService.releaseUsage(appliedCoupon.id);
+        }
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.removeItem('turfflow_pending_checkout');
+        }
+
+        // Rollback all pending bookings on failure
+        for (const b of createdBookings) {
+          if (b.status === 'pending_payment') {
+            PostgresEngine.updateBookingStatus(b.id, 'cancelled');
+          }
+        }
         setPaymentError(webhookResult.message);
       }
     }, 1200);

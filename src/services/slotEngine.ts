@@ -1,14 +1,16 @@
 import { store } from './store';
 import { Court, DynamicSlot, DayType } from '../types/schema';
 import { RedisLockService } from './redisLockService';
+import { getVenueNow, getVenueDateString, getVenueMinutesFromMidnight } from '../utils/venueTime';
 
 export class SlotEngine {
   /**
-   * Helper to format HH:mm string from minutes from midnight
+   * Helper to format HH:mm string from minutes from midnight (supports modulo 1440 for overnight hours)
    */
   private static minutesToTime(mins: number): string {
-    const h = Math.floor(mins / 60).toString().padStart(2, '0');
-    const m = (mins % 60).toString().padStart(2, '0');
+    const normalized = mins % 1440;
+    const h = Math.floor(normalized / 60).toString().padStart(2, '0');
+    const m = (normalized % 60).toString().padStart(2, '0');
     return `${h}:${m}`;
   }
 
@@ -16,8 +18,8 @@ export class SlotEngine {
    * Helper to convert HH:mm string to minutes from midnight
    */
   private static timeToMinutes(timeStr: string): number {
-    const [h, m] = timeStr.split(':').map(Number);
-    return h * 60 + m;
+    const [h, m] = (timeStr || '00:00').split(':').map(Number);
+    return (h || 0) * 60 + (m || 0);
   }
 
   /**
@@ -32,13 +34,22 @@ export class SlotEngine {
 
   /**
    * Compute exact available slots dynamically for a given court and date
+   * CC-S01: Consecutive multi-hour buffer suppression
+   * CC-S02: Server-side Asia/Kolkata clock skew protection
+   * CC-DB1: Midnight operating hours crossover support (e.g. 06:00 to 02:00)
    */
   public static computeSlotsForCourt(court: Court, dateStr: string, currentSessionId?: string): DynamicSlot[] {
     const slots: DynamicSlot[] = [];
     const openMins = this.timeToMinutes(court.opening_time);
-    const closeMins = this.timeToMinutes(court.closing_time);
-    const stepMins = court.slot_duration_minutes;
-    const bufferMins = court.buffer_minutes;
+    let closeMins = this.timeToMinutes(court.closing_time);
+
+    // CC-DB1: Handle midnight operating hours crossover (e.g., 06:00 AM to 02:00 AM next day)
+    if (closeMins <= openMins) {
+      closeMins += 1440;
+    }
+
+    const stepMins = court.slot_duration_minutes || 60;
+    const bufferMins = court.buffer_minutes || 0;
 
     const dayType = this.getDayType(dateStr);
     const pricingRules = store.getPricingRules().filter(r => r.court_id === court.id && r.day_type === dayType);
@@ -46,12 +57,25 @@ export class SlotEngine {
     const blockedSlots = store.getBlockedSlots().filter(b => b.court_id === court.id && b.date === dateStr);
     const venue = store.getVenue();
 
-    const now = new Date();
-    const isToday = dateStr === now.toISOString().split('T')[0];
-    const currentMins = now.getHours() * 60 + now.getMinutes();
+    // CC-S02: Use calibrated Asia/Kolkata venue time to prevent client machine clock skew
+    const venueNow = getVenueNow();
+    const localTodayStr = getVenueDateString();
+    const currentMins = getVenueMinutesFromMidnight();
 
-    const [year, month, dayNum] = dateStr.split('-').map(Number);
-    const slotDate = new Date(year, month - 1, dayNum);
+    const isPastDate = dateStr < localTodayStr;
+    const isToday = dateStr === localTodayStr;
+
+    // Check advance days limit
+    const maxDate = new Date(venueNow);
+    maxDate.setDate(maxDate.getDate() + (venue.max_advance_days || 14));
+    const maxYear = maxDate.getFullYear();
+    const maxMonth = String(maxDate.getMonth() + 1).padStart(2, '0');
+    const maxDay = String(maxDate.getDate()).padStart(2, '0');
+    const maxDateStr = `${maxYear}-${maxMonth}-${maxDay}`;
+    const isBeyondAdvanceLimit = dateStr > maxDateStr;
+
+    const [slotYear, slotMonth, dayNum] = dateStr.split('-').map(Number);
+    const slotDate = new Date(slotYear, slotMonth - 1, dayNum);
     const dayOfWeek = slotDate.getDay(); // 0 = Sunday, 6 = Saturday
 
     let baseRate = court.base_price_per_hour;
@@ -70,7 +94,7 @@ export class SlotEngine {
       const slotEnd = this.minutesToTime(cursor + stepMins);
 
       // Check if slot start time is in past or violates min_notice_minutes
-      const isPast = isToday && (cursor <= (currentMins + venue.min_notice_minutes));
+      const isPast = isPastDate || (isToday && (cursor <= (currentMins + (venue.min_notice_minutes || 0))));
 
       let slotPrice = baseRate;
       let isPeak = false;
@@ -78,7 +102,8 @@ export class SlotEngine {
       // 1. Check Pitch Peak Hours Configuration
       if (court.peak_enabled && court.peak_start_time && court.peak_end_time && court.peak_price_per_hour) {
         const pStart = this.timeToMinutes(court.peak_start_time);
-        const pEnd = this.timeToMinutes(court.peak_end_time);
+        let pEnd = this.timeToMinutes(court.peak_end_time);
+        if (pEnd <= pStart) pEnd += 1440;
         if (cursor >= pStart && cursor < pEnd) {
           slotPrice = court.peak_price_per_hour;
           isPeak = true;
@@ -88,7 +113,8 @@ export class SlotEngine {
       // 2. Check Custom Granular Pricing Rules
       for (const rule of pricingRules) {
         const rStart = this.timeToMinutes(rule.start_time);
-        const rEnd = this.timeToMinutes(rule.end_time);
+        let rEnd = this.timeToMinutes(rule.end_time);
+        if (rEnd <= rStart) rEnd += 1440;
         // Ignore full-day legacy pricing rules so court's Saturday/Sunday rates take priority
         if (rStart <= openMins && rEnd >= closeMins) {
           continue;
@@ -104,16 +130,18 @@ export class SlotEngine {
       const blocked = blockedSlots.find(b => {
         if (!b.start_time) return true; // Full day block
         const bStart = this.timeToMinutes(b.start_time);
-        const bEnd = b.end_time ? this.timeToMinutes(b.end_time) : closeMins;
+        let bEnd = b.end_time ? this.timeToMinutes(b.end_time) : closeMins;
+        if (bEnd <= bStart) bEnd += 1440;
         return cursor >= bStart && cursor < bEnd;
       });
 
-      // Check Existing DB Active Bookings (including multi-slot spans)
+      // Check Existing DB Active Bookings (including multi-slot spans with true interval overlap)
       const existingBooking = bookings.find(b => {
         if (b.status !== 'confirmed' && b.status !== 'pending_payment') return false;
         const bStart = this.timeToMinutes(b.start_time);
-        const bEnd = this.timeToMinutes(b.end_time);
-        return cursor >= bStart && cursor < bEnd;
+        let bEnd = this.timeToMinutes(b.end_time);
+        if (bEnd <= bStart) bEnd += 1440;
+        return cursor < bEnd && (cursor + stepMins) > bStart;
       });
 
       // Check Redis Lock
@@ -125,6 +153,9 @@ export class SlotEngine {
 
       if (isPast) {
         status = 'past';
+      } else if (isBeyondAdvanceLimit) {
+        status = 'blocked';
+        blockedReason = 'Beyond Advance Booking Limit';
       } else if (blocked) {
         status = 'blocked';
         blockedReason = blocked.reason === 'maintenance' ? 'Maintenance' : 
@@ -147,8 +178,18 @@ export class SlotEngine {
         blocked_reason: blockedReason
       });
 
-      // Advance cursor including buffer minutes turnover time
-      cursor += stepMins + bufferMins;
+      // CC-S01: Multi-Hour Consecutive Slot Booking Buffer Suppression
+      // If the slot is inside an existing consecutive booking that continues further, do not inject turnover buffer!
+      let effectiveBuffer = bufferMins;
+      if (existingBooking) {
+        let bEnd = this.timeToMinutes(existingBooking.end_time);
+        if (bEnd <= this.timeToMinutes(existingBooking.start_time)) bEnd += 1440;
+        if (cursor + stepMins < bEnd) {
+          effectiveBuffer = 0; // Suppress buffer inside consecutive booking
+        }
+      }
+
+      cursor += stepMins + effectiveBuffer;
     }
 
     return slots;

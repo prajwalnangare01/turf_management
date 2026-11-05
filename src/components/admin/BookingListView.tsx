@@ -4,8 +4,9 @@ import { PostgresEngine } from '../../services/postgresEngine';
 import { AuditLogger } from '../../services/auditLogger';
 import { AdminUser, BookingStatus, Booking } from '../../types/schema';
 import { ConfirmModal } from '../common/ConfirmModal';
+import { AdminRefundModal } from './AdminRefundModal';
 import { formatTimeRange12h } from '../../utils/formatters';
-import { Search, Filter, CheckCircle, XCircle, UserX, Calendar, ArrowUpDown, X, Clock, MapPin, Tag } from 'lucide-react';
+import { Search, Filter, CheckCircle, XCircle, UserX, Calendar, ArrowUpDown, X, Clock, MapPin, Tag, RotateCcw } from 'lucide-react';
 
 interface BookingListViewProps {
   currentAdmin: AdminUser;
@@ -36,6 +37,7 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
   const closeConfirm = () => setConfirmState(prev => ({ ...prev, isOpen: false }));
 
   const [bookings, setBookings] = useState<Booking[]>(() => store.getBookings());
+  const [refundModalBooking, setRefundModalBooking] = useState<Booking | null>(null);
   const customers = store.getCustomers();
   const courts = store.getCourts();
 
@@ -209,10 +211,25 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
                     <span className={`px-2 py-0.5 rounded-full font-headline font-bold text-[9px] uppercase block mt-0.5 ${
                       b.status === 'confirmed' ? 'bg-emerald-100 text-emerald-900 border border-emerald-300' :
                       b.status === 'pending_payment' ? 'bg-sky-100 text-sky-900 border border-sky-300' :
-                      b.status === 'completed' ? 'bg-gray-100 text-gray-800' : 'bg-red-100 text-red-900'
+                      b.status === 'completed' ? 'bg-gray-100 text-gray-800' :
+                      b.status === 'refunded' ? 'bg-purple-100 text-purple-900 border border-purple-300' : 'bg-red-100 text-red-900'
                     }`}>
                       {(b.status || 'unknown').replace('_', ' ')}
                     </span>
+                    {b.refund_amount !== undefined && b.refund_amount > 0 && (
+                      <span className="text-[10px] font-bold text-purple-700 block mt-0.5 font-mono">
+                        Refund: ₹{b.refund_amount}
+                      </span>
+                    )}
+                    {b.cancelled_by === 'customer' && (
+                      <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-bold mt-0.5 ${
+                        b.cancellation_met_terms 
+                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-300' 
+                          : 'bg-amber-50 text-amber-900 border border-amber-300'
+                      }`}>
+                        {b.cancellation_met_terms ? '✅ Met Terms' : '⚠️ Terms Not Met'}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -230,31 +247,48 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
                     <span className="text-on-surface-variant font-medium">Channel Source:</span>
                     <span className="font-headline uppercase text-[10px] font-bold text-secondary">{b.source.replace('_', ' ')}</span>
                   </div>
+                  {b.refund_reason && (
+                    <div className="flex justify-between text-[11px] text-red-700 bg-red-50/70 p-1 rounded">
+                      <span className="font-medium">Refund Note:</span>
+                      <span className="font-semibold italic truncate max-w-[200px]">{b.refund_reason}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Action Buttons */}
-                {b.status === 'confirmed' && (
-                  <div className="grid grid-cols-3 gap-1.5 pt-1">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-1">
+                  {b.status === 'confirmed' && (
+                    <>
+                      <button
+                        onClick={() => requestStatusUpdate(b, 'completed')}
+                        className="px-2 py-1.5 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-lg font-bold text-[10px] hover:bg-emerald-100 flex items-center justify-center gap-1"
+                      >
+                        <CheckCircle className="w-3.5 h-3.5" /> Complete
+                      </button>
+                      <button
+                        onClick={() => requestStatusUpdate(b, 'no_show')}
+                        className="px-2 py-1.5 bg-amber-50 text-amber-900 border border-amber-300 rounded-lg font-bold text-[10px] hover:bg-amber-100 flex items-center justify-center gap-1"
+                      >
+                        <UserX className="w-3.5 h-3.5" /> No-Show
+                      </button>
+                      <button
+                        onClick={() => requestStatusUpdate(b, 'cancelled')}
+                        className="px-2 py-1.5 bg-red-50 text-red-800 border border-red-200 rounded-lg font-bold text-[10px] hover:bg-red-100 flex items-center justify-center gap-1"
+                      >
+                        <XCircle className="w-3.5 h-3.5" /> Cancel
+                      </button>
+                    </>
+                  )}
+                  {['confirmed', 'completed', 'cancelled', 'refunded'].includes(b.status) && (
                     <button
-                      onClick={() => requestStatusUpdate(b, 'completed')}
-                      className="px-2 py-1.5 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-lg font-bold text-[10px] hover:bg-emerald-100 flex items-center justify-center gap-1"
+                      onClick={() => setRefundModalBooking(b)}
+                      className="px-2 py-1.5 bg-purple-50 text-purple-900 border border-purple-300 rounded-lg font-bold text-[10px] hover:bg-purple-100 flex items-center justify-center gap-1"
                     >
-                      <CheckCircle className="w-3.5 h-3.5" /> Complete
+                      <RotateCcw className="w-3.5 h-3.5 text-purple-700" />
+                      {b.status === 'refunded' ? 'Adjust Refund' : 'Refund'}
                     </button>
-                    <button
-                      onClick={() => requestStatusUpdate(b, 'no_show')}
-                      className="px-2 py-1.5 bg-amber-50 text-amber-900 border border-amber-300 rounded-lg font-bold text-[10px] hover:bg-amber-100 flex items-center justify-center gap-1"
-                    >
-                      <UserX className="w-3.5 h-3.5" /> No-Show
-                    </button>
-                    <button
-                      onClick={() => requestStatusUpdate(b, 'cancelled')}
-                      className="px-2 py-1.5 bg-red-50 text-red-800 border border-red-200 rounded-lg font-bold text-[10px] hover:bg-red-100 flex items-center justify-center gap-1"
-                    >
-                      <XCircle className="w-3.5 h-3.5" /> Cancel
-                    </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             );
           })
@@ -318,42 +352,73 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
                       <span className={`px-2.5 py-0.5 rounded-full font-headline font-bold text-[10px] uppercase ${
                         b.status === 'confirmed' ? 'bg-emerald-100 text-emerald-900 border border-emerald-300' :
                         b.status === 'pending_payment' ? 'bg-sky-100 text-sky-900 border border-sky-300 animate-pulse font-extrabold' :
-                        b.status === 'completed' ? 'bg-gray-100 text-gray-800' : 'bg-red-100 text-red-900'
+                        b.status === 'completed' ? 'bg-gray-100 text-gray-800' :
+                        b.status === 'refunded' ? 'bg-purple-100 text-purple-900 border border-purple-300' : 'bg-red-100 text-red-900'
                       }`}>
                         {b.status === 'pending_payment' ? 'Pending Payment' : (b.status || 'unknown').replace('_', ' ')}
                       </span>
+                      {b.refund_amount !== undefined && b.refund_amount > 0 && (
+                        <div className="text-[10px] font-bold text-purple-700 font-mono mt-0.5">
+                          Refund: ₹{b.refund_amount}
+                        </div>
+                      )}
+                      {b.cancelled_by === 'customer' && (
+                        <div className="mt-0.5">
+                          <span className={`inline-block px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                            b.cancellation_met_terms
+                              ? 'bg-emerald-50 text-emerald-800 border border-emerald-300'
+                              : 'bg-amber-50 text-amber-900 border border-amber-300'
+                          }`}>
+                            {b.cancellation_met_terms ? '✅ Met Terms' : '⚠️ Terms Not Met'}
+                          </span>
+                        </div>
+                      )}
                     </td>
                     <td className="p-3 font-headline font-extrabold text-on-surface">₹{b.total_amount || 0}</td>
                     <td className="p-3 text-right">
-                      {b.status === 'confirmed' ? (
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => requestStatusUpdate(b, 'completed')}
-                            className="px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-lg font-bold text-[10px] hover:bg-emerald-100 flex items-center gap-1 transition-colors shadow-2xs"
-                            title="Mark as Checked-in & Played"
-                          >
-                            <CheckCircle className="w-3.5 h-3.5 text-emerald-700" /> Complete
-                          </button>
+                      <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                        {b.status === 'confirmed' && (
+                          <>
+                            <button
+                              onClick={() => requestStatusUpdate(b, 'completed')}
+                              className="px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-lg font-bold text-[10px] hover:bg-emerald-100 flex items-center gap-1 transition-colors shadow-2xs"
+                              title="Mark as Checked-in & Played"
+                            >
+                              <CheckCircle className="w-3.5 h-3.5 text-emerald-700" /> Complete
+                            </button>
 
-                          <button
-                            onClick={() => requestStatusUpdate(b, 'no_show')}
-                            className="px-2.5 py-1 bg-amber-50 text-amber-900 border border-amber-300 rounded-lg font-bold text-[10px] hover:bg-amber-100 flex items-center gap-1 transition-colors shadow-2xs"
-                            title="Mark Customer as No-Show"
-                          >
-                            <UserX className="w-3.5 h-3.5 text-amber-700" /> No-Show
-                          </button>
+                            <button
+                              onClick={() => requestStatusUpdate(b, 'no_show')}
+                              className="px-2.5 py-1 bg-amber-50 text-amber-900 border border-amber-300 rounded-lg font-bold text-[10px] hover:bg-amber-100 flex items-center gap-1 transition-colors shadow-2xs"
+                              title="Mark Customer as No-Show"
+                            >
+                              <UserX className="w-3.5 h-3.5 text-amber-700" /> No-Show
+                            </button>
 
+                            <button
+                              onClick={() => requestStatusUpdate(b, 'cancelled')}
+                              className="px-2 py-1 bg-red-50 text-red-800 border border-red-200 rounded-lg font-bold text-[10px] hover:bg-red-100 flex items-center gap-1 transition-colors shadow-2xs"
+                              title="Cancel Reservation"
+                            >
+                              <XCircle className="w-3.5 h-3.5 text-red-700" /> Cancel
+                            </button>
+                          </>
+                        )}
+
+                        {['confirmed', 'completed', 'cancelled', 'refunded'].includes(b.status) && (
                           <button
-                            onClick={() => requestStatusUpdate(b, 'cancelled')}
-                            className="px-2 py-1 bg-red-50 text-red-800 border border-red-200 rounded-lg font-bold text-[10px] hover:bg-red-100 flex items-center gap-1 transition-colors shadow-2xs"
-                            title="Cancel Reservation"
+                            onClick={() => setRefundModalBooking(b)}
+                            className="px-2.5 py-1 bg-purple-50 text-purple-900 border border-purple-300 rounded-lg font-bold text-[10px] hover:bg-purple-100 flex items-center gap-1 transition-colors shadow-2xs"
+                            title={b.status === 'refunded' ? 'Adjust Refund Amount / Details' : 'Process Refund for Booking'}
                           >
-                            <XCircle className="w-3.5 h-3.5 text-red-700" /> Cancel
+                            <RotateCcw className="w-3.5 h-3.5 text-purple-700" />
+                            {b.status === 'refunded' ? 'Adjust' : 'Refund'}
                           </button>
-                        </div>
-                      ) : (
-                        <span className="text-[10px] text-on-surface-variant font-medium italic">No action</span>
-                      )}
+                        )}
+                        {!['confirmed', 'completed', 'cancelled', 'refunded'].includes(b.status) && (
+                          <span className="text-[10px] text-on-surface-variant font-medium italic">No action</span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -372,6 +437,18 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
         variant={confirmState.variant}
         onConfirm={confirmState.onConfirm}
         onCancel={closeConfirm}
+      />
+
+      {/* Admin Refund Modal */}
+      <AdminRefundModal
+        isOpen={!!refundModalBooking}
+        booking={refundModalBooking}
+        currentAdmin={currentAdmin}
+        onClose={() => setRefundModalBooking(null)}
+        onSuccess={() => {
+          setBookings([...store.getBookings()]);
+          setRefundModalBooking(null);
+        }}
       />
     </div>
   );

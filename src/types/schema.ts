@@ -111,6 +111,13 @@ export interface Booking {
   coupon_id?: string;
   created_by_admin_id?: string;
   notes?: string;
+  refund_amount?: number;
+  refund_reason?: string;
+  refunded_at?: string;
+  cancelled_by?: 'customer' | 'admin';
+  cancelled_at?: string;
+  cancellation_notice_hours?: number;
+  cancellation_met_terms?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -152,6 +159,14 @@ export interface CancellationPolicy {
   court_id?: string; // null means global default
   hours_before_start: number;
   refund_percentage: number;
+  label?: string;
+}
+
+export interface CancellationSettings {
+  cutoff_hours: number;              // Till what time any booking can be cancelled to get a refund (e.g. 6)
+  refund_percentage: number;         // How much will be refunded (e.g. 100 or 50)
+  processing_business_days: string;  // How many business days it will take (e.g. "5-7")
+  allow_cancellation_after_cutoff: boolean; // Allow cancel for ₹0 after cutoff
 }
 
 export interface Coupon {
