@@ -16,7 +16,9 @@ const DEFAULT_VENUE: Venue = {
   min_notice_minutes: 15,
   max_advance_days: 14,
   whatsapp_enabled: true,
-  sms_fallback_enabled: true
+  sms_fallback_enabled: true,
+  email_enabled: true,
+  email_sender: 'TurfFlow <onboarding@resend.dev>'
 };
 
 const DEFAULT_SPORTS: Sport[] = [

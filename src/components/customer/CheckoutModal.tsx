@@ -185,6 +185,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         };
         customers.push(customer);
         store.setCustomers(customers);
+      } else if (email && (!customer.email || customer.email !== email)) {
+        customer.email = email;
+        store.setCustomers(customers);
       }
 
       // EDGE CASE: Pre-check locks and DB overlaps across ALL blocks before creating any booking

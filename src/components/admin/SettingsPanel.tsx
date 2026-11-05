@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { store } from '../../services/store';
 import { AuditLogger } from '../../services/auditLogger';
 import { AdminUser, CancellationPolicy, CancellationSettings } from '../../types/schema';
-import { Sliders, Save, RefreshCw, MessageSquare, DollarSign, Clock, PlusCircle, Trash2, ShieldCheck, ArrowRight, AlertCircle, RotateCcw } from 'lucide-react';
+import { Sliders, Save, RefreshCw, MessageSquare, DollarSign, Clock, PlusCircle, Trash2, ShieldCheck, ArrowRight, AlertCircle, RotateCcw, Mail, Send, CheckCircle2 } from 'lucide-react';
+import { EmailService } from '../../services/emailService';
 
 interface SettingsPanelProps {
   currentAdmin: AdminUser;
@@ -24,6 +25,41 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin }) =>
   const [newPercentage, setNewPercentage] = useState<number>(75);
   const [newLabel, setNewLabel] = useState<string>('Partial Refund (12h+ notice)');
   const [policySuccessMsg, setPolicySuccessMsg] = useState<string | null>(null);
+
+  // Resend Email Test State
+  const [testEmailRecipient, setTestEmailRecipient] = useState(currentAdmin.email || 'customer@example.com');
+  const [testEmailLoading, setTestEmailLoading] = useState(false);
+  const [testEmailResult, setTestEmailResult] = useState<{ success: boolean; message: string; simulated?: boolean } | null>(null);
+
+  const handleSendTestEmail = async () => {
+    if (!testEmailRecipient.trim()) return;
+    setTestEmailLoading(true);
+    setTestEmailResult(null);
+    try {
+      const result = await EmailService.sendTestEmail(testEmailRecipient, venue.name);
+      setTestEmailLoading(false);
+      if (result.success) {
+        setTestEmailResult({
+          success: true,
+          message: result.simulated
+            ? `Simulation successful! Email logged for ${testEmailRecipient} (Add RESEND_API_KEY in .env for live dispatch)`
+            : `Live email successfully delivered to ${testEmailRecipient} via Resend API (ID: ${result.id})!`,
+          simulated: result.simulated
+        });
+      } else {
+        setTestEmailResult({
+          success: false,
+          message: result.error || 'Failed to dispatch test email.'
+        });
+      }
+    } catch (err: any) {
+      setTestEmailLoading(false);
+      setTestEmailResult({
+        success: false,
+        message: err.message || 'Error sending test email'
+      });
+    }
+  };
 
   const handleSaveVenue = (e: React.FormEvent) => {
     e.preventDefault();
@@ -485,27 +521,113 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin }) =>
           </div>
 
           <div className="pt-3 border-t border-outline-variant/30 space-y-3">
-            <p className="font-headline font-bold text-sm text-on-surface">Outbound Notification Channels</p>
-            <div className="flex items-center gap-4">
-              <label className="flex items-center gap-2 font-medium text-xs cursor-pointer">
+            <div className="flex items-center justify-between">
+              <p className="font-headline font-bold text-sm text-on-surface">Outbound Notification Channels</p>
+              <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
+                EmailService.isResendConfigured()
+                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                  : 'bg-amber-100 text-amber-800 border border-amber-300'
+              }`}>
+                {EmailService.isResendConfigured() ? '⚡ Resend API Active' : '🧪 Resend Simulation Mode'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <label className="flex items-center gap-2 font-medium text-xs cursor-pointer p-2.5 rounded-lg bg-surface-container-low border border-outline-variant/30">
                 <input
                   type="checkbox"
                   checked={venue.whatsapp_enabled}
                   onChange={e => setVenue({ ...venue, whatsapp_enabled: e.target.checked })}
                   className="rounded accent-primary"
                 />
-                WhatsApp Instant Receipt Dispatch
+                <span>WhatsApp Instant Dispatch</span>
               </label>
 
-              <label className="flex items-center gap-2 font-medium text-xs cursor-pointer">
+              <label className="flex items-center gap-2 font-medium text-xs cursor-pointer p-2.5 rounded-lg bg-surface-container-low border border-outline-variant/30">
                 <input
                   type="checkbox"
                   checked={venue.sms_fallback_enabled}
                   onChange={e => setVenue({ ...venue, sms_fallback_enabled: e.target.checked })}
                   className="rounded accent-primary"
                 />
-                SMS Gateway Fallback
+                <span>SMS Gateway Fallback</span>
               </label>
+
+              <label className="flex items-center gap-2 font-medium text-xs cursor-pointer p-2.5 rounded-lg bg-surface-container-low border border-outline-variant/30">
+                <input
+                  type="checkbox"
+                  checked={venue.email_enabled !== false}
+                  onChange={e => setVenue({ ...venue, email_enabled: e.target.checked })}
+                  className="rounded accent-primary"
+                />
+                <span>Resend Email Dispatch</span>
+              </label>
+            </div>
+
+            {/* Resend Email Configuration & Live Test */}
+            <div className="bg-surface-container-low p-3.5 rounded-xl border border-outline-variant/30 space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">
+                    Resend From / Sender Address
+                  </label>
+                  <input
+                    type="text"
+                    value={venue.email_sender || 'TurfFlow Arena <onboarding@resend.dev>'}
+                    onChange={e => setVenue({ ...venue, email_sender: e.target.value })}
+                    placeholder="TurfFlow Arena <onboarding@resend.dev>"
+                    className="form-input text-xs"
+                  />
+                  <p className="text-[10px] text-on-surface-variant mt-1">
+                    Default: <code className="bg-surface-container px-1 py-0.5 rounded">onboarding@resend.dev</code> (or verified domain in Resend)
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">
+                    Send Test Email via Resend
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="email"
+                      value={testEmailRecipient}
+                      onChange={e => setTestEmailRecipient(e.target.value)}
+                      placeholder="Enter test recipient email"
+                      className="form-input text-xs flex-1"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSendTestEmail}
+                      disabled={testEmailLoading || !testEmailRecipient}
+                      className="btn-secondary text-xs px-3 py-1.5 font-bold flex items-center gap-1.5 border-primary/40 text-primary hover:bg-primary/5 shrink-0"
+                    >
+                      {testEmailLoading ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Send className="w-3.5 h-3.5" />
+                      )}
+                      <span>Test Resend</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {testEmailResult && (
+                <div className={`p-2.5 rounded-lg text-xs flex items-center gap-2 ${
+                  testEmailResult.success
+                    ? testEmailResult.simulated
+                      ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                      : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                    : 'bg-red-50 text-red-800 border border-red-200'
+                }`}>
+                  {testEmailResult.success ? (
+                    <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
+                  )}
+                  <span>{testEmailResult.message}</span>
+                </div>
+              )}
             </div>
           </div>
 

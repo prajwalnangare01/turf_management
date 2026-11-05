@@ -36,6 +36,8 @@ export interface Venue {
   max_advance_days: number;
   whatsapp_enabled: boolean;
   sms_fallback_enabled: boolean;
+  email_enabled?: boolean;
+  email_sender?: string;
 }
 
 export interface Sport {
@@ -186,7 +188,7 @@ export interface NotificationLog {
   id: string;
   booking_id: string;
   channel: 'whatsapp' | 'sms' | 'email';
-  type: 'confirmation' | 'reminder' | 'cancellation' | 'reschedule';
+  type: 'confirmation' | 'reminder' | 'cancellation' | 'reschedule' | 'welcome' | 'otp' | 'test';
   status: 'sent' | 'failed' | 'delivered';
   recipient: string;
   message_preview: string;

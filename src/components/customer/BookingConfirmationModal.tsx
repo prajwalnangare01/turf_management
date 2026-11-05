@@ -1,7 +1,7 @@
 import React from 'react';
 import { store } from '../../services/store';
 import { formatTimeRange12h } from '../../utils/formatters';
-import { CheckCircle2, MapPin, MessageSquare, Download, X, KeyRound, Calendar } from 'lucide-react';
+import { CheckCircle2, MapPin, MessageSquare, Download, X, KeyRound, Calendar, Mail } from 'lucide-react';
 
 interface BookingConfirmationModalProps {
   bookingRef: string;
@@ -12,7 +12,8 @@ export const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> =
   const booking = store.getBookings().find(b => b.booking_ref === bookingRef);
   const venue = store.getVenue();
   const court = store.getCourts().find(c => c.id === booking?.court_id);
-  const notif = store.getNotificationLogs().find(n => n.booking_id === booking?.id);
+  const notif = store.getNotificationLogs().find(n => n.booking_id === booking?.id && n.channel !== 'email');
+  const emailNotif = store.getNotificationLogs().find(n => n.booking_id === booking?.id && n.channel === 'email');
 
   if (!booking) return null;
 
@@ -229,13 +230,28 @@ export const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> =
             </div>
           </div>
 
-          {/* WhatsApp Preview */}
+          {/* Outbound Notification Dispatch Status */}
           {notif && (
-            <div className="bg-primary/10 border border-primary/20 p-3.5 rounded-xl text-primary flex items-start gap-2.5">
+            <div className="bg-primary/10 border border-primary/20 p-3 rounded-xl text-primary flex items-start gap-2.5">
               <MessageSquare className="w-4 h-4 shrink-0 mt-0.5 text-primary" />
               <div>
-                <p className="font-headline font-bold text-xs text-primary">WhatsApp Receipt Dispatched</p>
+                <p className="font-headline font-bold text-xs text-primary">WhatsApp / SMS Receipt Dispatched</p>
                 <p className="text-[11px] text-on-surface opacity-90 mt-0.5 leading-relaxed">{notif.message_preview}</p>
+              </div>
+            </div>
+          )}
+
+          {emailNotif && (
+            <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-xl text-emerald-900 flex items-start gap-2.5">
+              <Mail className="w-4 h-4 shrink-0 mt-0.5 text-emerald-700" />
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <p className="font-headline font-bold text-xs text-emerald-800">Email Confirmation Dispatched</p>
+                  <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.2 rounded font-mono font-bold">Resend</span>
+                </div>
+                <p className="text-[11px] text-emerald-950 mt-0.5 leading-relaxed font-medium">
+                  Sent to <strong className="font-mono">{emailNotif.recipient}</strong> with entry pass and matchday details.
+                </p>
               </div>
             </div>
           )}

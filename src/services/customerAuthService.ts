@@ -1,6 +1,7 @@
 import { Customer } from '../types/schema';
 import { store } from './store';
 import { normalizeIndianPhone } from '../utils/venueTime';
+import { EmailService } from './emailService';
 
 const CUSTOMER_SESSION_KEY = 'turfflow_customer_session';
 
@@ -131,6 +132,16 @@ export class CustomerAuthService {
     };
 
     store.addCustomer(newCustomer);
+
+    if (newCustomer.email) {
+      EmailService.sendWelcomeEmail({
+        customerName: newCustomer.name,
+        customerEmail: newCustomer.email,
+        customerPhone: newCustomer.phone,
+        venueName: store.getVenue().name
+      }).catch(err => console.warn('[CustomerAuthService] Welcome email error:', err));
+    }
+
     return this.createSession(newCustomer);
   }
 
