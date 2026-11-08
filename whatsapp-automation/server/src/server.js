@@ -1,14 +1,17 @@
-// TurfFlow Production Backend & WhatsApp Automation Server
+// TurfFlow Unified Production Backend & WhatsApp Automation Server
+import './env.js';
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { apiRouter } from './routes/apiRoutes.js';
 import { webhookRouter } from './routes/webhookRoutes.js';
 import { store } from './data/store.js';
-
-dotenv.config();
+import { SupabaseService } from './services/supabaseService.js';
+import { WhatsAppService } from './services/whatsappService.js';
+import { ReminderScheduler } from './services/reminderScheduler.js';
+import { isSupabaseConfigured, testSupabaseConnection } from './data/supabaseClient.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -27,12 +30,47 @@ app.use(express.json());
 // Main REST API
 app.use('/api', apiRouter);
 
+// Supabase Status Endpoint
+app.get('/api/supabase/status', async (req, res) => {
+  const conn = await testSupabaseConnection();
+  res.json({
+    configured: isSupabaseConfigured(),
+    realtimeActive: Boolean(SupabaseService.realtimeChannel),
+    connection: conn,
+    stats: {
+      courts: store.getCourts().length,
+      bookings: store.getBookings().length,
+      customers: store.getCustomers().length,
+      activeLocks: store.locks.size
+    }
+  });
+});
+
+// Force Supabase Sync / Hydration
+app.post('/api/supabase/sync', async (req, res) => {
+  const success = await SupabaseService.hydrateStore(store);
+  if (success && !SupabaseService.realtimeChannel) {
+    SupabaseService.subscribeToRealtime(store);
+  }
+  res.json({
+    success,
+    message: success ? 'Synchronized store with Supabase PostgreSQL!' : 'Could not hydrate from Supabase.',
+    stats: {
+      courts: store.getCourts().length,
+      bookings: store.getBookings().length,
+      customers: store.getCustomers().length
+    }
+  });
+});
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
     service: 'TurfFlow Backend & WhatsApp Agent API',
+    databaseMode: isSupabaseConfigured() ? 'supabase-postgresql' : 'in-memory-fallback',
+    supabaseRealtime: Boolean(SupabaseService.realtimeChannel),
     stats: {
       venues: 1,
       courts: store.getCourts().length,
@@ -47,21 +85,64 @@ app.get('/api/health', (req, res) => {
 const simulatorPath = path.resolve(__dirname, '../../simulator');
 app.use('/simulator', express.static(simulatorPath));
 
-// Redirect root to simulator or API health
-app.get('/', (req, res) => {
+// Serve production frontend build if available
+const distPath = path.resolve(__dirname, '../../../dist');
+app.use(express.static(distPath));
+
+// Fallback to React index.html for client routes (or redirect to /simulator if dist not built)
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api') || req.path.startsWith('/simulator')) {
+    return next();
+  }
+  const indexPath = path.join(distPath, 'index.html');
+  if (fs.existsSync(indexPath)) {
+    return res.sendFile(indexPath);
+  }
   res.redirect('/simulator');
 });
 
-const server = app.listen(PORT, () => {
-  console.log(`\n======================================================`);
-  console.log(`🚀 TurfFlow Backend & WhatsApp Automation Server Ready!`);
-  console.log(`======================================================`);
-  console.log(`📡 REST API Root:        http://localhost:${PORT}/api`);
-  console.log(`🩺 Health Status:        http://localhost:${PORT}/api/health`);
-  console.log(`📲 WhatsApp Simulator:   http://localhost:${PORT}/simulator`);
-  console.log(`🔔 Razorpay Webhook:     http://localhost:${PORT}/api/webhooks/razorpay`);
-  console.log(`💬 WhatsApp Webhook:     http://localhost:${PORT}/api/webhooks/whatsapp`);
-  console.log(`======================================================\n`);
-});
+// Boot and initialize Supabase synchronization
+async function startServer() {
+  if (isSupabaseConfigured()) {
+    console.log('⚡ Initializing Supabase PostgreSQL hydration & Realtime sync...');
+    await SupabaseService.hydrateStore(store);
+    SupabaseService.subscribeToRealtime(store);
+  } else {
+    console.log('ℹ️  Supabase URL/Key not configured in .env. Running in resilient in-memory mode.');
+  }
+
+  // Launch Baileys WhatsApp Multi-Device Agent
+  const targetPhone = process.env.WHATSAPP_PHONE_NUMBER || '9579158374';
+  console.log(`⚡ Launching WhatsApp Multi-Device Agent for +${targetPhone}...`);
+  WhatsAppService.init({ usePairingCode: true, targetPhoneNumber: targetPhone }).catch(err => {
+    console.warn('⚠️ WhatsApp initialization notice:', err.message);
+  });
+
+  // Start automated 1-hour matchday reminder background service
+  ReminderScheduler.start();
+
+  const server = app.listen(PORT, () => {
+    console.log(`\n======================================================`);
+    console.log(`🚀 TurfFlow Unified Platform Server Ready (Site + WhatsApp Agent)`);
+    console.log(`======================================================`);
+    console.log(`🌐 Web App & API:        http://localhost:${PORT}`);
+    console.log(`📡 REST API Root:        http://localhost:${PORT}/api`);
+    console.log(`🩺 Health Status:        http://localhost:${PORT}/api/health`);
+    console.log(`🗄️  Supabase Status:     http://localhost:${PORT}/api/supabase/status`);
+    console.log(`📲 WhatsApp Simulator:   http://localhost:${PORT}/simulator`);
+    console.log(`🔔 Razorpay Webhook:     http://localhost:${PORT}/api/webhooks/razorpay`);
+    console.log(`💬 WhatsApp Webhook:     http://localhost:${PORT}/api/webhooks/whatsapp`);
+    console.log(`======================================================\n`);
+  });
+
+  return server;
+}
+
+// Start if executed directly
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  startServer().catch(err => {
+    console.error('Fatal server boot error:', err);
+  });
+}
 
 export default app;

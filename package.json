@@ -4,10 +4,14 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently -n \"SITE,AGENT\" -c \"cyan,green\" \"vite\" \"node whatsapp-automation/server/src/server.js\"",
+    "dev:site": "vite",
+    "dev:server": "node whatsapp-automation/server/src/server.js",
     "build": "tsc && vite build",
+    "start": "node whatsapp-automation/server/src/server.js",
     "preview": "vite preview",
-    "test": "npx tsx src/tests/edgeCases.test.ts"
+    "test": "npx tsx src/tests/edgeCases.test.ts",
+    "test:agent": "cd whatsapp-automation/server && npm test"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",
@@ -21,6 +25,7 @@
     "@types/react-dom": "^18.2.22",
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.5.4",
+    "concurrently": "^10.0.7",
     "postcss": "^8.5.23",
     "tailwindcss": "^3.4.19",
     "typescript": "^5.2.2",

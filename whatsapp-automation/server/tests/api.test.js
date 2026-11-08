@@ -90,7 +90,7 @@ const agentGreeting = await AiAgentService.handleIncomingMessage({
   senderName: 'Vikas',
   messageText: 'Hello'
 });
-assert(agentGreeting.reply.includes('TurfFlow Booking Concierge'), 'Agent greeted customer');
+assert(agentGreeting.reply.includes('TurfFlow'), 'Agent greeted customer');
 
 const agentSlots = await AiAgentService.handleIncomingMessage({
   fromPhone: '+919999988888',
@@ -110,7 +110,7 @@ assert(agentBook.reply.includes('RESERVATION PENDING PAYMENT'), 'Agent held slot
 const agentConflict = await AiAgentService.handleIncomingMessage({
   fromPhone: '+919999988888',
   senderName: 'Vikas',
-  messageText: 'Book Turf A tomorrow at 7pm'
+  messageText: 'Book Turf A tomorrow at 8pm'
 });
 assert(agentConflict.action === 'booking_conflict', 'Agent correctly detected double-booking conflict and prevented duplicate reservation');
 

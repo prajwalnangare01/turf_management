@@ -116,18 +116,66 @@ export class AiAgentService {
     console.log(`🤖 [AI AGENT INBOUND from ${name} (${phone})]: "${text}"`);
 
     // 1. GREETINGS & INTRO
-    if (/^(hi|hello|hey|yo|namaste|start|menu|help)$/i.test(lower)) {
+    const isGreeting = (
+      /^(hi|hello|hey|hii|heyy|yo|namaste|hlo|hola|start|menu|help|options)$/i.test(lower) ||
+      lower.startsWith('good morning') ||
+      lower.startsWith('good evening') ||
+      lower.startsWith('good afternoon') ||
+      ((lower.startsWith('hi ') || lower.startsWith('hello ') || lower.startsWith('hey ') || lower.startsWith('namaste ')) && text.length <= 25)
+    );
+
+    if (isGreeting) {
       const venue = store.getVenue();
       return {
         reply: `👋 *Welcome to ${venue.name}!* ⚽🏏🏸\n\n` +
-          `I am your 24/7 TurfFlow Booking Concierge. How can I assist you today?\n\n` +
-          `1️⃣ *Check Available Slots* (e.g. _"Football slots tomorrow"_\n` +
-          `2️⃣ *Book a Court* (e.g. _"Book Turf A tomorrow 7 PM"_)\n` +
-          `3️⃣ *View My Bookings* (e.g. _"My bookings"_)\n` +
-          `4️⃣ *Cancel / Reschedule* (e.g. _"Cancel TRF-..."_)\n` +
-          `5️⃣ *Venue Info & Pricing* (e.g. _"Where are you located?"_)\n\n` +
-          `Simply type your message or ask anything!`,
+          `Hi ${name !== 'Sports Player' ? name : 'there'}! How can I assist you today?\n\n` +
+          `Please choose what you would like to do:\n\n` +
+          `1️⃣ *Check Available Slots*\n` +
+          `   _Reply *1* or e.g. "Football slots tomorrow"_\n\n` +
+          `2️⃣ *Book Turf*\n` +
+          `   _Reply *2* or e.g. "Book Turf A tomorrow at 8pm"_\n\n` +
+          `3️⃣ *Show My Bookings*\n` +
+          `   _Reply *3* or "My bookings"_\n\n` +
+          `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+          `💡 _You can also ask about *Pricing*, *Location*, or *Rules* anytime!_`,
         action: 'greeting'
+      };
+    }
+
+    // MENU OPTION 1: CHECK AVAILABLE SLOTS
+    if (lower === '1' || lower === 'check available slot' || lower === 'check available slots' || lower === 'check slot' || lower === 'check slots' || lower === 'available slots') {
+      const parsedDate = this.parseDate('tomorrow');
+      const availData = SlotEngine.getAvailableSlots(null, parsedDate, phone);
+      const reply = WhatsAppFormatter.formatAvailableSlots(availData);
+      return {
+        reply: `📅 *Here are the available slots for tomorrow (${parsedDate}):*\n\n` + reply,
+        action: 'check_availability',
+        data: availData
+      };
+    }
+
+    // MENU OPTION 2: BOOK TURF
+    if (lower === '2' || lower === 'book turf' || lower === 'book court' || lower === 'book a turf' || lower === 'book a court') {
+      const courts = store.getCourts();
+      const courtList = courts.map(c => `• *${c.name}* (${c.sport_ids.join(', ')}) — ₹${c.base_price_per_hour}/hr`).join('\n');
+      return {
+        reply: `🏟️ *Book a Turf Slot:*\n━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+          `Our Courts:\n${courtList}\n\n` +
+          `👉 *How to book:* Simply reply with the court name, date, and time:\n` +
+          `• *"Book Turf A tomorrow at 8pm"*\n` +
+          `• *"Book Turf B today at 6pm"*\n\n` +
+          `Or reply *1* to check all available timings first!`,
+        action: 'booking_prompt'
+      };
+    }
+
+    // MENU OPTION 3: SHOW MY BOOKINGS
+    if (lower === '3') {
+      const bookings = BookingService.lookupBookings({ phone });
+      return {
+        reply: WhatsAppFormatter.formatCustomerBookings(bookings),
+        action: 'lookup_bookings',
+        data: bookings
       };
     }
 

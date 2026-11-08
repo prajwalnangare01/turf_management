@@ -1,14 +1,14 @@
 // Supabase Client and Database Layer
+import '../env.js';
 import { createClient } from '@supabase/supabase-js';
-import dotenv from 'dotenv';
 
-dotenv.config();
-
-const SUPABASE_URL = process.env.SUPABASE_URL || '';
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || '';
+const getUrl = () => (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
+const getKey = () => (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '').trim();
 
 export const isSupabaseConfigured = () => {
-  return Boolean(SUPABASE_URL && SUPABASE_KEY && !SUPABASE_URL.includes('your-supabase-project'));
+  const url = getUrl();
+  const key = getKey();
+  return Boolean(url && key && !url.includes('your-supabase-project') && url.startsWith('http'));
 };
 
 let supabaseInstance = null;
@@ -18,7 +18,7 @@ export const getSupabase = () => {
     return null;
   }
   if (!supabaseInstance) {
-    supabaseInstance = createClient(SUPABASE_URL, SUPABASE_KEY, {
+    supabaseInstance = createClient(getUrl(), getKey(), {
       auth: {
         persistSession: false,
         autoRefreshToken: false
@@ -42,6 +42,9 @@ export async function testSupabaseConnection() {
 
   try {
     const supabase = getSupabase();
+    if (!supabase) {
+      return { connected: false, mode: 'error', error: 'Could not create Supabase client' };
+    }
     const { data, error } = await supabase.from('venues').select('id, name').limit(1);
     if (error) {
       return {

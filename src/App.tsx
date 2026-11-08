@@ -1,18 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { CustomerApp } from './components/customer/CustomerApp';
 import { AdminApp } from './components/admin/AdminApp';
-import { WhatsAppOnlyLanding } from './components/customer/WhatsAppOnlyLanding';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
+import { ReminderScheduler } from './services/reminderScheduler';
 
 export const App: React.FC = () => {
-  const isWhatsAppOnlyTier = () => {
-    return (
-      (import.meta as any).env?.VITE_TURFFLOW_PRODUCT_TIER === 'whatsapp_only' ||
-      window.location.search.includes('tier=whatsapp') ||
-      window.location.hash.includes('tier=whatsapp')
-    );
-  };
-
   const checkIsAdminRoute = () => {
     return (
       window.location.search.includes('admin') ||
@@ -22,9 +14,6 @@ export const App: React.FC = () => {
   };
 
   const [view, setView] = useState<'customer' | 'admin'>(() => (checkIsAdminRoute() ? 'admin' : 'customer'));
-  const [productTier, setProductTier] = useState<'full' | 'whatsapp_only'>(() => 
-    isWhatsAppOnlyTier() ? 'whatsapp_only' : 'full'
-  );
 
   useEffect(() => {
     const handleUrlChange = () => {
@@ -33,14 +22,18 @@ export const App: React.FC = () => {
       } else {
         setView('customer');
       }
-      setProductTier(isWhatsAppOnlyTier() ? 'whatsapp_only' : 'full');
     };
 
     window.addEventListener('popstate', handleUrlChange);
     window.addEventListener('hashchange', handleUrlChange);
+
+    // Initialize automated 1-hour matchday reminder background checker
+    ReminderScheduler.start(60000);
+
     return () => {
       window.removeEventListener('popstate', handleUrlChange);
       window.removeEventListener('hashchange', handleUrlChange);
+      ReminderScheduler.stop();
     };
   }, []);
 
@@ -64,8 +57,6 @@ export const App: React.FC = () => {
       <div>
         {view === 'admin' ? (
           <AdminApp onSwitchToCustomer={handleSwitchToCustomer} />
-        ) : productTier === 'whatsapp_only' ? (
-          <WhatsAppOnlyLanding onSwitchToAdmin={handleSwitchToAdmin} />
         ) : (
           <CustomerApp onSwitchToAdmin={handleSwitchToAdmin} />
         )}

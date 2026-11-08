@@ -11,10 +11,12 @@ import { CustomerCRM } from './CustomerCRM';
 import { ReportsAnalytics } from './ReportsAnalytics';
 import { AuditLogViewer } from './AuditLogViewer';
 import { SettingsPanel } from './SettingsPanel';
+import { WhatsAppManagerTab } from './WhatsAppManagerTab';
 import { OfflineBookingModal } from './OfflineBookingModal';
 import { 
   Calendar, ListFilter, Settings, Users, BarChart3, History, 
-  Sliders, PlusCircle, UserCheck, ArrowLeft, Lock, ShieldCheck, Zap, LogOut, ShieldAlert
+  Sliders, PlusCircle, UserCheck, ArrowLeft, Lock, ShieldCheck, Zap, LogOut, ShieldAlert,
+  MessageSquare
 } from 'lucide-react';
 
 interface AdminAppProps {
@@ -27,24 +29,24 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onSwitchToCustomer }) => {
     return AuthService.getAuthenticatedAdmin();
   });
 
-  const getInitialTab = (): 'calendar' | 'bookings' | 'courts' | 'crm' | 'reports' | 'audit' | 'settings' => {
+  const getInitialTab = (): 'calendar' | 'bookings' | 'courts' | 'crm' | 'reports' | 'audit' | 'settings' | 'whatsapp' => {
     try {
       const params = new URLSearchParams(window.location.search);
       const tabParam = params.get('tab');
-      if (tabParam && ['calendar', 'bookings', 'courts', 'crm', 'reports', 'audit', 'settings'].includes(tabParam)) {
+      if (tabParam && ['calendar', 'bookings', 'courts', 'crm', 'reports', 'audit', 'settings', 'whatsapp'].includes(tabParam)) {
         return tabParam as any;
       }
       const saved = localStorage.getItem('TURFFLOW_ADMIN_TAB');
-      if (saved && ['calendar', 'bookings', 'courts', 'crm', 'reports', 'audit', 'settings'].includes(saved)) {
+      if (saved && ['calendar', 'bookings', 'courts', 'crm', 'reports', 'audit', 'settings', 'whatsapp'].includes(saved)) {
         return saved as any;
       }
     } catch {}
     return 'calendar';
   };
 
-  const [activeTab, setActiveTab] = useState<'calendar' | 'bookings' | 'courts' | 'crm' | 'reports' | 'audit' | 'settings'>(getInitialTab);
+  const [activeTab, setActiveTab] = useState<'calendar' | 'bookings' | 'courts' | 'crm' | 'reports' | 'audit' | 'settings' | 'whatsapp'>(getInitialTab);
 
-  const handleTabChange = (tab: 'calendar' | 'bookings' | 'courts' | 'crm' | 'reports' | 'audit' | 'settings') => {
+  const handleTabChange = (tab: 'calendar' | 'bookings' | 'courts' | 'crm' | 'reports' | 'audit' | 'settings' | 'whatsapp') => {
     setActiveTab(tab);
     try {
       localStorage.setItem('TURFFLOW_ADMIN_TAB', tab);
@@ -105,7 +107,8 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onSwitchToCustomer }) => {
     crm: ['owner', 'manager', 'staff'],
     reports: ['owner', 'manager'],
     audit: ['owner', 'manager'],
-    settings: ['owner']
+    settings: ['owner'],
+    whatsapp: ['owner', 'manager', 'staff']
   };
 
   const hasAccessToTab = (tabId: string): boolean => {
@@ -260,6 +263,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onSwitchToCustomer }) => {
           >
             <option value="calendar">📅 Schedule Calendar Matrix</option>
             <option value="bookings">📋 Bookings Audit Directory</option>
+            <option value="whatsapp">💬 WhatsApp Concierge & AI</option>
             <option value="courts">⚙️ Court Pricing Manager</option>
             <option value="crm">👥 Customer CRM & Blacklist</option>
             <option value="reports">📊 Analytics & Revenue Reports</option>
@@ -273,6 +277,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onSwitchToCustomer }) => {
           {[
             { id: 'calendar', label: 'Schedule Calendar', icon: Calendar },
             { id: 'bookings', label: 'Bookings Directory', icon: ListFilter },
+            { id: 'whatsapp', label: 'WhatsApp Concierge', icon: MessageSquare },
             { id: 'courts', label: 'Court Pricing Manager', icon: Sliders },
             { id: 'crm', label: 'Customer CRM', icon: Users },
             { id: 'reports', label: 'Analytics & Revenue', icon: BarChart3 },
@@ -336,6 +341,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onSwitchToCustomer }) => {
             <>
               {activeTab === 'calendar' && <ScheduleCalendarView currentAdmin={currentAdmin} />}
               {activeTab === 'bookings' && <BookingListView currentAdmin={currentAdmin} />}
+              {activeTab === 'whatsapp' && <WhatsAppManagerTab currentAdmin={currentAdmin} />}
               {activeTab === 'courts' && <CourtPricingManager currentAdmin={currentAdmin} />}
               {activeTab === 'crm' && <CustomerCRM currentAdmin={currentAdmin} />}
               {activeTab === 'reports' && <ReportsAnalytics currentAdmin={currentAdmin} />}

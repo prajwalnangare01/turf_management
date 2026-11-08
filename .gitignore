@@ -73,3 +73,14 @@ build/
 .env.development.local
 .env.test.local
 .env.production.local
+
+# WhatsApp OpenWA & Baileys session directories & binaries
+sessions/
+**/sessions/
+*.session
+whatsapp_session/
+**/whatsapp_session/
+bin/
+**/bin/
+*.exe
+

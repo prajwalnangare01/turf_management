@@ -7,6 +7,9 @@ import { RazorpayService } from '../services/razorpayService';
 import { normalizeIndianPhone, parseIndianTimeInput, getVenueNow } from '../utils/venueTime';
 import { store } from '../services/store';
 import { groupContiguousSlots } from '../components/customer/CheckoutModal';
+import { EmailService } from '../services/emailService';
+import { EmailVerificationService } from '../services/emailVerificationService';
+import { ReminderScheduler } from '../services/reminderScheduler';
 import { Court, DynamicSlot } from '../types/schema';
 
 declare const process: { exit: (code: number) => void };
@@ -257,22 +260,28 @@ assert(validLogin.session?.customer.phone === '9876543210', 'Customer session cr
 const badPassLogin = CustomerAuthService.loginWithPassword('9876543210', 'wrongpassword');
 assert(badPassLogin.success === false, 'Incorrect password correctly rejected');
 
-// 3. Signup attempt without OTP
-const noOtpSignup = CustomerAuthService.register('New User', '9911223344', '', 'pass123');
-assert(noOtpSignup.success === false, 'Signup without OTP rejected');
-assert(noOtpSignup.error?.includes('OTP') === true, 'Clear error message returned requiring OTP');
+// 3. Signup attempt without mobile OTP
+const noOtpSignup = CustomerAuthService.register('New User', '9911223344', '', 'pass123', 'newuser@example.com', '123456');
+assert(noOtpSignup.success === false, 'Signup without mobile OTP rejected');
+assert(noOtpSignup.error?.includes('OTP') === true, 'Clear error message returned requiring mobile OTP');
 
-// 4. Signup attempt with invalid OTP
-const badOtpSignup = CustomerAuthService.register('New User', '9911223344', '9999', 'pass123');
-assert(badOtpSignup.success === false, 'Signup with invalid OTP rejected');
+// 4. Signup attempt with invalid mobile OTP
+const badOtpSignup = CustomerAuthService.register('New User', '9911223344', '9999', 'pass123', 'newuser@example.com', '123456');
+assert(badOtpSignup.success === false, 'Signup with invalid mobile OTP rejected');
 
-// 5. Signup attempt with valid OTP (1234)
-const validSignup = CustomerAuthService.register('New User', '9911223344', '1234', 'pass123', 'newuser@example.com');
-assert(validSignup.success === true, 'Signup with valid OTP (1234) succeeded');
+// 4b. Signup attempt without email OTP
+const noEmailOtpSignup = CustomerAuthService.register('New User', '9911223344', '1234', 'pass123', 'newuser@example.com', '');
+assert(noEmailOtpSignup.success === false, 'Signup without email OTP rejected');
+assert(noEmailOtpSignup.error?.includes('email verification') === true, 'Clear error message returned requiring email OTP');
+
+// 5. Signup attempt with valid Dual OTPs (Mobile: 1234, Email: 123456)
+const validSignup = CustomerAuthService.register('New User', '9911223344', '1234', 'pass123', 'newuser@example.com', '123456');
+assert(validSignup.success === true, 'Signup with valid Dual OTPs (Mobile: 1234, Email: 123456) succeeded');
 assert(validSignup.session?.customer.name === 'New User', 'New user account registered and session started');
+assert(validSignup.session?.customer.email_verified === true, 'Email marked verified on registration');
 
 // 6. Duplicate signup with same phone
-const dupSignup = CustomerAuthService.register('Another User', '9911223344', '1234', 'pass123');
+const dupSignup = CustomerAuthService.register('Another User', '9911223344', '1234', 'pass123', 'another@example.com', '123456');
 assert(dupSignup.success === false, 'Signup with already-registered phone cleanly rejected');
 assert(dupSignup.error?.includes('already exists') === true, 'Informs user to log in instead of creating duplicate');
 
@@ -769,4 +778,112 @@ assert(parse3?.time24 === '21:00', 'standalone 9 defaults to 21:00 (9 PM evening
 const parse4 = parseIndianTimeInput('subah 6 am');
 assert(parse4?.time24 === '06:00', 'subah 6 am parsed to 06:00 AM');
 
-console.log('\n🎉 ALL CORNER & EDGE CASE TESTS PASSED PERFECTLY!\n');
+// --------------------------------------------------------------------------
+// TEST 17: Resend Email Integration (Login OTP, Profile Update OTP, Booking Confirmation & 1-Hour Reminder)
+// --------------------------------------------------------------------------
+console.log('\n--- TEST 17: Resend Email Integration (Login OTP, Profile Update OTP, Booking Confirmation & 1-Hour Reminder) ---');
+
+async function runResendTests() {
+  const testEmail = 'player.resend@example.com';
+  const updatedEmail = 'player.newemail@example.com';
+
+  // 17.1: Request Email Signup OTP via Resend
+  const reqSignup = await EmailVerificationService.requestOtp(testEmail, 'signup', 'Resend Player');
+  assert(reqSignup.success, 'EmailVerificationService successfully generates and dispatches signup OTP via Resend');
+  assert(!!reqSignup.code && reqSignup.code.length === 6, 'Generated 6-digit verification code');
+
+  // 17.2: Verify Invalid vs Valid OTP
+  const invalidVerify = EmailVerificationService.verifyOtp(testEmail, '999999', 'signup');
+  assert(!invalidVerify.success, 'Invalid verification code rejected');
+
+  const validVerify = EmailVerificationService.verifyOtp(testEmail, reqSignup.code!, 'signup');
+  assert(validVerify.success, 'Valid 6-digit code successfully verified');
+
+  // 17.3: Mandatory Dual OTP Registration (Mobile OTP + Resend Email OTP)
+  const reqSignup2 = await EmailVerificationService.requestOtp(testEmail, 'signup', 'Resend Player');
+  const signupRes = CustomerAuthService.register(
+    'Resend Player',
+    '9123456780',
+    '1234',
+    'securepass123',
+    testEmail,
+    reqSignup2.code!
+  );
+  assert(signupRes.success && !!signupRes.session, 'Customer registered via Mandatory Dual OTP (Mobile + Resend Email)');
+  assert(signupRes.session!.customer.email === testEmail, 'Registered customer email matches');
+  assert(signupRes.session!.customer.email_verified === true, 'Registered customer email marked as verified');
+
+  // 17.3b: Login using Password (No email OTP option)
+  const loginRes = CustomerAuthService.loginWithPassword(testEmail, 'securepass123');
+  assert(loginRes.success && !!loginRes.session, 'Customer successfully logs in using email + password');
+
+  // 17.4: Profile Update with Email Verification
+  const reqUpdate = await EmailVerificationService.requestOtp(updatedEmail, 'profile_update', signupRes.session!.customer.name);
+  assert(reqUpdate.success, 'Resend OTP dispatched for profile email update');
+
+  const updateRes = CustomerAuthService.updateCustomerEmail(signupRes.session!.customer.id, updatedEmail, reqUpdate.code!);
+  assert(updateRes.success, 'Customer email updated after OTP verification');
+  assert(updateRes.customer?.email === updatedEmail, 'Profile email reflects new verified email');
+  assert(updateRes.customer?.email_verified === true, 'Updated email marked verified');
+
+  // 17.5: Booking Confirmation with Gatepass via Resend
+  const testBooking = store.getBookings()[0];
+  const testCust = store.getCustomers().find(c => c.id === testBooking.customer_id) || store.getCustomers()[0];
+  const venue = store.getVenue();
+  const courtName = store.getCourts()[0].name;
+
+  const confirmRes = await EmailService.sendBookingConfirmation({
+    booking: testBooking,
+    customer: testCust,
+    courtName,
+    venue
+  });
+  assert(confirmRes.success, 'Booking confirmation with 4-digit Gatepass sent via Resend pipeline');
+  assert(confirmRes.subject.includes(testBooking.booking_ref), 'Subject contains booking reference');
+
+  // 17.6: 1-Hour Matchday Kickoff Reminder Email
+  const reminderRes = await EmailService.sendBookingReminder({
+    booking: testBooking,
+    customer: testCust,
+    courtName,
+    venue
+  });
+  assert(reminderRes.success, '1-Hour matchday kickoff reminder email sent via Resend pipeline');
+  assert(reminderRes.subject.includes('1 Hour'), 'Reminder subject indicates 1 hour to kickoff');
+
+  // 17.7: ReminderScheduler Automated Check
+  const slotDate = new Date(Date.now() + 60 * 60 * 1000);
+  const year = slotDate.getFullYear();
+  const month = String(slotDate.getMonth() + 1).padStart(2, '0');
+  const day = String(slotDate.getDate()).padStart(2, '0');
+  const targetDate = `${year}-${month}-${day}`;
+  const startStr = `${String(slotDate.getHours()).padStart(2, '0')}:${String(slotDate.getMinutes()).padStart(2, '0')}`;
+  const endHour = (slotDate.getHours() + 1) % 24;
+  const endStr = `${String(endHour).padStart(2, '0')}:${String(slotDate.getMinutes()).padStart(2, '0')}`;
+
+  const scheduledBooking = PostgresEngine.createBooking({
+    booking_ref: `TRF-REMIND-${Date.now().toString().slice(-4)}`,
+    customer_id: testCust.id,
+    court_id: store.getCourts()[0].id,
+    sport_id: store.getSports()[0].id,
+    booking_date: targetDate,
+    start_time: startStr,
+    end_time: endStr,
+    source: 'online',
+    status: 'confirmed',
+    total_amount: 1200,
+    discount_amount: 0
+  });
+
+  assert(scheduledBooking.success && !!scheduledBooking.booking, 'Created booking starting in 1 hour for scheduler test');
+  const schedulerCheck = ReminderScheduler.checkAndDispatch();
+  assert(schedulerCheck.dispatchedCount >= 1, 'ReminderScheduler detected and dispatched 1-hour reminder automatically');
+  assert(scheduledBooking.booking!.reminder_sent === true, 'Booking reminder_sent flag set to true');
+
+  console.log('\n🎉 ALL CORNER & EDGE CASE TESTS (INCLUDING RESEND EMAIL INTEGRATION) PASSED PERFECTLY!\n');
+}
+
+runResendTests().catch(err => {
+  console.error('❌ Resend test failed:', err);
+  process.exit(1);
+});

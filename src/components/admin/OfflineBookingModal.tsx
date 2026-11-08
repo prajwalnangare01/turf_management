@@ -3,6 +3,7 @@ import { store } from '../../services/store';
 import { RedisLockService } from '../../services/redisLockService';
 import { PostgresEngine } from '../../services/postgresEngine';
 import { AuditLogger } from '../../services/auditLogger';
+import { NotificationService } from '../../services/notificationService';
 import { SlotEngine } from '../../services/slotEngine';
 import { AdminUser, BookingSource, PaymentMethod, Payment } from '../../types/schema';
 import { normalizeIndianPhone } from '../../utils/venueTime';
@@ -224,6 +225,11 @@ export const OfflineBookingModal: React.FC<OfflineBookingModalProps> = ({
       null,
       result.booking
     );
+
+    // Dispatch confirmation email & gatepass via Resend if customer has email
+    if (result.booking) {
+      NotificationService.enqueueNotification(result.booking, 'confirmation');
+    }
 
     if (onSuccess) onSuccess();
     onClose();

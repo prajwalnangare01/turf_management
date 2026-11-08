@@ -1,7 +1,7 @@
 import React from 'react';
 import { store } from '../../services/store';
 import { formatTimeRange12h } from '../../utils/formatters';
-import { CheckCircle2, MapPin, MessageSquare, Download, X, KeyRound, Calendar, Mail } from 'lucide-react';
+import { CheckCircle2, MapPin, MessageSquare, Download, X, KeyRound, Calendar, Mail, Printer } from 'lucide-react';
 
 interface BookingConfirmationModalProps {
   bookingRef: string;
@@ -19,6 +19,41 @@ export const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> =
 
   const otpCode = (booking.booking_ref || booking.id || '').slice(-4) || '----';
   const customer = store.getCustomers().find(c => c.id === booking.customer_id);
+  const [isDownloadingPdf, setIsDownloadingPdf] = React.useState(false);
+
+  const handleDownloadPdfFile = async () => {
+    setIsDownloadingPdf(true);
+    try {
+      let res = await fetch(`/api/bookings/${booking.booking_ref}/pass.pdf`);
+      if (!res.ok) {
+        res = await fetch('/api/bookings/generate-pass-pdf', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ booking })
+        });
+      }
+
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `GatePass-${booking.booking_ref}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(url);
+        }, 150);
+        return;
+      }
+    } catch (err) {
+      console.warn('PDF download fallback to print:', err);
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+    handleDownloadPdfPass();
+  };
 
   const handleDownloadCalendarIcs = () => {
     const cleanDate = booking.booking_date.replace(/-/g, '');
@@ -258,12 +293,22 @@ export const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> =
 
           {/* Actions */}
           <div className="space-y-2 pt-2">
-            <button
-              onClick={handleDownloadPdfPass}
-              className="btn-cta w-full py-3 text-xs font-headline font-bold uppercase tracking-wider flex items-center justify-center gap-2 shadow-md"
-            >
-              <Download className="w-4 h-4" /> Download PDF Entry Pass & Receipt
-            </button>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={handleDownloadPdfFile}
+                disabled={isDownloadingPdf}
+                className="btn-cta py-3 text-xs font-headline font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md disabled:opacity-60 cursor-pointer"
+              >
+                <Download className={`w-4 h-4 ${isDownloadingPdf ? 'animate-bounce' : ''}`} /> 
+                {isDownloadingPdf ? 'Downloading...' : 'Download PDF'}
+              </button>
+              <button
+                onClick={handleDownloadPdfPass}
+                className="btn-secondary py-3 text-xs font-headline font-bold uppercase tracking-wider flex items-center justify-center gap-1.5"
+              >
+                <Printer className="w-4 h-4" /> Print Pass
+              </button>
+            </div>
 
             <button
               onClick={handleDownloadCalendarIcs}

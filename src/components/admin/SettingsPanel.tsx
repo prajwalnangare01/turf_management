@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { store } from '../../services/store';
 import { AuditLogger } from '../../services/auditLogger';
 import { AdminUser, CancellationPolicy, CancellationSettings } from '../../types/schema';
-import { Sliders, Save, RefreshCw, MessageSquare, DollarSign, Clock, PlusCircle, Trash2, ShieldCheck, ArrowRight, AlertCircle, RotateCcw, Mail, Send, CheckCircle2 } from 'lucide-react';
+import { Sliders, Save, RefreshCw, MessageSquare, DollarSign, Clock, PlusCircle, Trash2, ShieldCheck, ArrowRight, AlertCircle, RotateCcw, Mail, Send, CheckCircle2, Database, Radio } from 'lucide-react';
+import { getSupabaseConfig, setSupabaseConfig, clearSupabaseConfig, testSupabaseConnection, isSupabaseConfigured } from '../../services/supabaseClient';
+import { SupabaseSyncService } from '../../services/supabaseSyncService';
 import { EmailService } from '../../services/emailService';
 
 interface SettingsPanelProps {
@@ -26,8 +28,76 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin }) =>
   const [newLabel, setNewLabel] = useState<string>('Partial Refund (12h+ notice)');
   const [policySuccessMsg, setPolicySuccessMsg] = useState<string | null>(null);
 
+  // Supabase Sync State
+  const [supabaseConfig, setSupabaseConfigState] = useState(() => getSupabaseConfig());
+  const [supabaseUrlInput, setSupabaseUrlInput] = useState(supabaseConfig.url);
+  const [supabaseKeyInput, setSupabaseKeyInput] = useState(supabaseConfig.anonKey);
+  const [supabaseTestLoading, setSupabaseTestLoading] = useState(false);
+  const [supabaseTestResult, setSupabaseTestResult] = useState<{
+    connected: boolean;
+    message: string;
+    venue?: any;
+    stats?: { courts: number; bookings: number; customers: number };
+  } | null>(null);
+  const [supabaseSyncLoading, setSupabaseSyncLoading] = useState(false);
+
+  const handleTestSupabase = async () => {
+    setSupabaseTestLoading(true);
+    setSupabaseTestResult(null);
+    try {
+      const res = await testSupabaseConnection();
+      setSupabaseTestResult(res);
+    } catch (err: any) {
+      setSupabaseTestResult({ connected: false, message: err.message });
+    } finally {
+      setSupabaseTestLoading(false);
+    }
+  };
+
+  const handleSaveSupabaseConfig = async () => {
+    setSupabaseConfig(supabaseUrlInput, supabaseKeyInput);
+    setSupabaseConfigState(getSupabaseConfig());
+    setSupabaseSyncLoading(true);
+    try {
+      await SupabaseSyncService.init();
+      await handleTestSupabase();
+      alert('Supabase credentials saved and synced successfully!');
+    } catch (e: any) {
+      alert('Saved, but sync encountered error: ' + e.message);
+    } finally {
+      setSupabaseSyncLoading(false);
+    }
+  };
+
+  const handleClearSupabaseConfig = () => {
+    if (confirm('Revert to default environment variables for Supabase?')) {
+      clearSupabaseConfig();
+      const cfg = getSupabaseConfig();
+      setSupabaseConfigState(cfg);
+      setSupabaseUrlInput(cfg.url);
+      setSupabaseKeyInput(cfg.anonKey);
+      setSupabaseTestResult(null);
+    }
+  };
+
+  const handleForceFullSync = async () => {
+    setSupabaseSyncLoading(true);
+    try {
+      const ok = await SupabaseSyncService.hydrateFromSupabase();
+      if (ok) {
+        alert('Successfully re-synced all tables from Supabase PostgreSQL!');
+      } else {
+        alert('Supabase hydration completed (running with local cache).');
+      }
+    } catch (err: any) {
+      alert('Sync failed: ' + err.message);
+    } finally {
+      setSupabaseSyncLoading(false);
+    }
+  };
+
   // Resend Email Test State
-  const [testEmailRecipient, setTestEmailRecipient] = useState(currentAdmin.email || 'customer@example.com');
+  const [testEmailRecipient, setTestEmailRecipient] = useState(currentAdmin.email || 'delivered@resend.dev');
   const [testEmailLoading, setTestEmailLoading] = useState(false);
   const [testEmailResult, setTestEmailResult] = useState<{ success: boolean; message: string; simulated?: boolean } | null>(null);
 
@@ -592,7 +662,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin }) =>
                       type="email"
                       value={testEmailRecipient}
                       onChange={e => setTestEmailRecipient(e.target.value)}
-                      placeholder="Enter test recipient email"
+                      placeholder="e.g. delivered@resend.dev or your email"
                       className="form-input text-xs flex-1"
                     />
                     <button
@@ -609,6 +679,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin }) =>
                       <span>Test Resend</span>
                     </button>
                   </div>
+                  <p className="text-[10px] text-on-surface-variant mt-1">
+                    Tip: Use your Resend registered email or <code className="bg-surface-container px-1 py-0.5 rounded">delivered@resend.dev</code> for instant sandbox verification.
+                  </p>
                 </div>
               </div>
 
@@ -628,6 +701,169 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin }) =>
                   <span>{testEmailResult.message}</span>
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* 6. Supabase Cloud Database & Realtime Sync Card */}
+          <div className="card p-6 border-slate-200/80 bg-white/95 shadow-sm space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600">
+                  <Database className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-headline font-bold text-base text-slate-800 flex items-center gap-2">
+                    Supabase PostgreSQL & Realtime Synchronization
+                    {isSupabaseConfigured() ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Live Supabase Sync
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                        <span className="w-2 h-2 rounded-full bg-amber-500"></span> Local Cache (Demo Mode)
+                      </span>
+                    )}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Synchronizes bookings, slot locks, and customer data in real time between Website and WhatsApp Bot.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleForceFullSync}
+                  disabled={supabaseSyncLoading}
+                  className="btn-secondary text-xs px-3 py-1.5 font-bold flex items-center gap-1.5"
+                  title="Pull latest bookings, courts, and customers from Supabase"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${supabaseSyncLoading ? 'animate-spin' : ''}`} />
+                  <span>Resync All</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+              <div className="space-y-1.5">
+                <label className="font-semibold text-slate-700 flex items-center justify-between">
+                  <span>Supabase Project URL (VITE_SUPABASE_URL)</span>
+                  {supabaseConfig.isCustom && (
+                    <span className="text-[10px] text-primary font-mono">(Custom Override Active)</span>
+                  )}
+                </label>
+                <input
+                  type="url"
+                  value={supabaseUrlInput}
+                  onChange={e => setSupabaseUrlInput(e.target.value)}
+                  placeholder="https://your-project-id.supabase.co"
+                  className="input-field font-mono text-xs"
+                />
+                <p className="text-[11px] text-slate-400">Found in Supabase Dashboard -&gt; Project Settings -&gt; API</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-semibold text-slate-700">
+                  Supabase Anon Key (VITE_SUPABASE_ANON_KEY)
+                </label>
+                <input
+                  type="password"
+                  value={supabaseKeyInput}
+                  onChange={e => setSupabaseKeyInput(e.target.value)}
+                  placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  className="input-field font-mono text-xs"
+                />
+                <p className="text-[11px] text-slate-400">Public browser key with Row-Level Security (RLS) enforcement</p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 pt-1 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={handleSaveSupabaseConfig}
+                disabled={supabaseSyncLoading}
+                className="btn-primary text-xs px-4 py-2 font-bold flex items-center gap-1.5 shadow-sm"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>Save Credentials & Connect</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleTestSupabase}
+                disabled={supabaseTestLoading}
+                className="btn-secondary text-xs px-4 py-2 font-bold flex items-center gap-1.5 border-slate-300 hover:bg-slate-50"
+              >
+                {supabaseTestLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin text-primary" /> : <Radio className="w-3.5 h-3.5 text-emerald-600" />}
+                <span>Test Live Connection</span>
+              </button>
+
+              {supabaseConfig.isCustom && (
+                <button
+                  type="button"
+                  onClick={handleClearSupabaseConfig}
+                  className="text-xs text-slate-500 hover:text-slate-800 underline px-2 py-1"
+                >
+                  Clear Custom Credentials
+                </button>
+              )}
+
+              <div className="ml-auto flex items-center gap-2">
+                <a
+                  href="https://supabase.com/dashboard"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs text-primary font-semibold flex items-center gap-1 hover:underline"
+                >
+                  Supabase Dashboard &rarr;
+                </a>
+              </div>
+            </div>
+
+            {/* Test Connection Output Banner */}
+            {supabaseTestResult && (
+              <div className={`p-3.5 rounded-xl text-xs flex items-start gap-2.5 ${
+                supabaseTestResult.connected
+                  ? 'bg-emerald-50 text-emerald-900 border border-emerald-200'
+                  : 'bg-amber-50 text-amber-900 border border-amber-200'
+              }`}>
+                {supabaseTestResult.connected ? (
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 mt-0.5" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
+                )}
+                <div className="space-y-1 flex-1">
+                  <div className="font-bold flex items-center justify-between">
+                    <span>{supabaseTestResult.message}</span>
+                    {supabaseTestResult.venue && (
+                      <span className="text-[11px] font-mono font-normal opacity-75">
+                        Venue: {supabaseTestResult.venue.name}
+                      </span>
+                    )}
+                  </div>
+                  {supabaseTestResult.stats && (
+                    <div className="flex items-center gap-4 text-[11px] pt-1 text-emerald-700 font-mono">
+                      <span>Courts: {supabaseTestResult.stats.courts}</span>
+                      <span>Bookings: {supabaseTestResult.stats.bookings}</span>
+                      <span>Customers: {supabaseTestResult.stats.customers}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Schema Migration Helper */}
+            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-2">
+              <div className="flex items-center justify-between font-semibold text-slate-800">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                  Automated Database Setup & Schema Deployment
+                </span>
+                <span className="text-[11px] text-slate-500 font-mono">supabase_setup.sql</span>
+              </div>
+              <p className="text-slate-600 leading-relaxed text-[11px]">
+                Run the included schema in your Supabase project with one click: Open your Supabase Dashboard, navigate to the <b>SQL Editor</b>, paste the contents of <code>supabase_setup.sql</code> (in the project root), and click <b>Run</b>. It creates all 15 tables, activates Supabase Realtime publication on bookings, and installs the Layer-2 Concurrency Unique Index.
+              </p>
             </div>
           </div>
 

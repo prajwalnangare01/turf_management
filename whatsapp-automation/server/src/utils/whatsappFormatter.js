@@ -64,21 +64,32 @@ export class WhatsAppFormatter {
    */
   static formatCustomerBookings(bookings) {
     if (!bookings || bookings.length === 0) {
-      return `ℹ️ You have no active or past bookings under this phone number. Reply *"Show slots for tomorrow"* to book your game!`;
+      return `ℹ️ You have no pending or upcoming bookings.\n_(Completed and cancelled bookings are hidden to keep your chat clean)._\n\n👉 Reply *1* or *"Show slots"* to book your next game! ⚽🏏`;
     }
 
-    let out = `📋 *YOUR TURFFLOW BOOKINGS*\n━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+    let out = `📋 *YOUR ACTIVE & PENDING BOOKINGS*\n━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
     for (const b of bookings) {
-      const statusEmoji = b.status === 'confirmed' ? '✅' : b.status === 'pending_payment' ? '⏳' : b.status === 'cancelled' ? '❌' : '🏁';
-      out += `${statusEmoji} *${b.booking_ref}* (${b.status.toUpperCase()})\n`;
-      out += `🏟️ ${b.court_name}\n`;
-      out += `📅 ${b.booking_date} | ⏰ ${b.start_time} — ${b.end_time}\n`;
-      out += `💰 ₹${b.total_amount} | Source: ${b.source}\n`;
-      if (b.status === 'confirmed') {
-        out += `⚙️ _To cancel/reschedule reply: "Cancel ${b.booking_ref}"_\n`;
+      const isConfirmed = b.status === 'confirmed';
+      const otpCode = b.booking_ref ? b.booking_ref.slice(-4) : '0000';
+
+      if (isConfirmed) {
+        out += `✅ *${b.booking_ref}* (UPCOMING MATCH)\n`;
+        out += `🏟️ ${b.court_name}\n`;
+        out += `📅 ${b.booking_date} | ⏰ ${b.start_time} — ${b.end_time}\n`;
+        out += `🔑 *Gate Pass OTP:* *${otpCode}*\n`;
+        out += `💰 ₹${b.total_amount} (PAID)\n`;
+        out += `📄 *Download PDF Pass:* http://localhost:5000/api/bookings/${b.booking_ref}/pass\n`;
+        out += `⚙️ _To cancel/reschedule, reply: "Cancel ${b.booking_ref}"_\n`;
+      } else {
+        out += `⏳ *${b.booking_ref}* (PENDING PAYMENT)\n`;
+        out += `🏟️ ${b.court_name}\n`;
+        out += `📅 ${b.booking_date} | ⏰ ${b.start_time} — ${b.end_time}\n`;
+        out += `💰 ₹${b.total_amount}\n`;
+        out += `👉 *Complete Payment:* https://rzp.io/l/${b.booking_ref.toLowerCase()}\n`;
       }
       out += `─────────────────────────\n`;
     }
+    out += `\n💡 _Completed & past matches are automatically hidden._`;
     return out;
   }
 

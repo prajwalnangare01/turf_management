@@ -6,7 +6,8 @@ import { AdminUser, BookingStatus, Booking } from '../../types/schema';
 import { ConfirmModal } from '../common/ConfirmModal';
 import { AdminRefundModal } from './AdminRefundModal';
 import { formatTimeRange12h } from '../../utils/formatters';
-import { Search, Filter, CheckCircle, XCircle, UserX, Calendar, ArrowUpDown, X, Clock, MapPin, Tag, RotateCcw } from 'lucide-react';
+import { ReminderScheduler } from '../../services/reminderScheduler';
+import { Search, Filter, CheckCircle, XCircle, UserX, Calendar, ArrowUpDown, X, Clock, MapPin, Tag, RotateCcw, Bell } from 'lucide-react';
 
 interface BookingListViewProps {
   currentAdmin: AdminUser;
@@ -95,6 +96,17 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
         }
       }
     });
+  };
+
+  const handleSendReminderEmail = (b: Booking) => {
+    const cust = customers.find(c => c.id === b.customer_id);
+    const result = ReminderScheduler.triggerManualReminder(b.id);
+    if (result.success) {
+      alert(`1-Hour reminder successfully dispatched via Resend to ${cust?.email || cust?.phone || 'customer'}!`);
+      setBookings([...store.getBookings()]);
+    } else {
+      alert(result.message);
+    }
   };
 
   return (
@@ -379,6 +391,14 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
                       <div className="flex items-center justify-end gap-1.5 flex-wrap">
                         {b.status === 'confirmed' && (
                           <>
+                            <button
+                              onClick={() => handleSendReminderEmail(b)}
+                              className="px-2 py-1 bg-sky-50 text-sky-800 border border-sky-300 rounded-lg font-bold text-[10px] hover:bg-sky-100 flex items-center gap-1 transition-colors shadow-2xs"
+                              title="Send 1-Hour Matchday Reminder Email via Resend"
+                            >
+                              <Bell className="w-3.5 h-3.5 text-sky-600" /> 1-Hr Reminder
+                            </button>
+
                             <button
                               onClick={() => requestStatusUpdate(b, 'completed')}
                               className="px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-lg font-bold text-[10px] hover:bg-emerald-100 flex items-center gap-1 transition-colors shadow-2xs"

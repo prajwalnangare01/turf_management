@@ -78,7 +78,7 @@
               </div>
             </div>
             <div class="flex items-center gap-4 text-emerald-100 text-sm">
-              <button title="Call Venue" onclick="alert('Calling TurfFlow Arena Frontdesk: +91 98765 43210')"><i class="fa-solid fa-phone"></i></button>
+              <button title="Call Venue" onclick="alert('Calling TurfFlow Arena Frontdesk: +91 95791 58374')"><i class="fa-solid fa-phone"></i></button>
               <button title="Clear Chat" onclick="clearChat()"><i class="fa-solid fa-rotate-right"></i></button>
             </div>
           </div>
@@ -394,10 +394,11 @@
         else if (b.status === 'pending_payment') badgeClass = 'bg-amber-950 text-amber-400 border border-amber-800 animate-pulse';
         else if (b.status === 'cancelled') badgeClass = 'bg-rose-950 text-rose-400 border border-rose-800';
 
+        const courtTitle = b.court_name || (b.court_id === 'crt-001' ? 'Turf A (Synthetic)' : b.court_id === 'crt-002' ? 'Turf B (Multi-Sport)' : b.court_id === 'crt-003' ? 'Court 3 (Badminton)' : b.court_id);
         tr.innerHTML = `
           <td class="py-2.5 px-3 font-bold text-slate-200">${b.booking_ref}</td>
           <td class="py-2.5 px-3">
-            <span class="text-slate-200 font-semibold">${b.court_name}</span><br/>
+            <span class="text-slate-200 font-semibold">${courtTitle}</span><br/>
             <span class="text-slate-400 text-[10px]">${b.booking_date} @ ${b.start_time} - ${b.end_time}</span>
           </td>
           <td class="py-2.5 px-3 text-emerald-400 font-bold">₹${b.total_amount}</td>

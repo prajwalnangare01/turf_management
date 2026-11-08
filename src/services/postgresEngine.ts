@@ -3,6 +3,7 @@ import { Booking, BookingStatus } from '../types/schema';
 import { RedisLockService } from './redisLockService';
 import { AuditLogger } from './auditLogger';
 import { NotificationService } from './notificationService';
+import { SupabaseSyncService } from './supabaseSyncService';
 
 export class PostgresEngine {
   /**

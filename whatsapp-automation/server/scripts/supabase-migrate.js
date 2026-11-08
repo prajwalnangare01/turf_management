@@ -1,3 +1,4 @@
+import '../src/env.js';
 // Supabase Schema Migration & Seeder Script
 // Executes schema.sql, enforces unique active booking partial index,
 // activates Supabase Realtime publication on bookings, and seeds data.
@@ -22,7 +23,7 @@ const { Client } = pkg;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const SCHEMA_FILE = path.resolve(__dirname, '../../../turf_management-main/schema.sql');
+const SCHEMA_FILE = path.resolve(__dirname, '../../../schema.sql');
 
 export async function runSupabaseMigration() {
   const connectionString = process.env.DATABASE_URL || process.env.SUPABASE_DB_URL;

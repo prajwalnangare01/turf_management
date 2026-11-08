@@ -1,8 +1,10 @@
 -- =============================================================================
--- Turf / Sports Venue Booking Platform — Production PostgreSQL Database Schema
+-- TurfFlow Multi-Channel Booking Platform — Complete Supabase PostgreSQL Schema
+-- Synchronized for Web Portal (React/Vite) & WhatsApp Automation (AI Agent/n8n)
+-- ZERO DESTRUCTIVE STATEMENTS (Safe for fresh and existing Supabase instances)
 -- =============================================================================
 
--- Enable UUID extension if needed
+-- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- 1. Venues Table
@@ -16,6 +18,10 @@ CREATE TABLE IF NOT EXISTS venues (
   is_active BOOLEAN DEFAULT TRUE,
   min_notice_minutes INT DEFAULT 15,
   max_advance_days INT DEFAULT 14,
+  whatsapp_enabled BOOLEAN DEFAULT TRUE,
+  sms_fallback_enabled BOOLEAN DEFAULT TRUE,
+  email_enabled BOOLEAN DEFAULT TRUE,
+  email_sender VARCHAR(255) DEFAULT 'TurfFlow <onboarding@resend.dev>',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -37,6 +43,13 @@ CREATE TABLE IF NOT EXISTS courts (
   buffer_minutes INT NOT NULL DEFAULT 10,
   status VARCHAR(32) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'maintenance', 'inactive')),
   base_price_per_hour DECIMAL(10, 2) NOT NULL,
+  saturday_price_per_hour DECIMAL(10, 2) DEFAULT 1600,
+  sunday_price_per_hour DECIMAL(10, 2) DEFAULT 1600,
+  weekend_price_per_hour DECIMAL(10, 2) DEFAULT 1600,
+  peak_enabled BOOLEAN DEFAULT TRUE,
+  peak_start_time TIME DEFAULT '18:00',
+  peak_end_time TIME DEFAULT '23:00',
+  peak_price_per_hour DECIMAL(10, 2) DEFAULT 1800,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -64,6 +77,7 @@ CREATE TABLE IF NOT EXISTS customers (
   name VARCHAR(255) NOT NULL,
   phone VARCHAR(20) UNIQUE NOT NULL,
   email VARCHAR(255),
+  password VARCHAR(255),
   total_bookings INT DEFAULT 0,
   total_spent DECIMAL(10, 2) DEFAULT 0.00,
   no_show_count INT DEFAULT 0,
@@ -77,7 +91,7 @@ CREATE TABLE IF NOT EXISTS admin_users (
   name VARCHAR(255) NOT NULL,
   email VARCHAR(255) UNIQUE NOT NULL,
   phone VARCHAR(20),
-  password_hash VARCHAR(255) NOT NULL,
+  password_hash VARCHAR(255) NOT NULL DEFAULT 'scrypt_hashed_password',
   role VARCHAR(16) NOT NULL CHECK (role IN ('owner', 'manager', 'staff')),
   is_active BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -100,6 +114,14 @@ CREATE TABLE IF NOT EXISTS bookings (
   coupon_id VARCHAR(64),
   created_by_admin_id VARCHAR(64) REFERENCES admin_users(id),
   notes TEXT,
+  refund_amount DECIMAL(10, 2) DEFAULT 0.00,
+  refund_reason TEXT,
+  refunded_at TIMESTAMP WITH TIME ZONE,
+  cancelled_by VARCHAR(32),
+  cancelled_at TIMESTAMP WITH TIME ZONE,
+  cancellation_notice_hours DECIMAL(6, 2),
+  cancellation_met_terms BOOLEAN,
+  gateway_payment_id VARCHAR(255),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -115,7 +137,7 @@ CREATE TABLE IF NOT EXISTS payments (
   booking_id VARCHAR(64) NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
   gateway VARCHAR(32) NOT NULL DEFAULT 'razorpay',
   gateway_order_id VARCHAR(255),
-  gateway_payment_id VARCHAR(255) UNIQUE,
+  gateway_payment_id VARCHAR(255),
   amount DECIMAL(10, 2) NOT NULL,
   status VARCHAR(32) NOT NULL CHECK (status IN ('created', 'authorized', 'captured', 'failed', 'refunded', 'partial_refund')),
   method VARCHAR(32) NOT NULL CHECK (method IN ('upi', 'card', 'netbanking', 'cash', 'other_offline')),
@@ -129,14 +151,28 @@ CREATE TABLE IF NOT EXISTS blocked_slots (
   id VARCHAR(64) PRIMARY KEY DEFAULT uuid_generate_v4()::text,
   court_id VARCHAR(64) NOT NULL REFERENCES courts(id) ON DELETE CASCADE,
   date DATE NOT NULL,
-  start_time TIME,
+  start_time TIME NOT NULL,
   end_time TIME,
   reason VARCHAR(32) NOT NULL CHECK (reason IN ('maintenance', 'private_event', 'owner_block')),
   created_by_admin_id VARCHAR(64) REFERENCES admin_users(id),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 11. Cancellation Policies Table
+-- 11. Slot Locks Table
+CREATE TABLE IF NOT EXISTS slot_locks (
+  id VARCHAR(64) PRIMARY KEY DEFAULT uuid_generate_v4()::text,
+  court_id VARCHAR(64) NOT NULL REFERENCES courts(id) ON DELETE CASCADE,
+  date DATE NOT NULL,
+  start_time TIME NOT NULL,
+  locked_by VARCHAR(64) NOT NULL,
+  expires_at BIGINT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS unique_active_slot_lock
+ON slot_locks (court_id, date, start_time);
+
+-- 12. Cancellation Policies Table
 CREATE TABLE IF NOT EXISTS cancellation_policies (
   id VARCHAR(64) PRIMARY KEY DEFAULT uuid_generate_v4()::text,
   court_id VARCHAR(64) REFERENCES courts(id) ON DELETE CASCADE,
@@ -144,7 +180,7 @@ CREATE TABLE IF NOT EXISTS cancellation_policies (
   refund_percentage INT NOT NULL CHECK (refund_percentage BETWEEN 0 AND 100)
 );
 
--- 12. Coupons Table
+-- 13. Coupons Table
 CREATE TABLE IF NOT EXISTS coupons (
   id VARCHAR(64) PRIMARY KEY DEFAULT uuid_generate_v4()::text,
   code VARCHAR(32) UNIQUE NOT NULL,
@@ -158,7 +194,7 @@ CREATE TABLE IF NOT EXISTS coupons (
   used_count INT DEFAULT 0
 );
 
--- 13. Notifications Log Table
+-- 14. Notifications Log Table
 CREATE TABLE IF NOT EXISTS notifications_log (
   id VARCHAR(64) PRIMARY KEY DEFAULT uuid_generate_v4()::text,
   booking_id VARCHAR(64) REFERENCES bookings(id) ON DELETE CASCADE,
@@ -171,7 +207,7 @@ CREATE TABLE IF NOT EXISTS notifications_log (
   sent_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 14. Audit Log Table
+-- 15. Audit Log Table
 CREATE TABLE IF NOT EXISTS audit_log (
   id VARCHAR(64) PRIMARY KEY DEFAULT uuid_generate_v4()::text,
   admin_user_id VARCHAR(64) REFERENCES admin_users(id),

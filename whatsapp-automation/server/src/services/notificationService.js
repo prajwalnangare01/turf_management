@@ -1,9 +1,11 @@
 // Notification Service & Dispatcher
 import { store } from '../data/store.js';
+import { WhatsAppService } from './whatsappService.js';
+import { GatePassService } from './gatePassService.js';
 
 export class NotificationService {
   /**
-   * Log and simulate dispatching a WhatsApp message
+   * Log and dispatch a real WhatsApp message if client is connected
    */
   static sendWhatsAppMessage(recipientPhone, messageText, templateData = null) {
     const log = {
@@ -18,21 +20,31 @@ export class NotificationService {
 
     store.notifications.unshift(log);
     console.log(`\n📱 [WHATSAPP OUTBOUND to ${recipientPhone}]:\n${messageText}\n`);
+
+    // Dispatch directly to actual WhatsApp user if Baileys agent is linked
+    if (WhatsAppService.isConnected()) {
+      WhatsAppService.sendMessage(recipientPhone, messageText).catch(err => {
+        console.warn(`⚠️ Failed to deliver live WhatsApp message to ${recipientPhone}:`, err.message);
+      });
+    }
+
     return log;
   }
 
   /**
-   * Send WhatsApp Booking Confirmation Card
+   * Send WhatsApp Booking Confirmation Card & PDF Gate Pass
    */
   static sendBookingConfirmation(booking) {
     const venue = store.getVenue();
     const court = store.getCourts().find(c => c.id === booking.court_id);
     const sports = store.getSports();
     const sport = sports.find(s => s.id === booking.sport_id);
+    const otpCode = booking.booking_ref ? booking.booking_ref.slice(-4) : '0000';
 
     const message = `🎉 *BOOKING CONFIRMED — TURFFLOW ARENA* 🎉\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `🎟️ *Booking Ref:* \`${booking.booking_ref}\`\n` +
+      `🔑 *Gate Check-in OTP:* *${otpCode}*\n` +
       `🏟️ *Court:* ${court?.name || 'Main Turf'}\n` +
       `🏅 *Sport:* ${sport?.icon || '⚽'} ${sport?.name || 'Football'}\n` +
       `📅 *Date:* ${booking.booking_date}\n` +
@@ -42,13 +54,30 @@ export class NotificationService {
       `📍 *Venue Address:* ${venue.address}\n` +
       `🗺️ *Google Maps:* ${venue.google_maps_link}\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `📄 *Your official PDF Gate Pass & Payment Receipt is attached below!* Show the PDF or your 4-digit OTP *${otpCode}* at the gate.\n\n` +
       `⚠️ *Pitch Rules:* Turf shoes only (no metal spikes). Please arrive 10 mins early.\n\n` +
       `Need to reschedule or cancel? Just reply *"Manage booking ${booking.booking_ref}"* anytime!`;
 
-    return this.sendWhatsAppMessage(booking.customer_phone, message, {
+    const log = this.sendWhatsAppMessage(booking.customer_phone, message, {
       type: 'confirmation',
       booking_ref: booking.booking_ref
     });
+
+    // Send PDF Gate Pass & Receipt attachment directly on WhatsApp
+    GatePassService.generatePassPdfBuffer(booking).then(pdfBuffer => {
+      if (pdfBuffer && WhatsAppService.isConnected()) {
+        WhatsAppService.sendDocument(
+          booking.customer_phone,
+          pdfBuffer,
+          `GatePass-${booking.booking_ref}.pdf`,
+          `🎟️ *VENUE ENTRY PASS & PAYMENT RECEIPT*\nRef: \`${booking.booking_ref}\` | Gate OTP: *${otpCode}*`
+        ).catch(err => console.warn('PDF pass dispatch warning:', err.message));
+      }
+    }).catch(err => {
+      console.warn('PDF generation error:', err.message);
+    });
+
+    return log;
   }
 
   /**

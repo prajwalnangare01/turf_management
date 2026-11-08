@@ -81,6 +81,7 @@ export interface Customer {
   phone: string;
   email?: string;
   password?: string;
+  email_verified?: boolean;
   created_at: string;
   total_bookings: number;
   total_spent: number;
@@ -120,6 +121,8 @@ export interface Booking {
   cancelled_at?: string;
   cancellation_notice_hours?: number;
   cancellation_met_terms?: boolean;
+  reminder_sent?: boolean;
+  gateway_payment_id?: string;
   created_at: string;
   updated_at: string;
 }

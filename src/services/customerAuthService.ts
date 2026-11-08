@@ -2,6 +2,7 @@ import { Customer } from '../types/schema';
 import { store } from './store';
 import { normalizeIndianPhone } from '../utils/venueTime';
 import { EmailService } from './emailService';
+import { EmailVerificationService, RequestOtpResult } from './emailVerificationService';
 
 const CUSTOMER_SESSION_KEY = 'turfflow_customer_session';
 
@@ -73,14 +74,72 @@ export class CustomerAuthService {
   }
 
   /**
-   * Register new customer account with required OTP verification
+   * Request Email Verification OTP for signup via Resend
+   */
+  public static async sendEmailSignupOtp(email: string, name?: string): Promise<RequestOtpResult> {
+    const cleanEmail = email.trim().toLowerCase();
+    return EmailVerificationService.requestOtp(cleanEmail, 'signup', name || 'Player');
+  }
+
+  /**
+   * Update customer email with Resend OTP verification
+   */
+  public static updateCustomerEmail(
+    customerId: string,
+    newEmail: string,
+    otpCode: string
+  ): { success: boolean; customer?: Customer; error?: string } {
+    const cleanEmail = newEmail.trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      return { success: false, error: 'Please enter a valid email address.' };
+    }
+
+    const verifyRes = EmailVerificationService.verifyOtp(cleanEmail, otpCode, 'profile_update');
+    if (!verifyRes.success) {
+      return { success: false, error: verifyRes.message };
+    }
+
+    const customers = store.getCustomers();
+    const customer = customers.find(c => c.id === customerId);
+    if (!customer) {
+      return { success: false, error: 'Customer not found.' };
+    }
+
+    customer.email = cleanEmail;
+    customer.email_verified = true;
+    store.setCustomers(customers);
+
+    // Update active session in localStorage
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const raw = localStorage.getItem(CUSTOMER_SESSION_KEY);
+        if (raw) {
+          const session: CustomerSession = JSON.parse(raw);
+          if (session.customer.id === customerId) {
+            session.customer = customer;
+            localStorage.setItem(CUSTOMER_SESSION_KEY, JSON.stringify(session));
+          }
+        }
+      } catch {
+        // Ignored
+      }
+    }
+
+    return { success: true, customer };
+  }
+
+  /**
+   * Register new customer account with required Dual OTP verification:
+   * 1. 4-Digit Mobile OTP (SMS)
+   * 2. 6-Digit Email OTP (Resend Email)
    */
   public static register(
     name: string, 
     phone: string, 
     otp: string, 
     password: string, 
-    email?: string
+    email?: string,
+    emailOtp?: string
   ): { success: boolean; session?: CustomerSession; error?: string } {
     const cleanDigits = phone.replace(/\D/g, '');
     const normalizedPhone = normalizeIndianPhone(phone);
@@ -93,28 +152,55 @@ export class CustomerAuthService {
       return { success: false, error: 'Valid 10-digit mobile phone number is required.' };
     }
 
+    // 1. Mobile Phone OTP Check (Mandatory)
     const cleanOtp = (otp || '').trim();
     if (!cleanOtp || cleanOtp !== '1234') {
       return { 
         success: false, 
-        error: 'Invalid verification code. Please enter the 4-digit OTP sent to your phone (Demo code: 1234).' 
+        error: 'Invalid mobile verification code. Please enter the 4-digit OTP sent to your phone (Demo code: 1234).' 
       };
     }
 
+    // 2. Email Address Check (Mandatory)
+    const cleanEmail = (email || '').trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
+      return { success: false, error: 'Email address is mandatory for registration.' };
+    }
+
+    // 3. Email OTP Check (Mandatory via Resend)
+    const cleanEmailOtp = (emailOtp || '').trim();
+    if (!cleanEmailOtp) {
+      return { success: false, error: '6-digit email verification code sent via Resend is mandatory.' };
+    }
+
+    const emailVerify = EmailVerificationService.verifyOtp(cleanEmail, cleanEmailOtp, 'signup');
+    if (!emailVerify.success) {
+      return { success: false, error: emailVerify.message };
+    }
+
+    // 4. Password Check
     if (!password || password.length < 4) {
       return { success: false, error: 'Please set a secure password with at least 4 characters.' };
     }
 
     const customers = store.getCustomers();
-    let existing = customers.find(c => 
+    let existingPhone = customers.find(c => 
       normalizeIndianPhone(c.phone) === normalizedPhone || 
       c.phone.replace(/\D/g, '').slice(-10) === cleanDigits.slice(-10)
     );
 
-    if (existing) {
+    if (existingPhone) {
       return { 
         success: false, 
         error: 'An account with this mobile number already exists. Please select "Log In" to access your account.' 
+      };
+    }
+
+    let existingEmail = customers.find(c => c.email && c.email.toLowerCase() === cleanEmail);
+    if (existingEmail) {
+      return { 
+        success: false, 
+        error: 'An account with this email address already exists. Please select "Log In" to access your account.' 
       };
     }
 
@@ -122,7 +208,8 @@ export class CustomerAuthService {
       id: `cust-${Date.now().toString().substring(6)}`,
       name: name.trim(),
       phone: normalizedPhone,
-      email: email?.trim(),
+      email: cleanEmail,
+      email_verified: true,
       password: password.trim(),
       created_at: new Date().toISOString(),
       total_bookings: 0,
@@ -133,14 +220,12 @@ export class CustomerAuthService {
 
     store.addCustomer(newCustomer);
 
-    if (newCustomer.email) {
-      EmailService.sendWelcomeEmail({
-        customerName: newCustomer.name,
-        customerEmail: newCustomer.email,
-        customerPhone: newCustomer.phone,
-        venueName: store.getVenue().name
-      }).catch(err => console.warn('[CustomerAuthService] Welcome email error:', err));
-    }
+    EmailService.sendWelcomeEmail({
+      customerName: newCustomer.name,
+      customerEmail: cleanEmail,
+      customerPhone: newCustomer.phone,
+      venueName: store.getVenue().name
+    }).catch(err => console.warn('[CustomerAuthService] Welcome email error:', err));
 
     return this.createSession(newCustomer);
   }

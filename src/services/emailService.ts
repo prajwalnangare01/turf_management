@@ -6,6 +6,7 @@ export interface EmailDispatchResult {
   id?: string;
   simulated: boolean;
   error?: string;
+  sandboxRestricted?: boolean;
   recipient: string;
   subject: string;
   preview: string;
@@ -63,6 +64,19 @@ export class EmailService {
           subject: payload.subject,
           preview: plainPreview
         };
+      } else {
+        const errJson = await response.json().catch(() => ({}));
+        const errMsg = errJson?.error || errJson?.details?.message || errJson?.message || 'Resend delivery failed';
+        const isSandbox = errMsg.includes('only send testing emails') || errMsg.includes('verify your domain');
+        return {
+          success: false,
+          error: errMsg,
+          sandboxRestricted: isSandbox,
+          simulated: false,
+          recipient: cleanTo,
+          subject: payload.subject,
+          preview: plainPreview
+        };
       }
     } catch {
       // Dev server middleware not reachable (e.g. static production deployment)
@@ -92,6 +106,18 @@ export class EmailService {
           return {
             success: true,
             id: directData.id,
+            simulated: false,
+            recipient: cleanTo,
+            subject: payload.subject,
+            preview: plainPreview
+          };
+        } else {
+          const directErr = await directRes.json().catch(() => ({}));
+          const errMsg = directErr?.message || 'Resend API call rejected';
+          return {
+            success: false,
+            error: errMsg,
+            sandboxRestricted: errMsg.includes('only send testing emails') || errMsg.includes('verify your domain'),
             simulated: false,
             recipient: cleanTo,
             subject: payload.subject,
@@ -519,6 +545,296 @@ export class EmailService {
       subject,
       html,
       text
+    });
+  }
+
+  /**
+   * 5. Send Login Verification OTP Email
+   */
+  public static async sendLoginVerificationOtp(params: {
+    email: string;
+    otpCode: string;
+    customerName?: string;
+    venueName?: string;
+  }): Promise<EmailDispatchResult> {
+    const { email, otpCode, customerName = 'Player', venueName = 'TurfFlow Arena' } = params;
+    const subject = `🔐 ${otpCode} is your TurfFlow Login Verification Code`;
+
+    const text = [
+      `TURFFLOW - LOGIN VERIFICATION`,
+      `Hi ${customerName},`,
+      ``,
+      `Your one-time login verification code is: ${otpCode}`,
+      ``,
+      `This code will expire in 10 minutes.`,
+      `If you did not attempt to sign in to TurfFlow, please disregard this email.`,
+      ``,
+      `Team ${venueName}`
+    ].join('\n');
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${subject}</title>
+</head>
+<body style="margin: 0; padding: 24px; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #0f172a;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 540px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.06); border: 1px solid #e2e8f0;">
+    <tr>
+      <td style="background: linear-gradient(135deg, #006b30 0%, #004d22 100%); padding: 28px 24px; text-align: center; color: #ffffff;">
+        <div style="font-size: 12px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; color: #86efac; margin-bottom: 6px;">${venueName} Security</div>
+        <h1 style="margin: 0; font-size: 24px; font-weight: 800;">Login Verification Code</h1>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 28px 24px;">
+        <p style="font-size: 15px; margin: 0 0 20px 0; color: #334155;">
+          Hi <strong>${customerName}</strong>,<br/>
+          Use the 6-digit verification code below to securely log into your player account:
+        </p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background: #f0fdf4; border: 2px dashed #16a34a; border-radius: 12px; margin-bottom: 24px;">
+          <tr>
+            <td style="padding: 20px; text-align: center;">
+              <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; color: #166534;">Your One-Time Code</div>
+              <div style="font-size: 38px; font-weight: 900; font-family: monospace; letter-spacing: 10px; color: #14532d; margin: 8px 0;">${otpCode}</div>
+              <div style="font-size: 12px; color: #15803d; font-weight: 600;">Valid for 10 minutes &bull; Do not share with anyone</div>
+            </td>
+          </tr>
+        </table>
+        <p style="font-size: 12px; color: #64748b; line-height: 1.5; margin: 0;">
+          If you did not request this login code, you can safely ignore this email. No access was granted without this code.
+        </p>
+      </td>
+    </tr>
+    <tr>
+      <td style="background: #f8fafc; padding: 16px 24px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8;">
+        ${venueName} &bull; Powered by Resend Email Delivery
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `;
+
+    return this.sendEmail({
+      to: email,
+      subject,
+      html,
+      text
+    });
+  }
+
+  /**
+   * 6. Send Email Update Verification OTP Email
+   */
+  public static async sendEmailUpdateVerificationOtp(params: {
+    email: string;
+    otpCode: string;
+    customerName?: string;
+    venueName?: string;
+  }): Promise<EmailDispatchResult> {
+    const { email, otpCode, customerName = 'Player', venueName = 'TurfFlow Arena' } = params;
+    const subject = `🛡️ ${otpCode} is your TurfFlow Email Change Verification Code`;
+
+    const text = [
+      `TURFFLOW - EMAIL UPDATE VERIFICATION`,
+      `Hi ${customerName},`,
+      ``,
+      `You requested to update your TurfFlow account email to this address.`,
+      `Your verification code is: ${otpCode}`,
+      ``,
+      `This code will expire in 10 minutes.`,
+      `If you did not request this change, please ignore this email.`,
+      ``,
+      `Team ${venueName}`
+    ].join('\n');
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${subject}</title>
+</head>
+<body style="margin: 0; padding: 24px; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #0f172a;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 540px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.06); border: 1px solid #e2e8f0;">
+    <tr>
+      <td style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); padding: 28px 24px; text-align: center; color: #ffffff;">
+        <div style="font-size: 12px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; color: #bae6fd; margin-bottom: 6px;">Email Verification</div>
+        <h1 style="margin: 0; font-size: 24px; font-weight: 800;">Confirm New Email Address</h1>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 28px 24px;">
+        <p style="font-size: 15px; margin: 0 0 20px 0; color: #334155;">
+          Hi <strong>${customerName}</strong>,<br/>
+          You requested to update your TurfFlow account email to <strong>${email}</strong>. Use the verification code below to confirm this update:
+        </p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background: #f0f9ff; border: 2px dashed #0284c7; border-radius: 12px; margin-bottom: 24px;">
+          <tr>
+            <td style="padding: 20px; text-align: center;">
+              <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; color: #0369a1;">Verification Code</div>
+              <div style="font-size: 38px; font-weight: 900; font-family: monospace; letter-spacing: 10px; color: #075985; margin: 8px 0;">${otpCode}</div>
+              <div style="font-size: 12px; color: #0284c7; font-weight: 600;">Valid for 10 minutes &bull; Enter in your profile to complete update</div>
+            </td>
+          </tr>
+        </table>
+        <p style="font-size: 12px; color: #64748b; line-height: 1.5; margin: 0;">
+          If you did not initiate this change from your TurfFlow profile, please ignore this email. Your existing profile email will remain unchanged.
+        </p>
+      </td>
+    </tr>
+    <tr>
+      <td style="background: #f8fafc; padding: 16px 24px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8;">
+        ${venueName} &bull; Powered by Resend Email Delivery
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `;
+
+    return this.sendEmail({
+      to: email,
+      subject,
+      html,
+      text
+    });
+  }
+
+  /**
+   * 7. Send 1-Hour Matchday Reminder Email
+   */
+  public static async sendBookingReminder(params: {
+    booking: Booking;
+    customer: Customer;
+    courtName: string;
+    venue: Venue;
+  }): Promise<EmailDispatchResult> {
+    const { booking, customer, courtName, venue } = params;
+    const recipient = customer.email || 'customer@example.com';
+    const otpCode = (booking.booking_ref || booking.id || '').slice(-4) || '----';
+    const timeRangeStr = formatTimeRange12h(booking.start_time, booking.end_time);
+
+    const subject = `⏰ Kickoff in 1 Hour: ${courtName} at ${booking.start_time} (${venue.name})`;
+
+    const text = [
+      `TURFFLOW - MATCHDAY REMINDER (1 HOUR TO KICKOFF)`,
+      `Hi ${customer.name},`,
+      `Your game at ${venue.name} starts in approximately 1 hour!`,
+      ``,
+      `Court / Pitch: ${courtName}`,
+      `Date: ${booking.booking_date}`,
+      `Slot Time: ${timeRangeStr}`,
+      `Booking Reference: ${booking.booking_ref}`,
+      `Gate Check-in OTP: ${otpCode}`,
+      `Venue Address: ${venue.address}`,
+      ``,
+      `Matchday Checklist:`,
+      `- Arrive 10 minutes before kickoff for warm-up & check-in.`,
+      `- Only turf shoes / sneakers allowed. No metal studs.`,
+      `- Show your 4-digit Gate OTP (${otpCode}) to the attendant for entry.`,
+      ``,
+      `See you on the pitch!`,
+      `Team ${venue.name}`
+    ].join('\n');
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${subject}</title>
+</head>
+<body style="margin: 0; padding: 24px; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #0f172a;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.06); border: 1px solid #e2e8f0;">
+    <!-- Alert Banner Header -->
+    <tr>
+      <td style="background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%); padding: 32px 24px; text-align: center; color: #ffffff;">
+        <div style="display: inline-block; background: #fbbf24; color: #78350f; font-size: 11px; font-weight: 900; letter-spacing: 1.5px; text-transform: uppercase; padding: 4px 14px; border-radius: 999px; margin-bottom: 10px;">
+          ⏳ 1 HOUR TO KICKOFF
+        </div>
+        <h1 style="margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.5px;">Matchday Reminder</h1>
+        <p style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.9; color: #dbeafe;">
+          ${venue.name} &bull; Ref: <strong style="font-family: monospace;">${booking.booking_ref}</strong>
+        </p>
+      </td>
+    </tr>
+
+    <!-- Body Content -->
+    <tr>
+      <td style="padding: 28px 24px;">
+        <p style="font-size: 16px; margin: 0 0 20px 0; color: #334155;">
+          Hi <strong>${customer.name}</strong>,<br/>
+          Get your kit ready! Your reserved pitch slot begins in <strong>1 hour</strong>.
+        </p>
+
+        <!-- Prominent OTP Gate Pass Box -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background: #fffbeb; border: 2px dashed #f59e0b; border-radius: 12px; margin-bottom: 24px;">
+          <tr>
+            <td style="padding: 20px; text-align: center;">
+              <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; color: #b45309;">4-Digit Gate Entry Pass</div>
+              <div style="font-size: 42px; font-weight: 900; font-family: monospace; letter-spacing: 12px; color: #78350f; margin: 6px 0;">${otpCode}</div>
+              <div style="font-size: 12px; color: #92400e; font-weight: 600;">Show this pass at the gate turnstile for quick check-in</div>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Reservation Details Table -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; margin-bottom: 24px;">
+          <tr style="background: #f8fafc;">
+            <td colspan="2" style="padding: 10px 16px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #64748b; border-bottom: 1px solid #e2e8f0;">
+              Match Details
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 12px 16px; font-size: 13px; color: #64748b; border-bottom: 1px solid #f1f5f9; width: 38%;">Pitch / Court</td>
+            <td style="padding: 12px 16px; font-size: 13px; font-weight: 700; color: #0f172a; border-bottom: 1px solid #f1f5f9;">${courtName}</td>
+          </tr>
+          <tr>
+            <td style="padding: 12px 16px; font-size: 13px; color: #64748b; border-bottom: 1px solid #f1f5f9;">Date & Time</td>
+            <td style="padding: 12px 16px; font-size: 13px; font-weight: 700; color: #1e40af; border-bottom: 1px solid #f1f5f9;">${booking.booking_date} &bull; ${timeRangeStr}</td>
+          </tr>
+          <tr>
+            <td style="padding: 12px 16px; font-size: 13px; color: #64748b;">Venue Location</td>
+            <td style="padding: 12px 16px; font-size: 12px; color: #334155;">
+              <strong>${venue.name}</strong><br/>
+              ${venue.address}
+            </td>
+          </tr>
+        </table>
+
+        <!-- Matchday Readiness Checklist -->
+        <div style="background: #eff6ff; border-left: 4px solid #2563eb; padding: 16px; border-radius: 0 8px 8px 0; margin-bottom: 24px;">
+          <div style="font-size: 12px; font-weight: 800; color: #1e40af; margin-bottom: 6px; text-transform: uppercase;">Kickoff Checklist</div>
+          <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #334155; line-height: 1.6;">
+            <li><strong>Arrive 10 mins early:</strong> Gives your team time to change, stretch, and check in.</li>
+            <li><strong>Correct Footwear:</strong> Turf shoes or rubber studs only. Metal spikes are strictly prohibited.</li>
+            <li><strong>Hydration & Locker Rooms:</strong> Purified water dispensers and lockers are ready on-site.</li>
+          </ul>
+        </div>
+      </td>
+    </tr>
+
+    <!-- Footer -->
+    <tr>
+      <td style="background: #f8fafc; padding: 20px 24px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8;">
+        <p style="margin: 0 0 4px 0;">Sent by <strong>${venue.name}</strong> via Resend API.</p>
+        <p style="margin: 0;">Venue Helpline: ${venue.contact_phone}</p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `;
+
+    return this.sendEmail({
+      to: recipient,
+      subject,
+      html,
+      text,
+      from: venue.email_sender || this.DEFAULT_SENDER
     });
   }
 }

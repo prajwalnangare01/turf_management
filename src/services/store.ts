@@ -11,7 +11,7 @@ const DEFAULT_VENUE: Venue = {
   address: 'Plot 42, Sports Enclave, Pune',
   timezone: 'Asia/Kolkata',
   gst_number: '29ABCDE1234F1Z5',
-  contact_phone: '+91 98765 43210',
+  contact_phone: '+91 95791 58374',
   is_active: true,
   min_notice_minutes: 15,
   max_advance_days: 14,
@@ -358,6 +358,23 @@ class AppStore {
   private coupons: Coupon[] = DEFAULT_COUPONS;
   private notificationLogs: NotificationLog[] = [];
   private auditLogs: AuditLog[] = [];
+  private listeners: (() => void)[] = [];
+
+  public subscribe(listener: () => void): () => void {
+    this.listeners.push(listener);
+    return () => {
+      this.listeners = this.listeners.filter(l => l !== listener);
+    };
+  }
+
+  public notify() {
+    this.listeners.forEach(fn => {
+      try { fn(); } catch (e) { console.error(e); }
+    });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('turfflow_store_synced'));
+    }
+  }
 
   constructor() {
     this.loadFromStorage();
@@ -393,6 +410,9 @@ class AppStore {
         }
         if (this.venue.address && this.venue.address.includes('Bengaluru')) {
           this.venue.address = 'Plot 42, Sports Enclave, Pune';
+        }
+        if (!this.venue.contact_phone || this.venue.contact_phone.includes('98765 43210') || this.venue.contact_phone.includes('9876543210')) {
+          this.venue.contact_phone = '+91 95791 58374';
         }
         this.sports = parsed.sports || DEFAULT_SPORTS;
         this.courts = parsed.courts || DEFAULT_COURTS;
@@ -450,6 +470,7 @@ class AppStore {
     } catch (e) {
       console.warn('LocalStorage save failed', e);
     }
+    this.notify();
   }
 
   // Getters

@@ -8,7 +8,7 @@ export const DEFAULT_VENUE = {
   google_maps_link: 'https://maps.google.com/?q=18.5204,73.8567',
   timezone: 'Asia/Kolkata',
   gst_number: '27ABCDE1234F1Z5',
-  contact_phone: '+91 98765 43210',
+  contact_phone: '+91 95791 58374',
   is_active: true,
   min_notice_minutes: 15,
   max_advance_days: 14,
