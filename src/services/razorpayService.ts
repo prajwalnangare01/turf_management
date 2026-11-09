@@ -4,6 +4,7 @@ import { RedisLockService } from './redisLockService';
 import { NotificationService } from './notificationService';
 import { AuditLogger } from './auditLogger';
 import { Payment } from '../types/schema';
+import { SupabaseSyncService } from './supabaseSyncService';
 
 export interface RazorpayOrder {
   order_id: string;
@@ -35,6 +36,11 @@ export class RazorpayService {
 
     payments.push(paymentRecord);
     store.setPayments(payments);
+
+    // Sync payment order to Supabase
+    SupabaseSyncService.syncPaymentToSupabase(paymentRecord).catch(err => {
+      console.warn('❌ [RazorpayService] Error syncing payment record to Supabase:', err);
+    });
 
     return {
       order_id: orderId,
@@ -98,6 +104,9 @@ export class RazorpayService {
         // Slot was taken by someone else! Issue 100% automatic conflict refund
         payment.status = 'refunded';
         store.setPayments(payments);
+        SupabaseSyncService.syncPaymentToSupabase(payment).catch(err => {
+          console.warn('❌ [RazorpayService] Error syncing refunded payment to Supabase:', err);
+        });
 
         PostgresEngine.updateBookingStatus(booking.id, 'refunded', {
           refundAmount: booking.total_amount,
@@ -132,6 +141,9 @@ export class RazorpayService {
       NotificationService.enqueueNotification(booking, 'confirmation');
 
       store.setPayments(payments);
+      SupabaseSyncService.syncPaymentToSupabase(payment).catch(err => {
+        console.warn('❌ [RazorpayService] Error syncing captured payment to Supabase:', err);
+      });
 
       return {
         success: true,
@@ -150,6 +162,9 @@ export class RazorpayService {
       RedisLockService.releaseLock(booking.court_id, booking.booking_date, booking.start_time);
 
       store.setPayments(payments);
+      SupabaseSyncService.syncPaymentToSupabase(payment).catch(err => {
+        console.warn('❌ [RazorpayService] Error syncing failed payment to Supabase:', err);
+      });
 
       return {
         success: false,

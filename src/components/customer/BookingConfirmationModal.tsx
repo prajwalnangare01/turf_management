@@ -9,7 +9,18 @@ interface BookingConfirmationModalProps {
 }
 
 export const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> = ({ bookingRef, onClose }) => {
-  const booking = store.getBookings().find(b => b.booking_ref === bookingRef);
+  const [cachedBooking, setCachedBooking] = useState(() => 
+    store.getBookings().find(b => b.booking_ref === bookingRef)
+  );
+
+  React.useEffect(() => {
+    const found = store.getBookings().find(b => b.booking_ref === bookingRef);
+    if (found) {
+      setCachedBooking(found);
+    }
+  }, [bookingRef]);
+
+  const booking = cachedBooking || store.getBookings().find(b => b.booking_ref === bookingRef);
   const venue = store.getVenue();
   const court = store.getCourts().find(c => c.id === booking?.court_id);
   const notif = store.getNotificationLogs().find(n => n.booking_id === booking?.id && n.channel !== 'email');

@@ -5,6 +5,7 @@ import { PostgresEngine } from '../../services/postgresEngine';
 import { RazorpayService } from '../../services/razorpayService';
 import { RedisLockService } from '../../services/redisLockService';
 import { CouponService } from '../../services/couponService';
+import { SupabaseSyncService } from '../../services/supabaseSyncService';
 import { normalizeIndianPhone } from '../../utils/venueTime';
 import { ShieldCheck, Tag, CreditCard, Smartphone, AlertTriangle, X, Timer, PersonStanding, Clock, RefreshCw } from 'lucide-react';
 import { formatTimeRange12h, formatDateDDMMYYYY } from '../../utils/formatters';
@@ -221,6 +222,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         store.setCustomers(customers);
       }
 
+      // Sync customer immediately to Supabase
+      SupabaseSyncService.syncCustomerToSupabase(customer).catch(err => {
+        console.warn('❌ [CheckoutModal] Error syncing customer to Supabase:', err);
+      });
+
       // EDGE CASE: Pre-check locks and DB overlaps across ALL blocks before creating any booking
       for (const block of contiguousBlocks) {
         const hasConflict = store.getBookings().some(b =>
@@ -345,6 +351,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           if (currentCustomer) {
             RedisLockService.releaseLocksForBooking(court.id, dateStr, block.start_time, block.end_time, currentCustomer.id);
           }
+        }
+
+        // Explicitly sync confirmed primary booking to Supabase
+        const confirmedPrimary = store.getBookings().find(b => b.id === primaryBooking.id);
+        if (confirmedPrimary) {
+          SupabaseSyncService.syncBookingToSupabase(confirmedPrimary).catch(err => {
+            console.warn('❌ [CheckoutModal] Error syncing primary booking:', err);
+          });
         }
 
         onSuccess(primaryBooking.booking_ref);

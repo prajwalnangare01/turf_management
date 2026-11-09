@@ -158,6 +158,11 @@ export class PostgresEngine {
       this.syncCustomerStats(newBooking.customer_id, 'confirmed', newBooking.total_amount);
     }
 
+    // Persist to Supabase PostgreSQL immediately
+    SupabaseSyncService.syncBookingToSupabase(newBooking).catch(err => {
+      console.warn('❌ [PostgresEngine] Error syncing new booking to Supabase:', err);
+    });
+
     return {
       success: true,
       message: 'Booking inserted successfully into database',
@@ -247,6 +252,11 @@ export class PostgresEngine {
       RedisLockService.releaseLocksForBooking(booking.court_id, booking.booking_date, booking.start_time, booking.end_time);
       NotificationService.enqueueNotification(booking, 'cancellation');
     }
+
+    // Persist booking update to Supabase PostgreSQL immediately
+    SupabaseSyncService.updateBookingInSupabase(booking.id, booking).catch(err => {
+      console.warn('❌ [PostgresEngine] Error syncing booking status to Supabase:', err);
+    });
 
     return {
       success: true,

@@ -150,7 +150,27 @@ export class SupabaseSyncService {
           updated_at: b.updated_at
         }));
 
-        store.setBookings(normalizedBookings);
+        // Merge with existing local store to avoid wiping in-flight bookings
+        const existingLocal = store.getBookings();
+        const mergedBookings = [...normalizedBookings];
+        const nowMs = Date.now();
+
+        for (const loc of existingLocal) {
+          const exists = mergedBookings.some(b => b.id === loc.id || b.booking_ref === loc.booking_ref);
+          if (!exists) {
+            const createdAtMs = loc.created_at ? new Date(loc.created_at).getTime() : 0;
+            // Retain recent bookings created in the last 90 seconds or in active states
+            if (nowMs - createdAtMs < 90000 || loc.status === 'confirmed' || loc.status === 'pending_payment') {
+              mergedBookings.push(loc);
+              // Trigger background sync to Supabase so it gets persisted
+              this.syncBookingToSupabase(loc).catch(err => {
+                console.warn('[Supabase Sync] Re-syncing in-flight booking during hydration:', err);
+              });
+            }
+          }
+        }
+
+        store.setBookings(mergedBookings);
       }
 
       // 6. Fetch Blocked Slots
@@ -182,6 +202,24 @@ export class SupabaseSyncService {
             expires_at: Number(l.expires_at)
           }));
         store.setSlotLocks(activeLocks);
+      }
+
+      // 8. Fetch Payments
+      const { data: payments, error: pErr } = await supabase.from('payments').select('*');
+      if (!pErr && payments) {
+        store.setPayments(payments.map((p: any) => ({
+          id: p.id,
+          booking_id: p.booking_id,
+          gateway: p.gateway,
+          gateway_order_id: p.gateway_order_id || undefined,
+          gateway_payment_id: p.gateway_payment_id || undefined,
+          amount: Number(p.amount),
+          status: p.status,
+          method: p.method,
+          raw_webhook_payload: p.raw_webhook_payload || undefined,
+          created_at: p.created_at,
+          updated_at: p.updated_at
+        })));
       }
 
       console.log(`✅ [Supabase Sync] Hydration complete! Loaded ${bookings?.length || 0} bookings, ${customers?.length || 0} customers.`);
@@ -385,15 +423,33 @@ export class SupabaseSyncService {
     if (!supabase) return false;
 
     try {
+      // 1. Ensure the customer exists in Supabase first to satisfy foreign key constraint
+      if (booking.customer_id) {
+        const customer = store.getCustomers().find(c => c.id === booking.customer_id);
+        if (customer) {
+          const syncedCust = await this.syncCustomerToSupabase(customer);
+          if (syncedCust && syncedCust.id !== booking.customer_id) {
+            booking.customer_id = syncedCust.id;
+          }
+        }
+      }
+
+      const formattedStart = typeof booking.start_time === 'string' && booking.start_time.length === 5 
+        ? `${booking.start_time}:00` 
+        : booking.start_time;
+      const formattedEnd = typeof booking.end_time === 'string' && booking.end_time.length === 5 
+        ? `${booking.end_time}:00` 
+        : booking.end_time;
+
       const payload = {
         id: booking.id,
         booking_ref: booking.booking_ref,
         customer_id: booking.customer_id,
         court_id: booking.court_id,
         sport_id: booking.sport_id,
-        booking_date: booking.booking_date,
-        start_time: booking.start_time,
-        end_time: booking.end_time,
+        booking_date: typeof booking.booking_date === 'string' ? booking.booking_date.slice(0, 10) : booking.booking_date,
+        start_time: formattedStart,
+        end_time: formattedEnd,
         source: booking.source || 'online',
         status: booking.status || 'pending_payment',
         total_amount: booking.total_amount,
@@ -408,6 +464,7 @@ export class SupabaseSyncService {
         cancelled_at: booking.cancelled_at || null,
         cancellation_notice_hours: booking.cancellation_notice_hours || null,
         cancellation_met_terms: booking.cancellation_met_terms ?? null,
+        gateway_payment_id: booking.gateway_payment_id || null,
         created_at: booking.created_at || new Date().toISOString(),
         updated_at: booking.updated_at || new Date().toISOString()
       };
@@ -417,6 +474,7 @@ export class SupabaseSyncService {
         console.error('❌ [Supabase Sync] Error syncing booking:', error.message);
         return false;
       }
+      console.log(`✅ [Supabase Sync] Synced booking ${booking.booking_ref} (${booking.status}) to Supabase.`);
       return true;
     } catch (err: any) {
       console.error('❌ [Supabase Sync] Exception syncing booking:', err.message);
@@ -432,10 +490,29 @@ export class SupabaseSyncService {
     if (!supabase) return false;
 
     try {
-      const payload = {
-        ...updates,
+      // Whitelist only columns that exist in the PostgreSQL bookings table
+      const allowedColumns = [
+        'booking_ref', 'customer_id', 'court_id', 'sport_id',
+        'booking_date', 'start_time', 'end_time', 'source', 'status',
+        'total_amount', 'discount_amount', 'coupon_id', 'created_by_admin_id',
+        'notes', 'refund_amount', 'refund_reason', 'refunded_at',
+        'cancelled_by', 'cancelled_at', 'cancellation_notice_hours',
+        'cancellation_met_terms', 'gateway_payment_id', 'reminder_sent'
+      ];
+
+      const payload: Record<string, any> = {
         updated_at: new Date().toISOString()
       };
+
+      for (const [key, value] of Object.entries(updates)) {
+        if (allowedColumns.includes(key)) {
+          if (key === 'start_time' || key === 'end_time') {
+            payload[key] = typeof value === 'string' && value.length === 5 ? `${value}:00` : value;
+          } else {
+            payload[key] = value ?? null;
+          }
+        }
+      }
 
       const { error } = await supabase
         .from('bookings')
@@ -446,6 +523,7 @@ export class SupabaseSyncService {
         console.error('❌ [Supabase Sync] Error updating booking:', error.message);
         return false;
       }
+      console.log(`✅ [Supabase Sync] Updated booking ${bookingId} in Supabase.`);
       return true;
     } catch (err: any) {
       console.error('❌ [Supabase Sync] Exception updating booking:', err.message);
@@ -456,23 +534,47 @@ export class SupabaseSyncService {
   /**
    * Upsert customer in Supabase
    */
-  public static async syncCustomerToSupabase(customer: Customer): Promise<boolean> {
+  public static async syncCustomerToSupabase(customer: Customer): Promise<Customer> {
     const supabase = getSupabase();
-    if (!supabase) return false;
+    if (!supabase) return customer;
 
     try {
+      // Check if customer exists by phone to align ID
+      const { data: existing } = await supabase
+        .from('customers')
+        .select('id')
+        .eq('phone', customer.phone)
+        .limit(1);
+
+      if (existing && existing.length > 0 && existing[0].id !== customer.id) {
+        customer.id = existing[0].id;
+      }
+
+      const payload = {
+        id: customer.id,
+        name: customer.name,
+        phone: customer.phone,
+        email: customer.email || null,
+        password: customer.password || null,
+        total_bookings: customer.total_bookings || 0,
+        total_spent: customer.total_spent || 0,
+        no_show_count: customer.no_show_count || 0,
+        is_blacklisted: customer.is_blacklisted || false,
+        email_verified: customer.email_verified || false,
+        created_at: customer.created_at || new Date().toISOString()
+      };
+
       const { error } = await supabase
         .from('customers')
-        .upsert([customer], { onConflict: 'phone' });
+        .upsert([payload], { onConflict: 'id' });
 
       if (error) {
         console.error('❌ [Supabase Sync] Error syncing customer:', error.message);
-        return false;
       }
-      return true;
+      return customer;
     } catch (err: any) {
       console.error('❌ [Supabase Sync] Exception syncing customer:', err.message);
-      return false;
+      return customer;
     }
   }
 
@@ -484,7 +586,21 @@ export class SupabaseSyncService {
     if (!supabase) return false;
 
     try {
-      const { error } = await supabase.from('payments').insert([payment]);
+      const payload = {
+        id: payment.id,
+        booking_id: payment.booking_id,
+        gateway: payment.gateway || 'razorpay',
+        gateway_order_id: payment.gateway_order_id || null,
+        gateway_payment_id: payment.gateway_payment_id || null,
+        amount: payment.amount,
+        status: payment.status,
+        method: payment.method || 'upi',
+        raw_webhook_payload: payment.raw_webhook_payload || null,
+        created_at: payment.created_at || new Date().toISOString(),
+        updated_at: payment.updated_at || new Date().toISOString()
+      };
+
+      const { error } = await supabase.from('payments').upsert([payload], { onConflict: 'id' });
       if (error) {
         console.error('❌ [Supabase Sync] Error syncing payment:', error.message);
         return false;
