@@ -69,7 +69,8 @@ export class WhatsAppFormatter {
     }
 
     if (totalAvailable === 0) {
-      out += `😔 Sorry, no slots are available for ${formattedDate}. Would you like to check another date?\n`;
+      out += `😔 Sorry, no slots are available for ${formattedDate}.\n\n` +
+        `👉 Reply *1* to select another date, or reply *menu* for main options.\n`;
     } else {
       out += `━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
       out += `💡 *To book:* Just reply with the court name and time (e.g., *"Book Turf A at 7:00 PM"*).\n`;

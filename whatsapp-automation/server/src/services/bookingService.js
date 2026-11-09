@@ -7,6 +7,7 @@ import { EmailService } from './emailService.js';
 import { SmsService } from './smsService.js';
 import { SlotEngine } from './slotEngine.js';
 import { SupabaseService } from './supabaseService.js';
+import { getVenueDateString, getVenueMinutesFromMidnight } from '../utils/venueTime.js';
 
 export class BookingService {
   /**
@@ -23,9 +24,42 @@ export class BookingService {
       return { success: false, message: `Court '${courtId}' not found.` };
     }
 
+    const todayStr = getVenueDateString(0);
+    if (date < todayStr) {
+      return { success: false, message: `Cannot book date ${date} as it is in the past. Today is ${todayStr}.` };
+    }
+
     const durationMins = court.slot_duration_minutes || 60;
     const startMins = SlotEngine.timeToMinutes(startTime);
     const endTime = SlotEngine.minutesToTime(startMins + durationMins);
+
+    // Operating hours check
+    const openMins = SlotEngine.timeToMinutes(court.opening_time || '06:00');
+    const closeMins = SlotEngine.timeToMinutes(court.closing_time || '23:00');
+    if (startMins < openMins || startMins >= closeMins) {
+      return {
+        success: false,
+        message: `Time ${startTime} is outside venue operating hours (${court.opening_time || '06:00'} — ${court.closing_time || '23:00'}).`
+      };
+    }
+
+    // Verify slot actually exists and is available
+    const slots = SlotEngine.computeSlotsForCourt(court, date, customerPhone);
+    const slotData = slots.find(s => s.start_time === startTime);
+    if (!slotData) {
+      return {
+        success: false,
+        message: `Slot at ${startTime} on ${date} does not exist for ${court.name}.`
+      };
+    }
+    if (slotData.status !== 'available') {
+      return {
+        success: false,
+        message: slotData.status === 'locked'
+          ? `Slot ${startTime} is temporarily held by another player. Please select another time.`
+          : `Slot ${startTime} is already booked or past.`
+      };
+    }
 
     // Concurrency Layer 1: Acquire Slot Lock for 5 minutes (300 seconds)
     const lockResult = LockService.acquireLock(court.id, date, startTime, customerPhone, 300);
@@ -54,10 +88,7 @@ export class BookingService {
       };
     }
 
-    // Determine slot price
-    const slots = SlotEngine.computeSlotsForCourt(court, date, customerPhone);
-    const slotData = slots.find(s => s.start_time === startTime);
-    const finalPrice = slotData ? slotData.price : court.base_price_per_hour;
+    const finalPrice = slotData.price || court.base_price_per_hour;
 
     // Get or register customer
     const customer = store.getOrCreateCustomer(customerName, customerPhone);
@@ -285,9 +316,9 @@ export class BookingService {
       });
 
       if (onlyPending) {
-        const now = new Date();
-        const todayStr = now.toISOString().slice(0, 10);
-        const currentHourMin = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        const todayStr = getVenueDateString(0);
+        const currentMins = getVenueMinutesFromMidnight();
+        const currentHourMin = `${String(Math.floor(currentMins / 60)).padStart(2, '0')}:${String(currentMins % 60).padStart(2, '0')}`;
 
         bookings = bookings.filter(b => {
           // Never show cancelled or refunded

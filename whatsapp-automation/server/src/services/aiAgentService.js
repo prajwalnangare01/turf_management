@@ -4,6 +4,7 @@ import { SlotEngine } from './slotEngine.js';
 import { BookingService } from './bookingService.js';
 import { WhatsAppFormatter } from '../utils/whatsappFormatter.js';
 import { LockService } from './lockService.js';
+import { getVenueNow, getVenueDateString, getVenueMinutesFromMidnight } from '../utils/venueTime.js';
 
 // In-memory conversation state machine per customer phone
 const dialogSessions = new Map();
@@ -12,49 +13,45 @@ export class AiAgentService {
   /**
    * Helper to parse relative date expressions (e.g. "today", "tomorrow", "friday", "2026-11-06", "15 Nov")
    * @param {string} text
-   * @param {boolean} strict - if true, returns null when unrecognized instead of defaulting to tomorrow
+   * @param {boolean} strict - if true, returns null when unrecognized instead of defaulting to today
    */
   static parseDate(text, strict = false) {
-    if (!text) return strict ? null : new Date().toISOString().slice(0, 10);
+    if (!text) return strict ? null : getVenueDateString(0);
     const lower = text.toLowerCase().trim();
-    const now = new Date();
 
     if (lower === '1' || lower === 'today' || lower === 'aaj') {
-      return now.toISOString().slice(0, 10);
+      return getVenueDateString(0);
     }
 
     if (lower === '2' || lower === 'tomorrow' || lower === 'kal') {
-      const tomorrow = new Date(now);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      return tomorrow.toISOString().slice(0, 10);
+      return getVenueDateString(1);
+    }
+
+    if (lower === '3' || lower === 'day after tomorrow' || lower === 'parso') {
+      return getVenueDateString(2);
     }
 
     if (lower.includes('today') || lower.includes('aaj')) {
-      return now.toISOString().slice(0, 10);
+      return getVenueDateString(0);
     }
 
     if (lower.includes('tomorrow') || lower.includes('kal')) {
-      const tomorrow = new Date(now);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      return tomorrow.toISOString().slice(0, 10);
+      return getVenueDateString(1);
     }
 
     if (lower.includes('day after tomorrow') || lower.includes('parso')) {
-      const dayAfter = new Date(now);
-      dayAfter.setDate(dayAfter.getDate() + 2);
-      return dayAfter.toISOString().slice(0, 10);
+      return getVenueDateString(2);
     }
 
+    const vNow = getVenueNow();
     const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
     for (let i = 0; i < days.length; i++) {
       if (lower.includes(days[i])) {
         const targetDay = i;
-        const currentDay = now.getDay();
+        const currentDay = vNow.getDay();
         let diff = targetDay - currentDay;
         if (diff <= 0) diff += 7; // Next occurrence
-        const targetDate = new Date(now);
-        targetDate.setDate(targetDate.getDate() + diff);
-        return targetDate.toISOString().slice(0, 10);
+        return getVenueDateString(diff);
       }
     }
 
@@ -63,7 +60,7 @@ export class AiAgentService {
     if (matchDMY) {
       const d = String(matchDMY[1]).padStart(2, '0');
       const m = String(matchDMY[2]).padStart(2, '0');
-      const y = matchDMY[3] || String(now.getFullYear());
+      const y = matchDMY[3] || String(vNow.getFullYear());
       return `${y}-${m}-${d}`;
     }
 
@@ -80,7 +77,7 @@ export class AiAgentService {
       const mIdx = months.indexOf(monthPrefix);
       if (mIdx !== -1) {
         const m = String(mIdx + 1).padStart(2, '0');
-        const y = now.getFullYear();
+        const y = vNow.getFullYear();
         return `${y}-${m}-${d}`;
       }
     }
@@ -92,28 +89,23 @@ export class AiAgentService {
       const mIdx = months.indexOf(monthPrefix);
       if (mIdx !== -1) {
         const m = String(mIdx + 1).padStart(2, '0');
-        const y = now.getFullYear();
+        const y = vNow.getFullYear();
         return `${y}-${m}-${d}`;
       }
     }
 
     if (strict) return null;
 
-    // Default fallback to tomorrow
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    return tomorrow.toISOString().slice(0, 10);
+    // Default fallback to today
+    return getVenueDateString(0);
   }
 
   /**
    * Validate that date is within today and the next 10 days
    */
   static validate10DayWindow(dateStr) {
-    const now = new Date();
-    const todayStr = now.toISOString().slice(0, 10);
-    const maxDate = new Date(now);
-    maxDate.setDate(maxDate.getDate() + 10);
-    const maxDateStr = maxDate.toISOString().slice(0, 10);
+    const todayStr = getVenueDateString(0);
+    const maxDateStr = getVenueDateString(10);
 
     if (dateStr < todayStr) {
       return { valid: false, reason: 'past', todayStr, maxDateStr };
@@ -126,13 +118,22 @@ export class AiAgentService {
 
   /**
    * Helper to parse time expressions (e.g. "7pm", "19:00", "7:00 pm", "morning", "evening", "kal shaam 7 baje")
+   * IMPORTANT: Single digits ("1", "2", "3") without prefix or am/pm are menu responses and NEVER parsed as time.
    */
   static parseTime(text) {
-    const lower = text.toLowerCase();
+    if (!text) return null;
+    const trimmed = text.trim();
+    const lower = trimmed.toLowerCase();
+
+    // STRICT GUARD: Single isolated digits or menu inputs (e.g. "1", "2", "3", "0") are NEVER times!
+    if (/^[0-9]$/.test(trimmed)) {
+      return null;
+    }
+
     const hasEveningContext = lower.includes('shaam') || lower.includes('evening') || lower.includes('raat') || lower.includes('night') || lower.includes('pm');
     const hasMorningContext = lower.includes('subah') || lower.includes('morning') || lower.includes('am');
 
-    // 12-hour format e.g. "7pm", "7:00 pm", "7 pm", "10am"
+    // 1. Explicit 12-hour format e.g. "7pm", "7:00 pm", "7 pm", "10am", "10:30am"
     const match12 = lower.match(/\b([1-9]|1[0-2])(?::([0-5]\d))?\s*(am|pm)\b/);
     if (match12) {
       let hour = parseInt(match12[1], 10);
@@ -143,30 +144,34 @@ export class AiAgentService {
       return `${String(hour).padStart(2, '0')}:${min}`;
     }
 
-    // 24-hour format e.g. "19:00"
+    // 2. Explicit 24-hour format e.g. "19:00", "07:00"
     const match24 = lower.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/);
     if (match24) {
       return `${String(match24[1]).padStart(2, '0')}:${match24[2]}`;
     }
 
-    // Colloquial e.g. "7 baje", "8:30 baje"
+    // 3. Colloquial Indian format e.g. "7 baje", "8:30 baje", "8 baje raat"
     const matchBaje = lower.match(/\b([1-9]|1[0-2])(?::([0-5]\d))?\s*baje\b/);
     if (matchBaje) {
       let h = parseInt(matchBaje[1], 10);
       const min = matchBaje[2] ? matchBaje[2] : '00';
-      if (hasEveningContext || (!hasMorningContext && h >= 5 && h <= 11)) {
-        h += 12;
+      if (hasEveningContext || (!hasMorningContext && (h <= 5 || h >= 6))) {
+        if (h < 12) h += 12;
       }
       return `${String(h).padStart(2, '0')}:${min}`;
     }
 
-    // Number with "at" or "for" e.g. "at 7", "for 8", "book 7"
-    const matchNum = lower.match(/\b(?:at|for|book|slot)?\s*([1-9]|1[0-2])(?::([0-5]\d))?\s*(?:in the\s*(?:morning|evening|night))?\b/);
-    if (matchNum && matchNum[1]) {
-      let h = parseInt(matchNum[1], 10);
-      const min = matchNum[2] ? matchNum[2] : '00';
-      if (hasEveningContext || (!hasMorningContext && h >= 5 && h <= 11)) {
-        h += 12;
+    // 4. Number with MANDATORY prefix "at", "for", "slot" or court name, e.g. "at 7", "for 8", "slot 6", "turf a 7"
+    // MUST NOT match isolated numbers without prefix!
+    const matchPrefixed = lower.match(/\b(?:at|for|slot|turf\s+[ab]|court\s+\d)\s+([1-9]|1[0-2])(?::([0-5]\d))?(?:\s*(?:in the\s*(?:morning|evening|night)))?\b/);
+    if (matchPrefixed && matchPrefixed[1]) {
+      let h = parseInt(matchPrefixed[1], 10);
+      const min = matchPrefixed[2] ? matchPrefixed[2] : '00';
+      // In sports turf context (open 6:00 to 23:00):
+      // If user says "at 7" without morning context, default to 19:00 (7 PM evening peak)
+      // If user says "at 1" or "at 2" or "at 3" or "at 4" or "at 5", it's 13:00, 14:00, etc. (afternoon)
+      if (hasEveningContext || (!hasMorningContext && (h <= 5 || h >= 6))) {
+        if (h < 12) h += 12;
       }
       return `${String(h).padStart(2, '0')}:${min}`;
     }
@@ -243,35 +248,49 @@ export class AiAgentService {
     if (session) {
       // Step A: User is picking Date (1. Today, 2. Tomorrow, 3. Any other date)
       if (session.step === 'awaiting_date_choice') {
-        const now = new Date();
-        const todayStr = now.toISOString().slice(0, 10);
-        const tomorrow = new Date(now);
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+        const todayStr = getVenueDateString(0);
+        const tomorrowStr = getVenueDateString(1);
 
         if (lower === '1' || lower === 'today' || lower === 'aaj') {
-          dialogSessions.set(phone, { step: 'awaiting_slot_selection', date: todayStr, updatedAt: Date.now() });
           const availData = SlotEngine.getAvailableSlots(null, todayStr, phone);
           const slotsFormatted = WhatsAppFormatter.formatAvailableSlots(availData);
+          const totalAvail = availData.courts.reduce((sum, c) => sum + c.slots.length, 0);
+
+          if (totalAvail > 0) {
+            dialogSessions.set(phone, { step: 'awaiting_slot_selection', date: todayStr, updatedAt: Date.now() });
+          } else {
+            // Keep in awaiting_date_choice so customer can pick tomorrow (2) or another date (3)
+            dialogSessions.set(phone, { step: 'awaiting_date_choice', updatedAt: Date.now() });
+          }
 
           return {
             reply: `🏟️ *Available Slots for Today (${WhatsAppFormatter.formatDate(todayStr)}):*\n\n` +
               slotsFormatted + `\n\n` +
-              `👉 *To reserve:* Reply with your court and time (e.g. *"Turf A at 7pm"* or *"Turf B at 8:30 PM"*).`,
+              (totalAvail > 0
+                ? `👉 *To reserve:* Reply with your court and time (e.g. *"Turf A at 7pm"* or *"Turf B at 8:30 PM"*).\n_(Or reply *1* to choose another date)_`
+                : `👉 _Reply *2* for Tomorrow, *3* for another date, or *menu* for main options._`),
             action: 'slots_for_today',
             date: todayStr
           };
         }
 
         if (lower === '2' || lower === 'tomorrow' || lower === 'kal') {
-          dialogSessions.set(phone, { step: 'awaiting_slot_selection', date: tomorrowStr, updatedAt: Date.now() });
           const availData = SlotEngine.getAvailableSlots(null, tomorrowStr, phone);
           const slotsFormatted = WhatsAppFormatter.formatAvailableSlots(availData);
+          const totalAvail = availData.courts.reduce((sum, c) => sum + c.slots.length, 0);
+
+          if (totalAvail > 0) {
+            dialogSessions.set(phone, { step: 'awaiting_slot_selection', date: tomorrowStr, updatedAt: Date.now() });
+          } else {
+            dialogSessions.set(phone, { step: 'awaiting_date_choice', updatedAt: Date.now() });
+          }
 
           return {
             reply: `🏟️ *Available Slots for Tomorrow (${WhatsAppFormatter.formatDate(tomorrowStr)}):*\n\n` +
               slotsFormatted + `\n\n` +
-              `👉 *To reserve:* Reply with your court and time (e.g. *"Turf A at 7pm"* or *"Court 1 at 19:00"*).`,
+              (totalAvail > 0
+                ? `👉 *To reserve:* Reply with your court and time (e.g. *"Turf A at 7pm"* or *"Court 1 at 19:00"*).\n_(Or reply *1* to choose another date)_`
+                : `👉 _Reply *1* for Today, *3* for another date, or *menu* for main options._`),
             action: 'slots_for_tomorrow',
             date: tomorrowStr
           };
@@ -304,14 +323,22 @@ export class AiAgentService {
             };
           }
 
-          dialogSessions.set(phone, { step: 'awaiting_slot_selection', date: directParsedDate, updatedAt: Date.now() });
           const availData = SlotEngine.getAvailableSlots(null, directParsedDate, phone);
           const slotsFormatted = WhatsAppFormatter.formatAvailableSlots(availData);
+          const totalAvail = availData.courts.reduce((sum, c) => sum + c.slots.length, 0);
+
+          if (totalAvail > 0) {
+            dialogSessions.set(phone, { step: 'awaiting_slot_selection', date: directParsedDate, updatedAt: Date.now() });
+          } else {
+            dialogSessions.set(phone, { step: 'awaiting_date_choice', updatedAt: Date.now() });
+          }
 
           return {
             reply: `🏟️ *Available Slots for ${WhatsAppFormatter.formatDate(directParsedDate)}:*\n\n` +
               slotsFormatted + `\n\n` +
-              `👉 *To reserve:* Reply with your court and time (e.g. *"Turf A at 7pm"*).`,
+              (totalAvail > 0
+                ? `👉 *To reserve:* Reply with your court and time (e.g. *"Turf A at 7pm"*).`
+                : `👉 Reply *1* to pick another date, or *menu* to return to main options.`),
             action: 'slots_for_date',
             date: directParsedDate
           };
@@ -328,11 +355,10 @@ export class AiAgentService {
         const parsedDate = this.parseDate(text, true);
 
         if (!parsedDate) {
-          const tomorrow = new Date();
-          tomorrow.setDate(tomorrow.getDate() + 1);
+          const tomorrowStr = getVenueDateString(1);
           return {
             reply: `⚠️ Could not understand that date format.\n` +
-              `👉 Please reply with a date within the next 10 days (e.g. *${WhatsAppFormatter.formatDate(tomorrow)}*, *15/11/2026*, or *Friday*):`,
+              `👉 Please reply with a date within the next 10 days (e.g. *${WhatsAppFormatter.formatDate(tomorrowStr)}*, *15/11/2026*, or *Friday*):`,
             action: 'custom_date_unrecognized'
           };
         }
@@ -352,14 +378,22 @@ export class AiAgentService {
           };
         }
 
-        dialogSessions.set(phone, { step: 'awaiting_slot_selection', date: parsedDate, updatedAt: Date.now() });
         const availData = SlotEngine.getAvailableSlots(null, parsedDate, phone);
         const slotsFormatted = WhatsAppFormatter.formatAvailableSlots(availData);
+        const totalAvail = availData.courts.reduce((sum, c) => sum + c.slots.length, 0);
+
+        if (totalAvail > 0) {
+          dialogSessions.set(phone, { step: 'awaiting_slot_selection', date: parsedDate, updatedAt: Date.now() });
+        } else {
+          dialogSessions.set(phone, { step: 'awaiting_date_choice', updatedAt: Date.now() });
+        }
 
         return {
           reply: `🏟️ *Available Slots for ${WhatsAppFormatter.formatDate(parsedDate)}:*\n\n` +
             slotsFormatted + `\n\n` +
-            `👉 *To reserve:* Reply with your court and time (e.g. *"Turf A at 7pm"* or *"Turf B at 8:30 PM"*).`,
+            (totalAvail > 0
+              ? `👉 *To reserve:* Reply with your court and time (e.g. *"Turf A at 7pm"* or *"Turf B at 8:30 PM"*).`
+              : `👉 Reply *1* to pick another date, or *menu* to return to main options.`),
           action: 'slots_for_custom_date',
           date: parsedDate
         };
@@ -367,12 +401,72 @@ export class AiAgentService {
 
       // Step C: User is picking Slot/Time for the chosen date
       if (session.step === 'awaiting_slot_selection') {
+        // INTERCEPT NAVIGATION & MENU NUMBERS FIRST:
+        // Option 1: User wants to pick another date / book turf
+        if (lower === '1' || lower === 'book turf' || lower === 'change date' || lower === 'select date' || lower === 'other date') {
+          dialogSessions.set(phone, { step: 'awaiting_date_choice', updatedAt: Date.now() });
+          return {
+            reply: this.getDateSelectionPrompt(),
+            action: 'book_turf_date_prompt'
+          };
+        }
+
+        // Option 2: User wants to see available slots for today
+        if (lower === '2' || lower === 'today' || lower === 'slots today' || lower.includes('available slots for today')) {
+          const todayStr = getVenueDateString(0);
+          const availData = SlotEngine.getAvailableSlots(null, todayStr, phone);
+          const slotsFormatted = WhatsAppFormatter.formatAvailableSlots(availData);
+          const totalAvail = availData.courts.reduce((sum, c) => sum + c.slots.length, 0);
+
+          if (totalAvail > 0) {
+            dialogSessions.set(phone, { step: 'awaiting_slot_selection', date: todayStr, updatedAt: Date.now() });
+          } else {
+            dialogSessions.set(phone, { step: 'awaiting_date_choice', updatedAt: Date.now() });
+          }
+
+          return {
+            reply: `🏟️ *Available Slots for Today (${WhatsAppFormatter.formatDate(todayStr)}):*\n\n` +
+              slotsFormatted + `\n\n` +
+              (totalAvail > 0
+                ? `👉 *To reserve:* Reply with your court and time (e.g. *"Turf A at 7pm"*), or reply *1* to pick another date.`
+                : `👉 Reply *2* for Tomorrow, or reply *1* to pick another date.`),
+            action: 'slots_today',
+            data: availData
+          };
+        }
+
+        // Option 3: User wants to check my bookings
+        if (lower === '3' || lower.includes('my booking') || lower.includes('my bookings') || lower.includes('show my bookings')) {
+          dialogSessions.delete(phone);
+          const bookings = BookingService.lookupBookings({ phone, onlyPending: true });
+          return {
+            reply: WhatsAppFormatter.formatCustomerBookings(bookings),
+            action: 'lookup_bookings',
+            data: bookings
+          };
+        }
+
+        // Date switches while in slot selection
+        if (lower === 'tomorrow' || lower === 'kal') {
+          const tomorrowStr = getVenueDateString(1);
+          dialogSessions.set(phone, { step: 'awaiting_slot_selection', date: tomorrowStr, updatedAt: Date.now() });
+          const availData = SlotEngine.getAvailableSlots(null, tomorrowStr, phone);
+          const slotsFormatted = WhatsAppFormatter.formatAvailableSlots(availData);
+          return {
+            reply: `🏟️ *Available Slots for Tomorrow (${WhatsAppFormatter.formatDate(tomorrowStr)}):*\n\n` +
+              slotsFormatted + `\n\n` +
+              `👉 *To reserve:* Reply with your court and time (e.g. *"Turf A at 7pm"*).`,
+            action: 'slots_for_tomorrow',
+            date: tomorrowStr
+          };
+        }
+
         const parsedTime = this.parseTime(text);
         if (!parsedTime) {
           return {
             reply: `⏰ What time would you like to play on *${WhatsAppFormatter.formatDate(session.date)}*?\n\n` +
-              `👉 Example: *"Turf A at 7:00 PM"* or *"8pm"*.\n` +
-              `_(Or reply "menu" to start over)_`,
+              `👉 Example: *"Turf A at 7:00 PM"*, *"8pm"*, or *"7 baje"*.\n\n` +
+              `_(Or reply *1* to pick another date, or *menu* to start over)_`,
             action: 'need_time_for_slot'
           };
         }
@@ -395,9 +489,6 @@ export class AiAgentService {
           customerPhone: phone
         });
 
-        // Clear session upon booking initiation
-        dialogSessions.delete(phone);
-
         if (!bookingRes.success) {
           const freshAvail = SlotEngine.getAvailableSlots(court.sport_ids[0], session.date, phone);
           const courtData = freshAvail.courts?.find(c => c.id === court.id);
@@ -405,12 +496,15 @@ export class AiAgentService {
           const timesText = openSlots.slice(0, 4).map(s => `• \`${WhatsAppFormatter.formatTime(s.start_time)}\` to \`${WhatsAppFormatter.formatTime(s.end_time)}\` (₹${s.price})`).join('\n');
 
           return {
-            reply: `⚠️ *Slot No Longer Available:*\n${bookingRes.message}\n\n` +
+            reply: `⚠️ *Slot Unavailable:*\n${bookingRes.message}\n\n` +
               (timesText ? `🏟️ *Remaining open timings on ${court.name} for ${WhatsAppFormatter.formatDate(session.date)}:*\n${timesText}\n\n` : '') +
-              `Reply with any of the available times above to lock it in! ⚽`,
+              `👉 Reply with any of the available times above, or reply *1* to pick another date! ⚽`,
             action: 'booking_conflict'
           };
         }
+
+        // Clear session on successful booking initiation
+        dialogSessions.delete(phone);
 
         return {
           reply: WhatsAppFormatter.formatPaymentCheckout({
@@ -435,14 +529,23 @@ export class AiAgentService {
 
     // OPTION 2: SHOW AVAILABLE SLOTS FOR TODAY
     if (lower === '2' || lower.includes('available slots for today') || lower === 'show available slots for today' || lower === 'slots today' || lower === 'today slots') {
-      const todayStr = new Date().toISOString().slice(0, 10);
+      const todayStr = getVenueDateString(0);
       const availData = SlotEngine.getAvailableSlots(null, todayStr, phone);
       const slotsFormatted = WhatsAppFormatter.formatAvailableSlots(availData);
+      const totalAvail = availData.courts.reduce((sum, c) => sum + c.slots.length, 0);
+
+      if (totalAvail > 0) {
+        dialogSessions.set(phone, { step: 'awaiting_slot_selection', date: todayStr, updatedAt: Date.now() });
+      } else {
+        dialogSessions.set(phone, { step: 'awaiting_date_choice', updatedAt: Date.now() });
+      }
 
       return {
-        reply: `📅 *Available Slots for Today (${WhatsAppFormatter.formatDate(todayStr)}):*\n\n` +
+        reply: `🏟️ *Available Slots for Today (${WhatsAppFormatter.formatDate(todayStr)}):*\n\n` +
           slotsFormatted + `\n\n` +
-          `👉 *To book:* Reply *1* or *"Book Turf"*!`,
+          (totalAvail > 0
+            ? `👉 *To reserve:* Reply with your court and time (e.g. *"Turf A at 7pm"*), or reply *1* to pick another date.`
+            : `👉 Reply *2* for Tomorrow, or reply *1* to pick another date.`),
         action: 'slots_today',
         data: availData
       };
@@ -451,7 +554,6 @@ export class AiAgentService {
     // NATURAL LANGUAGE AVAILABILITY CHECK (e.g. "show football slots for tomorrow", "slots for tomorrow", "available slots")
     if ((lower.includes('slot') || lower.includes('available') || lower.includes('availability') || lower.includes('timing') || lower.includes('free')) && !lower.includes('my booking')) {
       const parsedDate = this.parseDate(text);
-      dialogSessions.set(phone, { step: 'awaiting_slot_selection', date: parsedDate, updatedAt: Date.now() });
       const sports = store.getSports();
       let sport = null;
       if (lower.includes('football') || lower.includes('soccer')) {
@@ -461,10 +563,20 @@ export class AiAgentService {
       }
       const availData = SlotEngine.getAvailableSlots(sport?.id, parsedDate, phone);
       const slotsFormatted = WhatsAppFormatter.formatAvailableSlots(availData);
+      const totalAvail = availData.courts.reduce((sum, c) => sum + c.slots.length, 0);
+
+      if (totalAvail > 0) {
+        dialogSessions.set(phone, { step: 'awaiting_slot_selection', date: parsedDate, updatedAt: Date.now() });
+      } else {
+        dialogSessions.set(phone, { step: 'awaiting_date_choice', updatedAt: Date.now() });
+      }
+
       return {
         reply: `🏟️ *Available Slots for ${WhatsAppFormatter.formatDate(parsedDate)}:*\n\n` +
           slotsFormatted + `\n\n` +
-          `👉 *To reserve:* Reply with your court and time (e.g. *"Turf A at 7pm"* or *"Court 1 at 19:00"*).`,
+          (totalAvail > 0
+            ? `👉 *To reserve:* Reply with your court and time (e.g. *"Turf A at 7pm"* or *"Court 1 at 19:00"*).`
+            : `👉 Reply *1* to pick another date, or *menu* to return to main options.`),
         action: 'check_availability',
         data: availData
       };
@@ -486,8 +598,10 @@ export class AiAgentService {
       };
     }
 
-    // 4. DIRECT BOOKING SHORTCUT (e.g. "Book Turf A tomorrow at 8pm", "Reserve Turf B today at 6pm")
-    if (lower.includes('book') || lower.includes('reserve') || lower.includes('block')) {
+    // 4. DIRECT BOOKING SHORTCUT (e.g. "Book Turf A tomorrow at 8pm", "Reserve Turf B today at 6pm", "Turf A at 7pm")
+    const hasBookingIntent = lower.includes('book') || lower.includes('reserve') || lower.includes('block') ||
+      lower.includes('turf a') || lower.includes('turf b') || lower.includes('court 1');
+    if (hasBookingIntent) {
       const parsedTime = this.parseTime(text);
       if (parsedTime) {
         const parsedDate = this.parseDate(text);
@@ -516,8 +630,6 @@ export class AiAgentService {
           customerPhone: phone
         });
 
-        dialogSessions.delete(phone);
-
         if (!bookingRes.success) {
           const freshAvail = SlotEngine.getAvailableSlots(court.sport_ids[0], parsedDate, phone);
           const courtData = freshAvail.courts?.find(c => c.id === court.id);
@@ -525,12 +637,14 @@ export class AiAgentService {
           const timesText = openCourtSlots.slice(0, 4).map(s => `• \`${WhatsAppFormatter.formatTime(s.start_time)}\` to \`${WhatsAppFormatter.formatTime(s.end_time)}\` (₹${s.price})`).join('\n');
 
           return {
-            reply: `⚠️ *Slot No Longer Available:*\n${bookingRes.message}\n\n` +
+            reply: `⚠️ *Slot Unavailable:*\n${bookingRes.message}\n\n` +
               (timesText ? `🏟️ *Remaining open timings on ${court.name} for ${WhatsAppFormatter.formatDate(parsedDate)}:*\n${timesText}\n\n` : '') +
-              `Reply with any of the available times above to lock it in! ⚽`,
+              `👉 Reply with any of the available times above, or reply *1* to pick another date! ⚽`,
             action: 'booking_conflict'
           };
         }
+
+        dialogSessions.delete(phone);
 
         return {
           reply: WhatsAppFormatter.formatPaymentCheckout({

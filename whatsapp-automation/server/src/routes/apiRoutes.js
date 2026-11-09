@@ -10,6 +10,7 @@ import { GatePassService } from '../services/gatePassService.js';
 import { EmailService } from '../services/emailService.js';
 import { SmsService } from '../services/smsService.js';
 import { getSupabase } from '../data/supabaseClient.js';
+import { getVenueDateString } from '../utils/venueTime.js';
 
 export const apiRouter = express.Router();
 
@@ -126,7 +127,7 @@ apiRouter.get('/courts', (req, res) => {
  */
 apiRouter.get('/slots', (req, res) => {
   const { date, sport, courtId, sessionId } = req.query;
-  const targetDate = date || new Date().toISOString().slice(0, 10);
+  const targetDate = date || getVenueDateString(0);
 
   if (courtId) {
     const court = store.getCourts().find(c => c.id === courtId);

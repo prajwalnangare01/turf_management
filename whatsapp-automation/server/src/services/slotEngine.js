@@ -3,6 +3,7 @@
 
 import { store } from '../data/store.js';
 import { LockService } from './lockService.js';
+import { getVenueDateString, getVenueMinutesFromMidnight } from '../utils/venueTime.js';
 
 export class SlotEngine {
   static timeToMinutes(timeStr) {
@@ -47,13 +48,10 @@ export class SlotEngine {
       baseRate = court.weekend_price_per_hour;
     }
 
-    const currentYear = now.getFullYear();
-    const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
-    const currentDay = String(now.getDate()).padStart(2, '0');
-    const todayStr = `${currentYear}-${currentMonth}-${currentDay}`;
+    const todayStr = getVenueDateString();
     const isPastDate = dateStr < todayStr;
     const isToday = dateStr === todayStr;
-    const currentMins = now.getHours() * 60 + now.getMinutes();
+    const currentMins = getVenueMinutesFromMidnight();
 
     let cursor = openMins;
 
