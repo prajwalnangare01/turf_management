@@ -6,7 +6,7 @@ import { RazorpayService } from '../../services/razorpayService';
 import { RedisLockService } from '../../services/redisLockService';
 import { CouponService } from '../../services/couponService';
 import { normalizeIndianPhone } from '../../utils/venueTime';
-import { ShieldCheck, Tag, CreditCard, Smartphone, AlertTriangle, X, Timer, PersonStanding } from 'lucide-react';
+import { ShieldCheck, Tag, CreditCard, Smartphone, AlertTriangle, X, Timer, PersonStanding, Clock, RefreshCw } from 'lucide-react';
 import { formatTimeRange12h, formatDateDDMMYYYY } from '../../utils/formatters';
 
 interface CheckoutModalProps {
@@ -90,6 +90,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     return Math.max(0, Math.ceil((targetExpiryMs - Date.now()) / 1000));
   });
 
+  // 5-minute hold expired popup modal state
+  const [isHoldExpired, setIsHoldExpired] = useState(false);
+
   // OTP & Payment step
   const [step, setStep] = useState<'details' | 'otp' | 'payment'>('details');
   const [otpInput, setOtpInput] = useState('');
@@ -110,8 +113,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     }
   }, [court.id, dateStr, sessionId, selectedSlots]);
 
-  // Live 1-second countdown timer. If user does not complete in 5 minutes, release holds and refresh the page!
+  // Live 1-second countdown timer. If user does not complete in 5 minutes, release holds and show expired popup modal!
   useEffect(() => {
+    if (isHoldExpired) return;
+
     const timer = setInterval(() => {
       const remaining = Math.max(0, Math.ceil((targetExpiryMs - Date.now()) / 1000));
       setTimeLeft(remaining);
@@ -122,13 +127,15 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         selectedSlots.forEach(s => {
           RedisLockService.releaseLock(court.id, dateStr, s.start_time, sessionId);
         });
-        alert('Your 5-minute reservation hold has expired! The page will now refresh to show current slot availability.');
-        window.location.reload();
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.removeItem('turfflow_pending_checkout');
+        }
+        setIsHoldExpired(true);
       }
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [targetExpiryMs, court.id, dateStr, sessionId, selectedSlots]);
+  }, [targetExpiryMs, court.id, dateStr, sessionId, selectedSlots, isHoldExpired]);
 
   const rawTotal = selectedSlots.reduce((sum, s) => sum + s.price, 0);
   const discount = appliedCoupon
@@ -619,6 +626,52 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
         </div>
       </div>
+
+      {/* 5-Minute Hold Expired In-App Popup Modal */}
+      {isHoldExpired && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-900/75 backdrop-blur-md p-4">
+          <div className="bg-white border border-outline-variant/60 rounded-3xl w-full max-w-md p-6 space-y-5 shadow-2xl text-center animate-modalScaleIn text-on-surface">
+            <div className="w-16 h-16 bg-amber-50 border-2 border-amber-300 text-amber-600 rounded-full flex items-center justify-center mx-auto shadow-sm">
+              <Clock className="w-8 h-8 text-amber-600 animate-pulse" />
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="font-headline font-extrabold text-xl text-on-surface">
+                Reservation Hold Expired
+              </h3>
+              <p className="text-xs text-on-surface-variant leading-relaxed">
+                Your <strong>5-minute exclusive pitch reservation hold</strong> has timed out. To maintain fair access for other players, these slots have been released.
+              </p>
+            </div>
+
+            <div className="bg-surface-container-low p-4 rounded-xl text-xs space-y-2 border border-outline-variant/30 text-left font-medium">
+              <div className="flex justify-between">
+                <span className="text-on-surface-variant">Arena / Pitch:</span>
+                <strong className="text-on-surface font-bold">{court.name}</strong>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-on-surface-variant">Date:</span>
+                <strong className="text-on-surface font-bold">{formatDateDDMMYYYY(dateStr)}</strong>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-on-surface-variant">Selected Slots:</span>
+                <strong className="text-primary font-bold">{formattedSlotsSummary}</strong>
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="btn-primary w-full py-3 text-xs font-headline font-bold flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition cursor-pointer"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Refresh & View Available Slots
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
