@@ -167,6 +167,10 @@ export default defineConfig(({ mode }) => {
         '/pay': {
           target: 'http://localhost:5000',
           changeOrigin: true
+        },
+        '/simulator': {
+          target: 'http://localhost:5000',
+          changeOrigin: true
         }
       }
     }
