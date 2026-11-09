@@ -660,7 +660,10 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
             </div>
 
             {/* Modal Body: Clean Structured Ticket Card */}
-            <div className="p-5 sm:p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+            <div 
+              className="p-5 sm:p-6 space-y-4 max-h-[75vh] overflow-y-auto no-scrollbar"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            >
               
               {/* 4-Digit Gate Check-in OTP Box */}
               <div className="bg-[#fffbeb] border-2 border-dashed border-[#f59e0b] rounded-2xl p-4 text-center">

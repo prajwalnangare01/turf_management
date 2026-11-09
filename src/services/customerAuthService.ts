@@ -52,6 +52,40 @@ export class CustomerAuthService {
   }
 
   /**
+   * Check if phone number or email is already registered in the system.
+   * Enforces 1 user per 1 unique phone number and 1 unique email.
+   */
+  public static checkIdentityExists(phone?: string, email?: string): {
+    phoneExists: boolean;
+    emailExists: boolean;
+    existingCustomerByPhone?: Customer;
+    existingCustomerByEmail?: Customer;
+  } {
+    const customers = store.getCustomers();
+    const cleanDigits = phone ? phone.replace(/\D/g, '').slice(-10) : '';
+    const normalizedPhone = phone ? normalizeIndianPhone(phone) : '';
+    const cleanEmail = email ? email.trim().toLowerCase() : '';
+
+    const existingCustomerByPhone = cleanDigits.length >= 10
+      ? customers.find(c => 
+          normalizeIndianPhone(c.phone) === normalizedPhone || 
+          c.phone.replace(/\D/g, '').slice(-10) === cleanDigits
+        )
+      : undefined;
+
+    const existingCustomerByEmail = (cleanEmail && cleanEmail.includes('@') && cleanEmail.includes('.'))
+      ? customers.find(c => c.email && c.email.trim().toLowerCase() === cleanEmail)
+      : undefined;
+
+    return {
+      phoneExists: !!existingCustomerByPhone,
+      emailExists: !!existingCustomerByEmail,
+      existingCustomerByPhone,
+      existingCustomerByEmail
+    };
+  }
+
+  /**
    * Request Password Reset OTP via SMS
    */
   public static async sendPasswordResetOtp(identity: string): Promise<RequestSmsOtpResult> {
@@ -208,6 +242,12 @@ export class CustomerAuthService {
       return { success: false, error: 'Customer not found.' };
     }
 
+    // Enforce 1 unique email per user across the entire platform
+    const duplicateEmail = customers.find(c => c.id !== customerId && c.email && c.email.trim().toLowerCase() === cleanEmail);
+    if (duplicateEmail) {
+      return { success: false, error: 'This email address is already registered to another account. Each user must have a unique email.' };
+    }
+
     customer.email = cleanEmail;
     customer.email_verified = true;
     store.setCustomers(customers);
@@ -299,48 +339,27 @@ export class CustomerAuthService {
       return { success: false, error: 'Please set a secure password with at least 4 characters.' };
     }
 
-    const customers = store.getCustomers();
-    let existingPhone = customers.find(c => 
-      normalizeIndianPhone(c.phone) === normalizedPhone || 
-      c.phone.replace(/\D/g, '').slice(-10) === cleanDigits.slice(-10)
-    );
+    // 5. Strict 1-to-1 Uniqueness Check: 1 user must have 1 unique phone number and 1 unique email
+    const identityCheck = this.checkIdentityExists(phone, cleanEmail);
 
-    // If an account exists with this phone number:
-    // Check if it's an unactivated/walkin/WhatsApp account (no custom password, or matching customer name)
-    if (existingPhone) {
-      const isUnactivatedOrOwner = 
-        !existingPhone.password || 
-        existingPhone.password === '' || 
-        !existingPhone.email || 
-        existingPhone.name.trim().toLowerCase() === name.trim().toLowerCase();
-
-      if (isUnactivatedOrOwner) {
-        // Upgrade / activate existing customer account!
-        existingPhone.name = name.trim() || existingPhone.name;
-        existingPhone.email = cleanEmail;
-        existingPhone.password = password.trim();
-        existingPhone.email_verified = true;
-        store.setCustomers(customers);
-
-        // Sync to Supabase PostgreSQL immediately
-        SupabaseSyncService.syncCustomerToSupabase(existingPhone).catch(err => {
-          console.warn('[CustomerAuthService] Error syncing activated customer to Supabase:', err);
-        });
-
-        return this.createSession(existingPhone);
-      }
-
+    if (identityCheck.phoneExists && identityCheck.emailExists) {
       return { 
         success: false, 
-        error: 'An account with this mobile number already exists. Please select "Log In" to access your account.' 
+        error: 'An account with this mobile number and email already exists. Each user must have a unique number and email. Please select "Log In" to access your account.' 
       };
     }
 
-    let existingEmail = customers.find(c => c.email && c.email.toLowerCase() === cleanEmail);
-    if (existingEmail) {
+    if (identityCheck.phoneExists) {
       return { 
         success: false, 
-        error: 'An account with this email address already exists. Please select "Log In" to access your account.' 
+        error: 'An account with this mobile number already exists. Each user must have a unique phone number. Please select "Log In" to access your account.' 
+      };
+    }
+
+    if (identityCheck.emailExists) {
+      return { 
+        success: false, 
+        error: 'An account with this email address already exists. Each user must have a unique email address. Please select "Log In" to access your account.' 
       };
     }
 

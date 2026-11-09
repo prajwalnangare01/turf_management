@@ -54,6 +54,12 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
       return;
     }
 
+    const check = CustomerAuthService.checkIdentityExists(signupPhone);
+    if (check.phoneExists) {
+      setError('An account with this mobile number already exists. Each user must have a unique phone number. Please select the Log In tab.');
+      return;
+    }
+
     setIsSendingMobileOtp(true);
     try {
       const res = await CustomerAuthService.sendMobileSignupOtp(signupPhone, signupName || 'Player');
@@ -80,6 +86,12 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
     const cleanEmail = signupEmail.trim().toLowerCase();
     if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
       setError('Please enter a valid email address first.');
+      return;
+    }
+
+    const check = CustomerAuthService.checkIdentityExists(undefined, cleanEmail);
+    if (check.emailExists) {
+      setError('An account with this email address already exists. Each user must have a unique email address. Please select the Log In tab.');
       return;
     }
 
@@ -185,6 +197,21 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
     e.preventDefault();
     setError(null);
 
+    // Strict 1-to-1 uniqueness check: 1 user with 1 unique phone and 1 unique email
+    const check = CustomerAuthService.checkIdentityExists(signupPhone, signupEmail);
+    if (check.phoneExists && check.emailExists) {
+      setError('An account with this mobile number and email already exists. Each user must have a unique number and email. Please select "Log In" to access your account.');
+      return;
+    }
+    if (check.phoneExists) {
+      setError('An account with this mobile number already exists. Each user must have a unique phone number. Please select "Log In" to access your account.');
+      return;
+    }
+    if (check.emailExists) {
+      setError('An account with this email address already exists. Each user must have a unique email address. Please select "Log In" to access your account.');
+      return;
+    }
+
     // Frictionless fallback: If user didn't manually press Send OTP or type OTP, auto-fill demo OTPs
     let effectiveMobileOtp = signupMobileOtp.trim();
     if (!effectiveMobileOtp) {
@@ -223,15 +250,8 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
 
       if (res.success && res.session) {
         onSuccess(res.session.customer);
-      } else if (res.error?.includes('already exists')) {
-        // If account already exists with password, attempt automatic seamless login with the provided password!
-        const loginRes = CustomerAuthService.loginWithPassword(signupPhone, signupPassword);
-        if (loginRes.success && loginRes.session) {
-          onSuccess(loginRes.session.customer);
-        } else {
-          setError(res.error || 'An account with this mobile number already exists. Please select Log In.');
-        }
       } else {
+        // Do NOT allow bypass or login when number or email is already registered!
         setError(res.error || 'Registration failed. Please check your details.');
       }
     }, 400);
@@ -257,6 +277,11 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
     setSignupPassword('pass123');
     setError(null);
   };
+
+  // Real-time unique checks for phone and email (1 user per 1 unique phone and 1 unique email)
+  const identityCheck = CustomerAuthService.checkIdentityExists(signupPhone, signupEmail);
+  const isPhoneAlreadyRegistered = authMethod === 'signup' && identityCheck.phoneExists;
+  const isEmailAlreadyRegistered = authMethod === 'signup' && identityCheck.emailExists;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
@@ -494,6 +519,23 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
                   <span className="truncate">{mobileOtpNotice}</span>
                 </div>
               )}
+
+              {isPhoneAlreadyRegistered && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-2.5 py-1.5 rounded-xl text-[11px] font-semibold flex items-center justify-between gap-1 animate-in fade-in">
+                  <span>⚠️ This mobile number is already registered.</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLoginIdentity(signupPhone);
+                      setAuthMethod('login');
+                      setError(null);
+                    }}
+                    className="underline font-bold text-red-900 hover:text-red-950 shrink-0 cursor-pointer"
+                  >
+                    Go to Log In →
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* 2. Email Address & Email OTP via Resend */}
@@ -516,7 +558,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
                   />
                   <button
                     type="button"
-                    disabled={isSendingEmailOtp}
+                    disabled={isSendingEmailOtp || isEmailAlreadyRegistered}
                     onClick={handleSendSignupEmailOtp}
                     className="btn-secondary text-[11px] px-2.5 whitespace-nowrap font-bold shrink-0 flex items-center gap-1"
                   >
@@ -546,15 +588,38 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
                   <span className="truncate">{emailOtpNotice}</span>
                 </div>
               )}
+
+              {isEmailAlreadyRegistered && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-2.5 py-1.5 rounded-xl text-[11px] font-semibold flex items-center justify-between gap-1 animate-in fade-in">
+                  <span>⚠️ This email is already registered. Each account requires a unique email.</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLoginIdentity(signupEmail);
+                      setAuthMethod('login');
+                      setError(null);
+                    }}
+                    className="underline font-bold text-red-900 hover:text-red-950 shrink-0 cursor-pointer"
+                  >
+                    Go to Log In →
+                  </button>
+                </div>
+              )}
             </div>
 
             <button
               type="submit"
-              disabled={isLoading}
-              className="w-full btn-cta py-2.5 text-xs font-headline font-bold uppercase tracking-wider flex items-center justify-center gap-2 shadow-md mt-1 cursor-pointer"
+              disabled={isLoading || isPhoneAlreadyRegistered || isEmailAlreadyRegistered}
+              className={`w-full py-2.5 text-xs font-headline font-bold uppercase tracking-wider flex items-center justify-center gap-2 shadow-md mt-1 transition ${
+                isPhoneAlreadyRegistered || isEmailAlreadyRegistered
+                  ? 'bg-slate-300 text-slate-600 cursor-not-allowed opacity-80'
+                  : 'btn-cta cursor-pointer'
+              }`}
             >
               {isLoading ? (
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : isPhoneAlreadyRegistered || isEmailAlreadyRegistered ? (
+                <>⚠️ Number or Email Already Registered (Log In Instead)</>
               ) : (
                 <>
                   <Check className="w-4 h-4" /> Verify Both OTPs & Register

@@ -287,6 +287,18 @@ const dupSignup = CustomerAuthService.register('Another User', '9911223344', '12
 assert(dupSignup.success === false, 'Signup with already-registered phone cleanly rejected');
 assert(dupSignup.error?.includes('already exists') === true, 'Informs user to log in instead of creating duplicate');
 
+// 6b. Duplicate signup with same email (different phone)
+const dupEmailSignup = CustomerAuthService.register('Third User', '9911223355', '1234', 'pass123', 'newuser@example.com', '123456');
+assert(dupEmailSignup.success === false, 'Signup with already-registered email cleanly rejected');
+assert(dupEmailSignup.error?.includes('already exists') === true, 'Informs user email already exists');
+
+// 6c. Real-time checkIdentityExists verification
+const check1 = CustomerAuthService.checkIdentityExists('9911223344', 'unique@example.com');
+assert(check1.phoneExists === true && check1.emailExists === false, 'checkIdentityExists detects registered phone');
+
+const check2 = CustomerAuthService.checkIdentityExists('9988776655', 'newuser@example.com');
+assert(check2.phoneExists === false && check2.emailExists === true, 'checkIdentityExists detects registered email');
+
 // --------------------------------------------------------------------------
 // TEST 7: Cancellation & Refund Engine (Policy Tiers, Custom Admin Overrides, Ledger Sync)
 // --------------------------------------------------------------------------
