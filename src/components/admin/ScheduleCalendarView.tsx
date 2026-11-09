@@ -4,13 +4,14 @@ import { PostgresEngine } from '../../services/postgresEngine';
 import { AuditLogger } from '../../services/auditLogger';
 import { SlotEngine } from '../../services/slotEngine';
 import { RedisLockService } from '../../services/redisLockService';
-import { Booking, AdminUser, Court } from '../../types/schema';
+import { SupabaseSyncService } from '../../services/supabaseSyncService';
+import { Booking, AdminUser, Court, BlockedSlot } from '../../types/schema';
 import { formatTime12h, formatTimeRange12h } from '../../utils/formatters';
 import { OfflineBookingModal } from './OfflineBookingModal';
 import { AdminRefundModal } from './AdminRefundModal';
 import { EmergencyWeatherModal } from './EmergencyWeatherModal';
 import { ActiveCustomerHoldModal } from '../common/ActiveCustomerHoldModal';
-import { Calendar, ChevronLeft, ChevronRight, Plus, UserCheck, XCircle, CheckCircle, Lock, KeyRound, RotateCcw, CloudRain, ShieldAlert, Unlock, Wrench } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, Plus, UserCheck, XCircle, CheckCircle, Lock, KeyRound, RotateCcw, CloudRain, ShieldAlert, Unlock, Wrench, Clock, AlertTriangle } from 'lucide-react';
 
 interface ScheduleCalendarViewProps {
   currentAdmin: AdminUser;
@@ -47,46 +48,64 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
   const [blockModalState, setBlockModalState] = useState<{
     isOpen: boolean;
     courtId: string;
+    startDate: string;
     startTime: string;
+    endDate: string;
     endTime: string;
     reason: 'maintenance' | 'private_event' | 'owner_block';
   }>({
     isOpen: false,
     courtId: courts[0]?.id || '',
+    startDate: selectedDate,
     startTime: '14:00',
-    endTime: '16:00',
+    endDate: selectedDate,
+    endTime: '18:00',
     reason: 'maintenance'
   });
 
   const handleCreateBlockSlot = () => {
-    const { courtId, startTime, endTime, reason } = blockModalState;
+    const { courtId, startDate, startTime, endDate, endTime, reason } = blockModalState;
+
+    if (endDate < startDate || (endDate === startDate && endTime <= startTime)) {
+      alert('⚠️ Invalid Schedule: End Date & Time must be strictly after Start Date & Time.');
+      return;
+    }
 
     // CC-D03: Guard checking if any active confirmed or pending booking exists in this interval
     const conflict = store.getBookings().find(b =>
       b.court_id === courtId &&
-      b.booking_date === selectedDate &&
       (b.status === 'confirmed' || b.status === 'pending_payment') &&
-      PostgresEngine.isTimeOverlap(startTime, endTime, b.start_time, b.end_time)
+      PostgresEngine.isDateTimeOverlap(
+        b.booking_date,
+        b.start_time,
+        b.end_time,
+        startDate,
+        startTime,
+        endDate,
+        endTime
+      )
     );
 
     if (conflict) {
-      alert(`⚠️ [Court Block Conflict Guard (CC-D03)] Cannot block court:\n\nActive booking ${conflict.booking_ref} exists (${conflict.start_time} - ${conflict.end_time}).\n\nPlease reschedule or cancel the booking first before blocking the pitch.`);
+      alert(`⚠️ [Court Block Conflict Guard (CC-D03)] Cannot block court:\n\nActive booking ${conflict.booking_ref} (${conflict.customer_name}) exists on ${conflict.booking_date} (${conflict.start_time} - ${conflict.end_time}).\n\nPlease reschedule or cancel the booking first before scheduling pitch maintenance.`);
       return;
     }
 
     const blockedSlots = store.getBlockedSlots();
-    const newBlock = {
+    const newBlock: BlockedSlot = {
       id: `blk-${Date.now()}`,
       court_id: courtId,
-      date: selectedDate,
+      date: startDate,
       start_time: startTime,
+      end_date: endDate,
       end_time: endTime,
       reason,
       created_by_admin_id: currentAdmin.id
     };
 
-    blockedSlots.push(newBlock);
-    store.setBlockedSlots(blockedSlots);
+    const updated = [...blockedSlots, newBlock];
+    store.setBlockedSlots(updated);
+    SupabaseSyncService.syncBlockedSlotToSupabase(newBlock);
 
     AuditLogger.log(
       currentAdmin.id,
@@ -97,7 +116,11 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
       newBlock
     );
 
-    alert(`Court blocked successfully for ${reason} (${startTime} - ${endTime})`);
+    const scheduleDesc = startDate === endDate
+      ? `${startDate} from ${startTime} to ${endTime}`
+      : `${startDate} (${startTime}) to ${endDate} (${endTime})`;
+
+    alert(`Court blocked successfully for ${reason.replace('_', ' ')} (${scheduleDesc})`);
     setBlockModalState(prev => ({ ...prev, isOpen: false }));
   };
 
@@ -106,11 +129,24 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
     if (!confirmed) return;
 
     const blockedSlots = store.getBlockedSlots();
-    const updated = blockedSlots.filter(
-      b => !(b.court_id === courtId && b.date === selectedDate)
-    );
+    // Locate the matching block record that covers this slot
+    const targetBlock = blockedSlots.find(b => {
+      if (b.court_id !== courtId) return false;
+      const bStartDate = b.date;
+      const bEndDate = b.end_date || b.date;
+      if (selectedDate < bStartDate || selectedDate > bEndDate) return false;
+      return true;
+    });
+
+    const updated = targetBlock
+      ? blockedSlots.filter(b => b.id !== targetBlock.id)
+      : blockedSlots.filter(b => !(b.court_id === courtId && b.date === selectedDate));
+
     store.setBlockedSlots(updated);
-    AuditLogger.log(currentAdmin.id, 'REMOVE_BLOCKED_SLOT', 'Court', courtId, null, { date: selectedDate, time: timeStr });
+    if (targetBlock) {
+      SupabaseSyncService.removeBlockedSlotFromSupabase(targetBlock.id);
+    }
+    AuditLogger.log(currentAdmin.id, 'DELETE_BLOCKED_SLOT', 'Court', courtId, null, { date: selectedDate, time: timeStr });
   };
 
   const changeDate = (days: number) => {
@@ -177,7 +213,13 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
 
           {/* CC-D03: Pitch Maintenance / Block Slot */}
           <button
-            onClick={() => setBlockModalState(prev => ({ ...prev, isOpen: true, courtId: courts[0]?.id || '' }))}
+            onClick={() => setBlockModalState(prev => ({
+              ...prev,
+              isOpen: true,
+              courtId: courts[0]?.id || '',
+              startDate: selectedDate,
+              endDate: selectedDate
+            }))}
             className="py-1.5 px-3 bg-gray-100 hover:bg-gray-200 text-gray-800 border border-gray-300 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition"
             title="Block pitch for maintenance or private events"
           >
@@ -479,26 +521,69 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-on-surface-variant mb-1">Start Time *</label>
-                  <input
-                    type="time"
-                    required
-                    value={blockModalState.startTime}
-                    onChange={e => setBlockModalState(prev => ({ ...prev, startTime: e.target.value }))}
-                    className="form-input text-xs"
-                  />
+              {/* Maintenance Start Schedule */}
+              <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl space-y-2">
+                <p className="font-bold text-gray-800 flex items-center gap-1.5 text-xs">
+                  <Calendar className="w-3.5 h-3.5 text-primary" /> Maintenance Start *
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] text-gray-500 font-semibold mb-0.5 block">Start Date *</label>
+                    <input
+                      type="date"
+                      required
+                      value={blockModalState.startDate}
+                      onChange={e => {
+                        const newStart = e.target.value;
+                        setBlockModalState(prev => ({
+                          ...prev,
+                          startDate: newStart,
+                          endDate: prev.endDate < newStart ? newStart : prev.endDate
+                        }));
+                      }}
+                      className="form-input text-xs font-semibold"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-gray-500 font-semibold mb-0.5 block">Start Time *</label>
+                    <input
+                      type="time"
+                      required
+                      value={blockModalState.startTime}
+                      onChange={e => setBlockModalState(prev => ({ ...prev, startTime: e.target.value }))}
+                      className="form-input text-xs font-bold"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block font-bold text-on-surface-variant mb-1">End Time *</label>
-                  <input
-                    type="time"
-                    required
-                    value={blockModalState.endTime}
-                    onChange={e => setBlockModalState(prev => ({ ...prev, endTime: e.target.value }))}
-                    className="form-input text-xs"
-                  />
+              </div>
+
+              {/* Maintenance End Schedule */}
+              <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl space-y-2">
+                <p className="font-bold text-gray-800 flex items-center gap-1.5 text-xs">
+                  <Clock className="w-3.5 h-3.5 text-amber-700" /> Maintenance End *
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] text-gray-500 font-semibold mb-0.5 block">End Date *</label>
+                    <input
+                      type="date"
+                      required
+                      min={blockModalState.startDate}
+                      value={blockModalState.endDate}
+                      onChange={e => setBlockModalState(prev => ({ ...prev, endDate: e.target.value }))}
+                      className="form-input text-xs font-semibold"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-gray-500 font-semibold mb-0.5 block">End Time *</label>
+                    <input
+                      type="time"
+                      required
+                      value={blockModalState.endTime}
+                      onChange={e => setBlockModalState(prev => ({ ...prev, endTime: e.target.value }))}
+                      className="form-input text-xs font-bold"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -515,6 +600,57 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
                 </select>
               </div>
 
+              {/* Live Preview / Validation */}
+              {(() => {
+                const isInvalid = blockModalState.endDate < blockModalState.startDate ||
+                  (blockModalState.endDate === blockModalState.startDate && blockModalState.endTime <= blockModalState.startTime);
+
+                if (isInvalid) {
+                  return (
+                    <div className="p-2 bg-red-50 border border-red-200 rounded-lg text-[11px] text-red-700 flex items-center gap-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5 text-red-600 shrink-0" />
+                      <span>End Date & Time must be after Start Date & Time.</span>
+                    </div>
+                  );
+                }
+
+                const conflict = store.getBookings().find(b =>
+                  b.court_id === blockModalState.courtId &&
+                  (b.status === 'confirmed' || b.status === 'pending_payment') &&
+                  PostgresEngine.isDateTimeOverlap(
+                    b.booking_date,
+                    b.start_time,
+                    b.end_time,
+                    blockModalState.startDate,
+                    blockModalState.startTime,
+                    blockModalState.endDate,
+                    blockModalState.endTime
+                  )
+                );
+
+                if (conflict) {
+                  return (
+                    <div className="p-2 bg-amber-50 border border-amber-300 rounded-lg text-[11px] text-amber-900">
+                      <span className="font-bold flex items-center gap-1 text-amber-800">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" /> Conflict:
+                      </span>
+                      <span>Booking {conflict.booking_ref} on {conflict.booking_date} ({conflict.start_time} - {conflict.end_time}) exists in this window.</span>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-lg text-[11px] text-emerald-800 flex items-center gap-1.5">
+                    <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span>
+                      {blockModalState.startDate === blockModalState.endDate
+                        ? `Pitch will be blocked on ${blockModalState.startDate} (${blockModalState.startTime} - ${blockModalState.endTime})`
+                        : `Pitch will be blocked from ${blockModalState.startDate} ${blockModalState.startTime} to ${blockModalState.endDate} ${blockModalState.endTime}`}
+                    </span>
+                  </div>
+                );
+              })()}
+
               <div className="pt-2 flex gap-2">
                 <button
                   type="button"
@@ -525,7 +661,11 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
                 </button>
                 <button
                   type="submit"
-                  className="btn-primary flex-1 py-2 text-xs font-bold"
+                  disabled={
+                    blockModalState.endDate < blockModalState.startDate ||
+                    (blockModalState.endDate === blockModalState.startDate && blockModalState.endTime <= blockModalState.startTime)
+                  }
+                  className="btn-primary flex-1 py-2 text-xs font-bold disabled:opacity-50"
                 >
                   Confirm Block
                 </button>

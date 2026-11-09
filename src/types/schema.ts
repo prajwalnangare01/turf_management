@@ -102,6 +102,8 @@ export interface Booking {
   id: string;
   booking_ref: string; // e.g. TRF-20260728-0001
   customer_id: string;
+  customer_name?: string;
+  customer_phone?: string;
   court_id: string;
   sport_id: string;
   booking_date: string; // YYYY-MM-DD

@@ -1372,73 +1372,170 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
       {/* Block Slot Modal */}
       {showBlockModal && (
         <div className="modal-overlay">
-          <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl animate-modalScaleIn text-on-surface max-h-[85vh] overflow-y-auto">
-            <h3 className="font-headline font-bold text-lg text-primary flex items-center gap-2">
-              <ShieldAlert className="w-5 h-5 text-amber-700" /> Block Court Slot
-            </h3>
+          <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl animate-modalScaleIn text-on-surface max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-outline-variant/40 pb-3">
+              <h3 className="font-headline font-bold text-lg text-primary flex items-center gap-2">
+                <ShieldAlert className="w-5 h-5 text-amber-700" /> Block Pitch for Maintenance / Event
+              </h3>
+              <button
+                onClick={() => setShowBlockModal(false)}
+                className="p-1 text-on-surface-variant hover:text-on-surface hover:bg-surface-container rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-            <form onSubmit={handleCreateBlock} className="space-y-3 text-xs">
+            <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-1">
+              <p className="font-bold flex items-center gap-1.5">
+                <ShieldAlert className="w-4 h-4 text-amber-700 shrink-0" /> Multi-Day & Time-Windowed Outage Management
+              </p>
+              <p className="text-[11px] text-amber-800 leading-relaxed">
+                Specify the exact start date & time and end date & time. The system will automatically block all overlapping slots across the Customer Website, WhatsApp AI Agent, and Counter booking calendar.
+              </p>
+            </div>
+
+            <form onSubmit={handleCreateBlock} className="space-y-3.5 text-xs">
               <div>
-                <label className="block text-on-surface-variant font-headline font-bold mb-1">Court</label>
+                <label className="block text-on-surface-variant font-headline font-bold mb-1">Select Pitch / Arena *</label>
                 <select
                   value={blockCourtId}
                   onChange={e => setBlockCourtId(e.target.value)}
-                  className="form-input"
+                  className="form-input font-bold"
                 >
                   {courts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
 
-              <div>
-                <label className="block text-on-surface-variant font-headline font-bold mb-1">Date</label>
-                <input
-                  type="date"
-                  required
-                  value={blockDate}
-                  onChange={e => setBlockDate(e.target.value)}
-                  className="form-input"
-                />
+              {/* Maintenance Start Schedule */}
+              <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl space-y-2">
+                <p className="font-headline font-bold text-gray-800 flex items-center gap-1.5 text-xs">
+                  <Calendar className="w-3.5 h-3.5 text-primary" /> Maintenance Start Schedule *
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] text-gray-600 font-semibold mb-1">Start Date *</label>
+                    <input
+                      type="date"
+                      required
+                      value={blockStartDate}
+                      onChange={e => {
+                        const newStart = e.target.value;
+                        setBlockStartDate(newStart);
+                        if (blockEndDate < newStart) {
+                          setBlockEndDate(newStart);
+                        }
+                      }}
+                      className="form-input text-xs font-semibold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-gray-600 font-semibold mb-1">Start Time *</label>
+                    <input
+                      type="time"
+                      required
+                      value={blockStartTime}
+                      onChange={e => setBlockStartTime(e.target.value)}
+                      className="form-input text-xs font-bold"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Maintenance End Schedule */}
+              <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl space-y-2">
+                <p className="font-headline font-bold text-gray-800 flex items-center gap-1.5 text-xs">
+                  <Clock className="w-3.5 h-3.5 text-amber-700" /> Maintenance End Schedule *
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] text-gray-600 font-semibold mb-1">End Date *</label>
+                    <input
+                      type="date"
+                      required
+                      min={blockStartDate}
+                      value={blockEndDate}
+                      onChange={e => setBlockEndDate(e.target.value)}
+                      className="form-input text-xs font-semibold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-gray-600 font-semibold mb-1">End Time *</label>
+                    <input
+                      type="time"
+                      required
+                      value={blockEndTime}
+                      onChange={e => setBlockEndTime(e.target.value)}
+                      className="form-input text-xs font-bold"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div>
-                <label className="block text-on-surface-variant font-headline font-bold mb-1">Start Time *</label>
-                <select
-                  value={blockStart}
-                  onChange={e => setBlockStart(e.target.value)}
-                  className="form-input font-bold"
-                >
-                  <option value="06:00">06:00 AM</option>
-                  <option value="07:00">07:00 AM</option>
-                  <option value="08:00">08:00 AM</option>
-                  <option value="09:00">09:00 AM</option>
-                  <option value="10:00">10:00 AM</option>
-                  <option value="11:00">11:00 AM</option>
-                  <option value="12:00">12:00 PM (Noon)</option>
-                  <option value="13:00">01:00 PM (13:00)</option>
-                  <option value="14:00">02:00 PM (14:00)</option>
-                  <option value="15:00">03:00 PM (15:00)</option>
-                  <option value="16:00">04:00 PM (16:00)</option>
-                  <option value="17:00">05:00 PM (17:00)</option>
-                  <option value="18:00">06:00 PM (18:00)</option>
-                  <option value="19:00">07:00 PM (19:00)</option>
-                  <option value="20:00">08:00 PM (20:00)</option>
-                  <option value="21:00">09:00 PM (21:00)</option>
-                  <option value="22:00">10:00 PM (22:00)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-on-surface-variant font-headline font-bold mb-1">Reason</label>
+                <label className="block text-on-surface-variant font-headline font-bold mb-1">Reason for Blocking *</label>
                 <select
                   value={blockReason}
                   onChange={e => setBlockReason(e.target.value as any)}
-                  className="form-input"
+                  className="form-input font-medium"
                 >
-                  <option value="maintenance">Maintenance & Cleaning</option>
-                  <option value="private_event">Private Tournament / Event</option>
-                  <option value="owner_block">Owner Personal Block</option>
+                  <option value="maintenance">🛠️ Pitch Maintenance, Turf Brushing & Repairs</option>
+                  <option value="private_event">🏆 Private Tournament / League Match</option>
+                  <option value="owner_block">🔒 Venue Owner Personal Reservation</option>
                 </select>
               </div>
+
+              {/* Live Interval Preview & Validation Banner */}
+              {(() => {
+                const isInvalidSequence = blockEndDate < blockStartDate || (blockEndDate === blockStartDate && blockEndTime <= blockStartTime);
+                if (isInvalidSequence) {
+                  return (
+                    <div className="p-2.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                      <span>End Date & Time must be after Start Date & Time.</span>
+                    </div>
+                  );
+                }
+
+                // Check for booking conflict live in the modal
+                const liveConflict = store.getBookings().find(b =>
+                  b.court_id === blockCourtId &&
+                  (b.status === 'confirmed' || b.status === 'pending_payment') &&
+                  PostgresEngine.isDateTimeOverlap(
+                    b.booking_date,
+                    b.start_time,
+                    b.end_time,
+                    blockStartDate,
+                    blockStartTime,
+                    blockEndDate,
+                    blockEndTime
+                  )
+                );
+
+                if (liveConflict) {
+                  return (
+                    <div className="p-2.5 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-900 space-y-1">
+                      <p className="font-bold flex items-center gap-1.5 text-amber-800">
+                        <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" /> Active Booking Conflict Detected
+                      </p>
+                      <p className="text-[11px] text-amber-800">
+                        Booking <strong className="font-mono">{liveConflict.booking_ref}</strong> ({liveConflict.customer_name}) is scheduled on {liveConflict.booking_date} ({liveConflict.start_time} - {liveConflict.end_time}). Please reschedule or cancel it first.
+                      </p>
+                    </div>
+                  );
+                }
+
+                const isSingleDay = blockStartDate === blockEndDate;
+                return (
+                  <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 flex items-center gap-2">
+                    <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>
+                      {isSingleDay
+                        ? `Pitch will be blocked on ${blockStartDate} from ${blockStartTime} to ${blockEndTime}.`
+                        : `Pitch will be blocked from ${blockStartDate} (${blockStartTime}) to ${blockEndDate} (${blockEndTime}).`}
+                    </span>
+                  </div>
+                );
+              })()}
 
               <div className="flex gap-3 pt-3">
                 <button
@@ -1448,7 +1545,11 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn-primary flex-1 py-2.5 font-headline font-bold">
+                <button
+                  type="submit"
+                  disabled={blockEndDate < blockStartDate || (blockEndDate === blockStartDate && blockEndTime <= blockStartTime)}
+                  className="btn-primary flex-1 py-2.5 font-headline font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                >
                   Confirm Block
                 </button>
               </div>
