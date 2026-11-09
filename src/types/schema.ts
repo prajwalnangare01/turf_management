@@ -152,11 +152,13 @@ export interface SlotLock {
 export interface BlockedSlot {
   id: string;
   court_id: string;
-  date: string;
-  start_time: string;
-  end_time?: string; // empty means full day
+  date: string;       // Start date (YYYY-MM-DD)
+  start_time: string; // Start time (HH:mm)
+  end_date?: string;  // End date (YYYY-MM-DD), defaults to date if omitted
+  end_time?: string;  // End time (HH:mm), empty means full day / close
   reason: 'maintenance' | 'private_event' | 'owner_block';
   created_by_admin_id: string;
+  notes?: string;
 }
 
 export interface CancellationPolicy {

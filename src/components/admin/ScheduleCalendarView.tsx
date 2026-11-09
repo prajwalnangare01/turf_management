@@ -29,6 +29,14 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [refundBooking, setRefundBooking] = useState<Booking | null>(null);
 
+  // Re-render when store updates via Supabase Realtime (e.g. WhatsApp hold/booking)
+  const [, setStoreVersion] = useState(0);
+  useEffect(() => {
+    return store.subscribe(() => {
+      setStoreVersion(v => v + 1);
+    });
+  }, []);
+
   // Detail modal for active hold slot
   const [selectedHoldSlot, setSelectedHoldSlot] = useState<{ court: Court; date: string; time: string } | null>(null);
 

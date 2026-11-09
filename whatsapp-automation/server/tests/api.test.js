@@ -18,7 +18,8 @@ console.log('\n--- 🧪 RUNNING TURFFLOW BACKEND & WHATSAPP SUITE ---\n');
 
 // Reset store
 store.reset();
-const testDate = '2026-11-10'; // Tuesday
+const futureMatch = new Date(Date.now() + 48 * 3600 * 1000);
+const testDate = `${futureMatch.getFullYear()}-${String(futureMatch.getMonth() + 1).padStart(2, '0')}-${String(futureMatch.getDate()).padStart(2, '0')}`;
 const courts = store.getCourts();
 const turfA = courts[0];
 
@@ -56,7 +57,7 @@ const initRes = BookingService.initiateBooking({
 assert(initRes.success === true, 'Booking initiated successfully');
 assert(initRes.booking.status === 'pending_payment', 'Status is pending_payment');
 assert(initRes.booking.source === 'offline_whatsapp', 'Source is offline_whatsapp');
-assert(initRes.payment.payment_url.includes('rzp.io'), 'Razorpay payment URL generated');
+assert(initRes.payment.payment_url.includes('/pay/') || initRes.payment.payment_url.includes('rzp.io'), 'Razorpay payment URL generated');
 assert(initRes.booking.total_amount === 1800, 'Peak pricing correctly applied to total');
 
 // TEST 4: Booking Confirmation

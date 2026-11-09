@@ -91,6 +91,14 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onSwitchToCustomer }) => {
     );
   }
 
+  // Re-render when store updates via Supabase Realtime
+  const [, setStoreVersion] = useState(0);
+  useEffect(() => {
+    return store.subscribe(() => {
+      setStoreVersion(v => v + 1);
+    });
+  }, []);
+
   // Compute metrics
   const bookings = store.getBookings();
   const todayStr = new Date().toISOString().split('T')[0];

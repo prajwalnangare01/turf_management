@@ -33,6 +33,11 @@ export class SupabaseSyncService {
         console.log('📡 [Supabase Sync] Network online detected. Resyncing state...');
         this.hydrateFromSupabase();
       });
+
+      // 4. Background polling resilience sync every 4 seconds
+      setInterval(() => {
+        this.hydrateFromSupabase();
+      }, 4000);
     }
 
     return true;
@@ -147,10 +152,27 @@ export class SupabaseSyncService {
           court_id: bl.court_id,
           date: typeof bl.date === 'string' ? bl.date.slice(0, 10) : bl.date,
           start_time: typeof bl.start_time === 'string' ? bl.start_time.slice(0, 5) : bl.start_time,
+          end_date: bl.end_date ? (typeof bl.end_date === 'string' ? bl.end_date.slice(0, 10) : bl.end_date) : undefined,
           end_time: typeof bl.end_time === 'string' ? bl.end_time.slice(0, 5) : bl.end_time,
           reason: bl.reason,
           created_by_admin_id: bl.created_by_admin_id
         })));
+      }
+
+      // 7. Fetch Active Slot Locks (5-min holds from WhatsApp or Site)
+      const { data: locks, error: lockErr } = await supabase.from('slot_locks').select('*');
+      if (!lockErr && locks) {
+        const nowMs = Date.now();
+        const activeLocks = locks
+          .filter((l: any) => Number(l.expires_at) > nowMs)
+          .map((l: any) => ({
+            court_id: l.court_id,
+            date: typeof l.date === 'string' ? l.date.slice(0, 10) : l.date,
+            start_time: typeof l.start_time === 'string' ? l.start_time.slice(0, 5) : l.start_time,
+            locked_by: l.locked_by,
+            expires_at: Number(l.expires_at)
+          }));
+        store.setSlotLocks(activeLocks);
       }
 
       console.log(`✅ [Supabase Sync] Hydration complete! Loaded ${bookings?.length || 0} bookings, ${customers?.length || 0} customers.`);
@@ -169,15 +191,22 @@ export class SupabaseSyncService {
    */
   public static subscribeToRealtime() {
     const supabase = getSupabase();
-    if (!supabase || this.realtimeChannel) {
+    if (!supabase) {
       return;
+    }
+
+    if (this.realtimeChannel) {
+      try {
+        supabase.removeChannel(this.realtimeChannel);
+      } catch (e) {}
+      this.realtimeChannel = null;
     }
 
     try {
       console.log('📡 [Supabase Realtime] Connecting to multi-agent sync channel...');
 
       this.realtimeChannel = supabase
-        .channel('turfflow-website-sync')
+        .channel(`turfflow-website-sync-${Date.now()}`)
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'bookings' },

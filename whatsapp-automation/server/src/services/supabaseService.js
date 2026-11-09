@@ -101,7 +101,22 @@ export class SupabaseService {
         });
       }
 
-      console.log(`✅ Supabase hydration complete! Loaded ${store.courts.length} courts, ${store.customers.length} customers, ${store.bookings.length} bookings.`);
+      // 7. Fetch Blocked Slots
+      const { data: blocked, error: blkErr } = await supabase.from('blocked_slots').select('*');
+      if (!blkErr && blocked) {
+        store.blockedSlots = blocked.map(bl => ({
+          id: bl.id,
+          court_id: bl.court_id,
+          date: typeof bl.date === 'string' ? bl.date.slice(0, 10) : bl.date,
+          start_time: typeof bl.start_time === 'string' ? bl.start_time.slice(0, 5) : bl.start_time,
+          end_date: bl.end_date ? (typeof bl.end_date === 'string' ? bl.end_date.slice(0, 10) : bl.end_date) : undefined,
+          end_time: typeof bl.end_time === 'string' ? bl.end_time.slice(0, 5) : bl.end_time,
+          reason: bl.reason,
+          created_by_admin_id: bl.created_by_admin_id
+        }));
+      }
+
+      console.log(`✅ Supabase hydration complete! Loaded ${store.courts.length} courts, ${store.customers.length} customers, ${store.bookings.length} bookings, ${store.blockedSlots?.length || 0} blocked slots.`);
       return true;
     } catch (err) {
       console.warn('⚠️ Supabase hydration warning:', err.message);

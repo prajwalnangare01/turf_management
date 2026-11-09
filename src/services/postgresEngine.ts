@@ -9,7 +9,7 @@ export class PostgresEngine {
   /**
    * Helper to convert HH:mm string to minutes from midnight
    */
-  private static timeToMinutes(timeStr: string): number {
+  public static timeToMinutes(timeStr: string): number {
     const [h, m] = (timeStr || '00:00').split(':').map(Number);
     return (h || 0) * 60 + (m || 0);
   }
@@ -35,6 +35,40 @@ export class PostgresEngine {
     const start2 = this.timeToMinutes(s2);
     const end2 = this.timeToMinutes(e2);
     return start1 < end2 && end1 > start2;
+  }
+
+  /**
+   * Check if a booking on bookingDate from bStart to bEnd overlaps with a datetime range [sDate sTime, eDate eTime)
+   */
+  public static isDateTimeOverlap(
+    bookingDate: string,
+    bStart: string,
+    bEnd: string,
+    sDate: string,
+    sTime: string,
+    eDate: string,
+    eTime: string
+  ): boolean {
+    if (bookingDate < sDate || bookingDate > eDate) return false;
+
+    const bStartMins = this.timeToMinutes(bStart);
+    const bEndMins = this.timeToMinutes(bEnd);
+    const sTimeMins = this.timeToMinutes(sTime);
+    const eTimeMins = this.timeToMinutes(eTime);
+
+    if (sDate === eDate) {
+      if (bookingDate !== sDate) return false;
+      return bStartMins < eTimeMins && bEndMins > sTimeMins;
+    }
+
+    if (bookingDate === sDate) {
+      return bEndMins > sTimeMins;
+    }
+    if (bookingDate === eDate) {
+      return bStartMins < eTimeMins;
+    }
+    // Intermediate full day
+    return true;
   }
 
   /**
@@ -82,6 +116,27 @@ export class PostgresEngine {
         return {
           success: false,
           message: `[Postgres Unique Constraint Violation] Slot interval ${booking.start_time} - ${booking.end_time} on ${booking.booking_date} conflicts with active booking ${activeConflict.booking_ref} (${activeConflict.start_time} - ${activeConflict.end_time}).`
+        };
+      }
+
+      // Check if slot falls in an admin blocked maintenance window
+      const blockedConflict = store.getBlockedSlots().find(blk => {
+        if (blk.court_id !== booking.court_id) return false;
+        return this.isDateTimeOverlap(
+          booking.booking_date,
+          booking.start_time,
+          booking.end_time,
+          blk.date,
+          blk.start_time || '00:00',
+          blk.end_date || blk.date,
+          blk.end_time || '23:59'
+        );
+      });
+
+      if (blockedConflict) {
+        return {
+          success: false,
+          message: `[Court Blocked Guard] Slot ${booking.start_time} - ${booking.end_time} on ${booking.booking_date} is closed for ${blockedConflict.reason.toUpperCase()}.`
         };
       }
     }

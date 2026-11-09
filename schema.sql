@@ -152,6 +152,7 @@ CREATE TABLE IF NOT EXISTS blocked_slots (
   court_id VARCHAR(64) NOT NULL REFERENCES courts(id) ON DELETE CASCADE,
   date DATE NOT NULL,
   start_time TIME NOT NULL,
+  end_date DATE,
   end_time TIME,
   reason VARCHAR(32) NOT NULL CHECK (reason IN ('maintenance', 'private_event', 'owner_block')),
   created_by_admin_id VARCHAR(64) REFERENCES admin_users(id),

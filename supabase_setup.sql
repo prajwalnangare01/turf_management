@@ -252,6 +252,7 @@ CREATE TABLE IF NOT EXISTS blocked_slots (
   court_id VARCHAR(64) NOT NULL,
   date DATE NOT NULL,
   start_time TIME NOT NULL,
+  end_date DATE,
   end_time TIME,
   reason VARCHAR(32) NOT NULL DEFAULT 'maintenance',
   created_by_admin_id VARCHAR(64),
@@ -261,6 +262,7 @@ CREATE TABLE IF NOT EXISTS blocked_slots (
 ALTER TABLE blocked_slots ADD COLUMN IF NOT EXISTS court_id VARCHAR(64);
 ALTER TABLE blocked_slots ADD COLUMN IF NOT EXISTS date DATE;
 ALTER TABLE blocked_slots ADD COLUMN IF NOT EXISTS start_time TIME;
+ALTER TABLE blocked_slots ADD COLUMN IF NOT EXISTS end_date DATE;
 ALTER TABLE blocked_slots ADD COLUMN IF NOT EXISTS end_time TIME;
 ALTER TABLE blocked_slots ADD COLUMN IF NOT EXISTS reason VARCHAR(32) DEFAULT 'maintenance';
 ALTER TABLE blocked_slots ADD COLUMN IF NOT EXISTS created_by_admin_id VARCHAR(64);

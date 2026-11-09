@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { store } from '../../services/store';
 import { AuditLogger } from '../../services/auditLogger';
+import { PostgresEngine } from '../../services/postgresEngine';
+import { SupabaseSyncService } from '../../services/supabaseSyncService';
 import { AdminUser, Court, BlockedSlot, Sport } from '../../types/schema';
 import { ConfirmModal } from '../common/ConfirmModal';
-import { Settings, ShieldAlert, Trash2, PlusCircle, Edit3, X, Check, Calendar, Zap } from 'lucide-react';
+import { Settings, ShieldAlert, Trash2, PlusCircle, Edit3, X, Check, Calendar, Zap, Clock, AlertTriangle } from 'lucide-react';
 
 interface CourtPricingManagerProps {
   currentAdmin: AdminUser;
@@ -177,11 +179,13 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
   const [editBuffer, setEditBuffer] = useState(0);
   const [editStatus, setEditStatus] = useState<'active' | 'maintenance' | 'inactive'>('active');
 
-  // Block slot form state
+  // Block slot form state (Start Date & Time + End Date & Time)
   const [showBlockModal, setShowBlockModal] = useState(false);
   const [blockCourtId, setBlockCourtId] = useState(courts[0]?.id || '');
-  const [blockDate, setBlockDate] = useState(new Date().toISOString().split('T')[0]);
-  const [blockStart, setBlockStart] = useState('14:00');
+  const [blockStartDate, setBlockStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [blockStartTime, setBlockStartTime] = useState('06:00');
+  const [blockEndDate, setBlockEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [blockEndTime, setBlockEndTime] = useState('23:00');
   const [blockReason, setBlockReason] = useState<'maintenance' | 'private_event' | 'owner_block'>('maintenance');
 
   const canEdit = true; // Add, Edit, and Delete features enabled for Admin Panel
@@ -411,8 +415,10 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
     const newBlock: BlockedSlot = {
       id: `blk-${Date.now()}`,
       court_id: blockCourtId,
-      date: blockDate,
-      start_time: blockStart,
+      date: blockStartDate,
+      start_time: blockStartTime,
+      end_date: blockEndDate,
+      end_time: blockEndTime,
       reason: blockReason,
       created_by_admin_id: currentAdmin.id
     };
@@ -420,6 +426,7 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
     const updated = [...blockedSlots, newBlock];
     store.setBlockedSlots(updated);
     setBlockedSlots(updated);
+    SupabaseSyncService.syncBlockedSlotToSupabase(newBlock);
     AuditLogger.log(currentAdmin.id, 'CREATE_BLOCKED_SLOT', 'BlockedSlot', newBlock.id, null, newBlock);
     setShowBlockModal(false);
     closeConfirm();
@@ -429,10 +436,40 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
     e.preventDefault();
     const court = courts.find(c => c.id === blockCourtId);
 
+    // Validate datetime sequence
+    if (blockEndDate < blockStartDate || (blockEndDate === blockStartDate && blockEndTime <= blockStartTime)) {
+      alert('⚠️ Invalid Schedule: End Date & Time must be strictly after Start Date & Time.');
+      return;
+    }
+
+    // CC-D03: Guard checking if any active confirmed or pending customer booking exists in this interval
+    const conflict = store.getBookings().find(b =>
+      b.court_id === blockCourtId &&
+      (b.status === 'confirmed' || b.status === 'pending_payment') &&
+      PostgresEngine.isDateTimeOverlap(
+        b.booking_date,
+        b.start_time,
+        b.end_time,
+        blockStartDate,
+        blockStartTime,
+        blockEndDate,
+        blockEndTime
+      )
+    );
+
+    if (conflict) {
+      alert(`⚠️ [Pitch Block Conflict Guard (CC-D03)]\n\nCannot block court: An active booking exists during this timeframe:\n• Booking Ref: ${conflict.booking_ref}\n• Customer: ${conflict.customer_name}\n• Scheduled: ${conflict.booking_date} (${conflict.start_time} - ${conflict.end_time})\n\nPlease reschedule or cancel the booking first before scheduling pitch maintenance.`);
+      return;
+    }
+
+    const scheduleDesc = blockStartDate === blockEndDate
+      ? `${blockStartDate} from ${blockStartTime} to ${blockEndTime}`
+      : `${blockStartDate} (${blockStartTime}) to ${blockEndDate} (${blockEndTime})`;
+
     setConfirmState({
       isOpen: true,
       title: 'Confirm Pitch Maintenance Block',
-      message: `Block ${court?.name || 'Pitch'} on ${blockDate} at ${blockStart} for reason: ${blockReason.toUpperCase()}?`,
+      message: `Block ${court?.name || 'Pitch'} for ${scheduleDesc} for reason: ${blockReason.toUpperCase().replace('_', ' ')}? All slots in this interval will be closed across Website and WhatsApp.`,
       confirmText: 'Confirm Block',
       variant: 'warning',
       onConfirm: executeCreateBlock
@@ -443,13 +480,14 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
     setConfirmState({
       isOpen: true,
       title: 'Remove Maintenance Block',
-      message: 'Are you sure you want to unblock this slot and make it available for booking again?',
-      confirmText: 'Unblock Slot',
+      message: 'Are you sure you want to unblock this maintenance interval and restore court availability?',
+      confirmText: 'Unblock Pitch',
       variant: 'success',
       onConfirm: () => {
         const updated = blockedSlots.filter(b => b.id !== id);
         store.setBlockedSlots(updated);
         setBlockedSlots(updated);
+        SupabaseSyncService.removeBlockedSlotFromSupabase(id);
         AuditLogger.log(currentAdmin.id, 'DELETE_BLOCKED_SLOT', 'BlockedSlot', id);
         closeConfirm();
       }
@@ -608,20 +646,49 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
           ) : (
             blockedSlots.map(blk => {
               const court = courts.find(c => c.id === blk.court_id);
+              const isSingleDay = !blk.end_date || blk.end_date === blk.date;
               return (
-                <div key={blk.id} className="bg-surface-container-low p-3 rounded-lg border border-outline-variant/40 flex justify-between items-center">
-                  <div>
-                    <p className="font-headline font-bold text-on-surface">{court?.name || 'Pitch'}</p>
-                    <p className="text-on-surface-variant text-[11px] font-medium">{blk.date} @ {blk.start_time}</p>
-                    <span className="bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded text-[10px] font-bold uppercase mt-1 inline-block">
-                      {blk.reason}
-                    </span>
+                <div key={blk.id} className="bg-surface-container-low p-3.5 rounded-xl border border-outline-variant/40 flex justify-between items-start gap-3 shadow-xs">
+                  <div className="space-y-1">
+                    <p className="font-headline font-bold text-on-surface text-sm flex items-center gap-1.5">
+                      <ShieldAlert className="w-4 h-4 text-amber-700 shrink-0" />
+                      {court?.name || 'Pitch'}
+                    </p>
+                    <div className="text-on-surface-variant text-xs font-medium space-y-0.5">
+                      {isSingleDay ? (
+                        <p className="flex items-center gap-1.5 text-gray-700">
+                          <Calendar className="w-3.5 h-3.5 text-primary" />
+                          <span className="font-semibold">{blk.date}</span>
+                          <span className="text-gray-400">•</span>
+                          <Clock className="w-3.5 h-3.5 text-amber-700" />
+                          <span>{blk.start_time} – {blk.end_time || 'End of Day'}</span>
+                        </p>
+                      ) : (
+                        <p className="flex items-center gap-1 text-gray-700">
+                          <Calendar className="w-3.5 h-3.5 text-primary" />
+                          <span>{blk.date} <strong className="text-gray-900">({blk.start_time})</strong></span>
+                          <span className="text-amber-700 font-bold mx-1">➔</span>
+                          <span>{blk.end_date} <strong className="text-gray-900">({blk.end_time || 'End of Day'})</strong></span>
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 pt-1">
+                      <span className="bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded text-[10px] font-bold uppercase inline-block">
+                        {blk.reason === 'maintenance' ? '🛠️ Maintenance' : blk.reason === 'private_event' ? '🏆 Private Event' : '🔒 Owner Block'}
+                      </span>
+                      {!isSingleDay && (
+                        <span className="bg-purple-100 text-purple-900 border border-purple-200 px-2 py-0.5 rounded text-[10px] font-bold">
+                          Multi-Day
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {canEdit && (
                     <button
                       onClick={() => handleDeleteBlock(blk.id)}
-                      className="p-2 text-red-600 hover:text-red-800"
+                      className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors shrink-0"
+                      title="Unblock pitch & restore slot availability"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>

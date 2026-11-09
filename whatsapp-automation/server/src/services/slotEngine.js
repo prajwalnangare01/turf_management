@@ -24,7 +24,12 @@ export class SlotEngine {
     const bufferMins = court.buffer_minutes || 0;
 
     const bookings = store.getBookings().filter(b => b.court_id === court.id && b.booking_date === dateStr);
-    const blockedSlots = store.getBlockedSlots().filter(b => b.court_id === court.id && b.date === dateStr);
+    const blockedSlots = store.getBlockedSlots().filter(b => {
+      if (b.court_id !== court.id) return false;
+      const bStartDate = b.date;
+      const bEndDate = b.end_date || b.date;
+      return dateStr >= bStartDate && dateStr <= bEndDate;
+    });
     const venue = store.getVenue();
 
     const now = new Date();
@@ -74,10 +79,24 @@ export class SlotEngine {
 
       // Check Admin Blocks
       const isBlocked = blockedSlots.find(b => {
-        if (!b.start_time) return true; // Full day
-        const bStart = this.timeToMinutes(b.start_time);
-        const bEnd = b.end_time ? this.timeToMinutes(b.end_time) : closeMins;
-        return cursor >= bStart && cursor < bEnd;
+        const bStartDate = b.date;
+        const bEndDate = b.end_date || b.date;
+        const bStartMins = b.start_time ? this.timeToMinutes(b.start_time) : openMins;
+        const bEndMins = b.end_time ? this.timeToMinutes(b.end_time) : closeMins;
+
+        if (bStartDate === bEndDate) {
+          let effectiveEnd = bEndMins;
+          if (effectiveEnd <= bStartMins) effectiveEnd += 1440;
+          return cursor < effectiveEnd && (cursor + stepMins) > bStartMins;
+        }
+
+        if (dateStr === bStartDate) {
+          return (cursor + stepMins) > bStartMins;
+        }
+        if (dateStr === bEndDate) {
+          return cursor < bEndMins;
+        }
+        return true;
       });
 
       // Check Confirmed Bookings (permanently booked)

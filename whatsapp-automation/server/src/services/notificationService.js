@@ -44,7 +44,6 @@ export class NotificationService {
 
     const message = `🎉 *BOOKING CONFIRMED — TURFFLOW ARENA* 🎉\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `🎟️ *Booking Ref:* \`${booking.booking_ref}\`\n` +
       `🔑 *Gate Check-in OTP:* *${otpCode}*\n` +
       `🏟️ *Court:* ${court?.name || 'Main Turf'}\n` +
       `🏅 *Sport:* ${sport?.icon || '⚽'} ${sport?.name || 'Football'}\n` +
@@ -57,7 +56,7 @@ export class NotificationService {
       `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `📄 *Your official PDF Gate Pass & Payment Receipt is attached below!* Show the PDF or your 4-digit OTP *${otpCode}* at the gate.\n\n` +
       `⚠️ *Pitch Rules:* Turf shoes only (no metal spikes). Please arrive 10 mins early.\n\n` +
-      `Need to reschedule or cancel? Just reply *"Manage booking ${booking.booking_ref}"* anytime!`;
+      `Need to reschedule or cancel? Just reply *"Manage booking"* anytime!`;
 
     const log = this.sendWhatsAppMessage(booking.customer_phone, message, {
       type: 'confirmation',
@@ -70,8 +69,8 @@ export class NotificationService {
         WhatsAppService.sendDocument(
           booking.customer_phone,
           pdfBuffer,
-          `GatePass-${booking.booking_ref}.pdf`,
-          `🎟️ *VENUE ENTRY PASS & PAYMENT RECEIPT*\nRef: \`${booking.booking_ref}\` | Gate OTP: *${otpCode}*`
+          `GatePass-${otpCode}.pdf`,
+          `🎟️ *VENUE ENTRY PASS & PAYMENT RECEIPT*\nGate OTP: *${otpCode}*`
         ).catch(err => console.warn('PDF pass dispatch warning:', err.message));
       }
     }).catch(err => {

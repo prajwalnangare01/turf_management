@@ -54,7 +54,12 @@ export class SlotEngine {
     const dayType = this.getDayType(dateStr);
     const pricingRules = store.getPricingRules().filter(r => r.court_id === court.id && r.day_type === dayType);
     const bookings = store.getBookings().filter(b => b.court_id === court.id && b.booking_date === dateStr);
-    const blockedSlots = store.getBlockedSlots().filter(b => b.court_id === court.id && b.date === dateStr);
+    const blockedSlots = store.getBlockedSlots().filter(b => {
+      if (b.court_id !== court.id) return false;
+      const bStartDate = b.date;
+      const bEndDate = b.end_date || b.date;
+      return dateStr >= bStartDate && dateStr <= bEndDate;
+    });
     const venue = store.getVenue();
 
     // CC-S02: Use calibrated Asia/Kolkata venue time to prevent client machine clock skew
@@ -128,11 +133,25 @@ export class SlotEngine {
 
       // Check Admin Blocked Slots
       const blocked = blockedSlots.find(b => {
-        if (!b.start_time) return true; // Full day block
-        const bStart = this.timeToMinutes(b.start_time);
-        let bEnd = b.end_time ? this.timeToMinutes(b.end_time) : closeMins;
-        if (bEnd <= bStart) bEnd += 1440;
-        return cursor >= bStart && cursor < bEnd;
+        const bStartDate = b.date;
+        const bEndDate = b.end_date || b.date;
+        const bStartMins = b.start_time ? this.timeToMinutes(b.start_time) : openMins;
+        const bEndMins = b.end_time ? this.timeToMinutes(b.end_time) : closeMins;
+
+        if (bStartDate === bEndDate) {
+          let effectiveEnd = bEndMins;
+          if (effectiveEnd <= bStartMins) effectiveEnd += 1440;
+          return cursor < effectiveEnd && (cursor + stepMins) > bStartMins;
+        }
+
+        if (dateStr === bStartDate) {
+          return (cursor + stepMins) > bStartMins;
+        }
+        if (dateStr === bEndDate) {
+          return cursor < bEndMins;
+        }
+        // Between start and end date: entire day is blocked
+        return true;
       });
 
       // Check Existing DB Confirmed Bookings (permanently booked)

@@ -448,6 +448,28 @@ export class AiAgentService {
       };
     }
 
+    // NATURAL LANGUAGE AVAILABILITY CHECK (e.g. "show football slots for tomorrow", "slots for tomorrow", "available slots")
+    if ((lower.includes('slot') || lower.includes('available') || lower.includes('availability') || lower.includes('timing') || lower.includes('free')) && !lower.includes('my booking')) {
+      const parsedDate = this.parseDate(text);
+      dialogSessions.set(phone, { step: 'awaiting_slot_selection', date: parsedDate, updatedAt: Date.now() });
+      const sports = store.getSports();
+      let sport = null;
+      if (lower.includes('football') || lower.includes('soccer')) {
+        sport = sports.find(s => s.name.toLowerCase().includes('football'));
+      } else if (lower.includes('cricket')) {
+        sport = sports.find(s => s.name.toLowerCase().includes('cricket'));
+      }
+      const availData = SlotEngine.getAvailableSlots(sport?.id, parsedDate, phone);
+      const slotsFormatted = WhatsAppFormatter.formatAvailableSlots(availData);
+      return {
+        reply: `🏟️ *Available Slots for ${WhatsAppFormatter.formatDate(parsedDate)}:*\n\n` +
+          slotsFormatted + `\n\n` +
+          `👉 *To reserve:* Reply with your court and time (e.g. *"Turf A at 7pm"* or *"Court 1 at 19:00"*).`,
+        action: 'check_availability',
+        data: availData
+      };
+    }
+
     // OPTION 3: SHOW MY BOOKINGS
     if (lower === '3' || lower.includes('my booking') || lower.includes('my bookings') || lower.includes('show my bookings') || lower.includes('check booking')) {
       const matchRef = text.match(/TRF-\d{8}-\d{4}/i);
@@ -558,21 +580,40 @@ export class AiAgentService {
     // 6. CANCEL BOOKING (Mandatory Two-Step Guardrail)
     if (lower.includes('cancel')) {
       const matchRef = text.match(/TRF-\d{8}-\d{4}/i);
-      if (!matchRef) {
-        return {
-          reply: `⚠️ Please provide your Booking Reference to cancel (e.g., *"Cancel TRF-20261105-1001"*).\n\n` +
-            `Type *"3"* or *"My bookings"* if you need to find your reference number.`,
-          action: 'cancel_need_ref'
-        };
+      let booking = null;
+      let bookingRef = null;
+
+      if (matchRef) {
+        bookingRef = matchRef[0].toUpperCase();
+        booking = store.getBookings().find(b => b.booking_ref === bookingRef);
+      } else {
+        // Allow matching by 4-digit Gate Pass OTP or auto-resolving single active confirmed booking
+        const cleanDigits = phone ? phone.replace(/\D/g, '').slice(-10) : '';
+        const matchOtp = text.match(/\b\d{4}\b/);
+        const userConfirmed = store.getBookings().filter(b => 
+          (b.customer_phone?.replace(/\D/g, '').slice(-10) === cleanDigits) &&
+          b.status === 'confirmed'
+        );
+
+        if (matchOtp) {
+          booking = userConfirmed.find(b => 
+            (b.booking_ref && b.booking_ref.endsWith(matchOtp[0])) ||
+            b.gate_pass_otp === matchOtp[0]
+          );
+        } else if (userConfirmed.length === 1) {
+          booking = userConfirmed[0];
+        }
+
+        if (booking) {
+          bookingRef = booking.booking_ref;
+        }
       }
 
-      const bookingRef = matchRef[0].toUpperCase();
-      const booking = store.getBookings().find(b => b.booking_ref === bookingRef);
-
-      if (!booking) {
+      if (!booking || !bookingRef) {
         return {
-          reply: `⚠️ Booking *${bookingRef}* could not be found. Please check your reference code or reply *3* for *"My bookings"*.`,
-          action: 'cancel_not_found'
+          reply: `⚠️ Please provide your 4-digit Gate Pass OTP or Booking Reference to cancel (e.g., *"Cancel 5231"*).\n\n` +
+            `Type *"3"* or *"My bookings"* if you need to review your active reservations.`,
+          action: 'cancel_need_ref'
         };
       }
 

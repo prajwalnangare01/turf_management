@@ -90,8 +90,14 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
 
   useEffect(() => {
     refreshSlots();
-    const interval = setInterval(refreshSlots, 15000);
-    return () => clearInterval(interval);
+    const unsubscribe = store.subscribe(() => {
+      refreshSlots();
+    });
+    const interval = setInterval(refreshSlots, 3000);
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
   }, [selectedCourt, selectedDate, effectiveSessionId]);
 
   // CC-S03: Recover from Mobile UPI external app intent switch on tab resume

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { store } from '../../services/store';
 import { PostgresEngine } from '../../services/postgresEngine';
 import { AuditLogger } from '../../services/auditLogger';
@@ -38,6 +38,12 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
   const closeConfirm = () => setConfirmState(prev => ({ ...prev, isOpen: false }));
 
   const [bookings, setBookings] = useState<Booking[]>(() => store.getBookings());
+
+  useEffect(() => {
+    return store.subscribe(() => {
+      setBookings([...store.getBookings()]);
+    });
+  }, []);
   const [refundModalBooking, setRefundModalBooking] = useState<Booking | null>(null);
   const customers = store.getCustomers();
   const courts = store.getCourts();

@@ -3,6 +3,7 @@ import { CustomerApp } from './components/customer/CustomerApp';
 import { AdminApp } from './components/admin/AdminApp';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { ReminderScheduler } from './services/reminderScheduler';
+import { SupabaseSyncService } from './services/supabaseSyncService';
 
 export const App: React.FC = () => {
   const checkIsAdminRoute = () => {
@@ -16,6 +17,9 @@ export const App: React.FC = () => {
   const [view, setView] = useState<'customer' | 'admin'>(() => (checkIsAdminRoute() ? 'admin' : 'customer'));
 
   useEffect(() => {
+    // Initialize Supabase PostgreSQL Hydration & Realtime multi-channel sync
+    SupabaseSyncService.init();
+
     const handleUrlChange = () => {
       if (checkIsAdminRoute()) {
         setView('admin');
