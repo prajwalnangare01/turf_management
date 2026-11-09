@@ -651,6 +651,9 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
               }
             } else if (selectedSlots.length > 0) {
               setShowCheckout(true);
+            } else {
+              // Seamlessly enter the Customer Portal ("My Bookings & Profile")!
+              setCustomerView('profile');
             }
           }}
           onClose={() => {

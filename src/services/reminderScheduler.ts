@@ -20,12 +20,6 @@ export class ReminderScheduler {
    */
   public static checkAndDispatch(): { dispatchedCount: number; checkedBookings: string[] } {
     const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const todayStr = `${year}-${month}-${day}`;
-    const currentMins = now.getHours() * 60 + now.getMinutes();
-
     const bookings = store.getBookings();
     const notificationLogs = store.getNotificationLogs();
     let dispatchedCount = 0;
@@ -33,10 +27,11 @@ export class ReminderScheduler {
 
     for (const booking of bookings) {
       if (booking.status !== 'confirmed') continue;
-      if (booking.booking_date !== todayStr) continue;
 
-      const startMins = this.timeToMinutes(booking.start_time);
-      const diffMins = startMins - currentMins;
+      const [bY, bM, bD] = booking.booking_date.split('-').map(Number);
+      const [bH, bMin] = booking.start_time.split(':').map(Number);
+      const bookingStartTime = new Date(bY, bM - 1, bD, bH, bMin, 0);
+      const diffMins = Math.round((bookingStartTime.getTime() - now.getTime()) / (60 * 1000));
 
       // 1-hour window: 45 to 75 minutes before game start
       if (diffMins >= 45 && diffMins <= 75) {

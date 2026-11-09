@@ -49,7 +49,7 @@ export class LockService {
       if (activeBooking.status === 'confirmed') {
         return {
           success: false,
-          message: `Slot is already booked (${activeBooking.booking_ref}).`
+          message: `Slot is already booked.`
         };
       }
       return {

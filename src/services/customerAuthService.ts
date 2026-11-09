@@ -4,6 +4,7 @@ import { normalizeIndianPhone } from '../utils/venueTime';
 import { EmailService } from './emailService';
 import { EmailVerificationService, RequestOtpResult } from './emailVerificationService';
 import { SmsVerificationService, RequestSmsOtpResult } from './smsVerificationService';
+import { SupabaseSyncService } from './supabaseSyncService';
 
 const CUSTOMER_SESSION_KEY = 'turfflow_customer_session';
 
@@ -121,6 +122,11 @@ export class CustomerAuthService {
     customer.password = newPassword.trim();
     store.setCustomers(customers);
 
+    // Sync to Supabase PostgreSQL immediately
+    SupabaseSyncService.syncCustomerToSupabase(customer).catch(err => {
+      console.warn('[CustomerAuthService] Error syncing password reset to Supabase:', err);
+    });
+
     console.info(`[CustomerAuthService] 🔑 Password reset successfully for customer ${customer.name} (${customer.phone})`);
 
     // Log the user in and return active session
@@ -205,6 +211,11 @@ export class CustomerAuthService {
     customer.email = cleanEmail;
     customer.email_verified = true;
     store.setCustomers(customers);
+
+    // Sync to Supabase PostgreSQL immediately
+    SupabaseSyncService.syncCustomerToSupabase(customer).catch(err => {
+      console.warn('[CustomerAuthService] Error syncing email update to Supabase:', err);
+    });
 
     // Update active session in localStorage
     if (typeof localStorage !== 'undefined') {
@@ -294,7 +305,31 @@ export class CustomerAuthService {
       c.phone.replace(/\D/g, '').slice(-10) === cleanDigits.slice(-10)
     );
 
+    // If an account exists with this phone number:
+    // Check if it's an unactivated/walkin/WhatsApp account (no custom password, or matching customer name)
     if (existingPhone) {
+      const isUnactivatedOrOwner = 
+        !existingPhone.password || 
+        existingPhone.password === '' || 
+        !existingPhone.email || 
+        existingPhone.name.trim().toLowerCase() === name.trim().toLowerCase();
+
+      if (isUnactivatedOrOwner) {
+        // Upgrade / activate existing customer account!
+        existingPhone.name = name.trim() || existingPhone.name;
+        existingPhone.email = cleanEmail;
+        existingPhone.password = password.trim();
+        existingPhone.email_verified = true;
+        store.setCustomers(customers);
+
+        // Sync to Supabase PostgreSQL immediately
+        SupabaseSyncService.syncCustomerToSupabase(existingPhone).catch(err => {
+          console.warn('[CustomerAuthService] Error syncing activated customer to Supabase:', err);
+        });
+
+        return this.createSession(existingPhone);
+      }
+
       return { 
         success: false, 
         error: 'An account with this mobile number already exists. Please select "Log In" to access your account.' 
@@ -324,6 +359,11 @@ export class CustomerAuthService {
     };
 
     store.addCustomer(newCustomer);
+
+    // Persist to Supabase PostgreSQL immediately
+    SupabaseSyncService.syncCustomerToSupabase(newCustomer).catch(err => {
+      console.warn('[CustomerAuthService] Error syncing new customer to Supabase:', err);
+    });
 
     EmailService.sendWelcomeEmail({
       customerName: newCustomer.name,

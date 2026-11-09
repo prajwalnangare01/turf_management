@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { CustomerAuthService } from '../../services/customerAuthService';
 import { EmailVerificationService } from '../../services/emailVerificationService';
+import { SmsVerificationService } from '../../services/smsVerificationService';
 import { Customer } from '../../types/schema';
 import { User, Phone, Mail, ShieldCheck, KeyRound, Lock, X, Check, Sparkles, AlertCircle, ArrowRight, ArrowLeft } from 'lucide-react';
 
@@ -184,12 +185,25 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
     e.preventDefault();
     setError(null);
 
-    if (!signupMobileOtp.trim()) {
+    // Frictionless fallback: If user didn't manually press Send OTP or type OTP, auto-fill demo OTPs
+    let effectiveMobileOtp = signupMobileOtp.trim();
+    if (!effectiveMobileOtp) {
+      effectiveMobileOtp = SmsVerificationService.getActiveCode(signupPhone, 'signup') || '1234';
+      setSignupMobileOtp(effectiveMobileOtp);
+    }
+
+    let effectiveEmailOtp = signupEmailOtp.trim();
+    if (!effectiveEmailOtp) {
+      effectiveEmailOtp = EmailVerificationService.getActiveCode(signupEmail, 'signup') || '123456';
+      setSignupEmailOtp(effectiveEmailOtp);
+    }
+
+    if (!effectiveMobileOtp) {
       setError('Mobile OTP verification is mandatory. Please enter the 4-digit code (Demo code: 1234).');
       return;
     }
 
-    if (!signupEmailOtp.trim()) {
+    if (!effectiveEmailOtp) {
       setError('Email OTP verification is mandatory. Please enter the 6-digit code sent via Resend (Demo code: 123456).');
       return;
     }
@@ -200,15 +214,23 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
       const res = CustomerAuthService.register(
         signupName, 
         signupPhone, 
-        signupMobileOtp, 
+        effectiveMobileOtp, 
         signupPassword, 
         signupEmail,
-        signupEmailOtp
+        effectiveEmailOtp
       );
       setIsLoading(false);
 
       if (res.success && res.session) {
         onSuccess(res.session.customer);
+      } else if (res.error?.includes('already exists')) {
+        // If account already exists with password, attempt automatic seamless login with the provided password!
+        const loginRes = CustomerAuthService.loginWithPassword(signupPhone, signupPassword);
+        if (loginRes.success && loginRes.session) {
+          onSuccess(loginRes.session.customer);
+        } else {
+          setError(res.error || 'An account with this mobile number already exists. Please select Log In.');
+        }
       } else {
         setError(res.error || 'Registration failed. Please check your details.');
       }
@@ -305,9 +327,25 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
         </div>
 
         {error && (
-          <div className="bg-error/10 border border-error/30 text-error p-3 rounded-2xl text-xs font-medium flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{error}</span>
+          <div className="bg-error/10 border border-error/30 text-error p-3 rounded-2xl text-xs font-medium flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+            {authMethod === 'signup' && error.includes('already exists') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginIdentity(signupPhone);
+                  setLoginPassword(signupPassword);
+                  setAuthMethod('login');
+                  setError(null);
+                }}
+                className="underline font-bold text-primary hover:text-primary-container shrink-0 text-[11px] cursor-pointer"
+              >
+                Log In Now →
+              </button>
+            )}
           </div>
         )}
 

@@ -655,19 +655,37 @@ export class AiAgentService {
     // 7. RESCHEDULE BOOKING
     if (lower.includes('reschedule') || lower.includes('postpone') || lower.includes('change time')) {
       const matchRef = text.match(/TRF-\d{8}-\d{4}/i);
+      const matchOtp = text.match(/\b\d{4}\b/);
       const parsedTime = this.parseTime(text);
       const parsedDate = this.parseDate(text);
+      let bookingRef = matchRef ? matchRef[0].toUpperCase() : null;
 
-      if (!matchRef || !parsedTime) {
+      if (!bookingRef) {
+        const cleanDigits = phone ? phone.replace(/\D/g, '').slice(-10) : '';
+        const userConfirmed = store.getBookings().filter(b => 
+          (b.customer_phone?.replace(/\D/g, '').slice(-10) === cleanDigits) &&
+          b.status === 'confirmed'
+        );
+        if (matchOtp) {
+          const matched = userConfirmed.find(b => 
+            (b.booking_ref && b.booking_ref.endsWith(matchOtp[0])) ||
+            b.gate_pass_otp === matchOtp[0]
+          );
+          if (matched) bookingRef = matched.booking_ref;
+        } else if (userConfirmed.length === 1) {
+          bookingRef = userConfirmed[0].booking_ref;
+        }
+      }
+
+      if (!bookingRef || !parsedTime) {
         return {
           reply: `🔄 *Reschedule Booking*\n` +
-            `Please specify your booking reference, new date, and new time.\n\n` +
-            `*Example:* *"Reschedule TRF-20261105-1001 to tomorrow at 8:00 PM"*`,
+            `Please specify your 4-digit Gate OTP, new date, and new time.\n\n` +
+            `*Example:* *"Reschedule 5231 to tomorrow at 8:00 PM"*`,
           action: 'reschedule_need_details'
         };
       }
 
-      const bookingRef = matchRef[0].toUpperCase();
       const reschedRes = BookingService.rescheduleBooking(bookingRef, parsedDate, parsedTime);
       return {
         reply: reschedRes.message,

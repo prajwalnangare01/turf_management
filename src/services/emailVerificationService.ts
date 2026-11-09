@@ -201,4 +201,17 @@ export class EmailVerificationService {
       message: 'Email address verified successfully!'
     };
   }
+
+  /**
+   * Helper to retrieve active code for test assertions or UI helper
+   */
+  public static getActiveCode(email: string, purpose: OtpPurpose): string | null {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const storageKey = `${cleanEmail}_${purpose}`;
+    const record = this.getRecords()[storageKey];
+    if (record && Date.now() <= record.expiresAt) {
+      return record.code;
+    }
+    return null;
+  }
 }

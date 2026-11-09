@@ -23,10 +23,10 @@ export class ReminderScheduler {
 
     for (const booking of bookings) {
       if (booking.status !== 'confirmed') continue;
-      if (booking.booking_date !== todayStr) continue;
-
-      const startMins = SlotEngine.timeToMinutes(booking.start_time);
-      const diffMins = startMins - currentMins;
+      const [bY, bM, bD] = booking.booking_date.split('-').map(Number);
+      const [bH, bMin] = booking.start_time.split(':').map(Number);
+      const bookingStartTime = new Date(bY, bM - 1, bD, bH, bMin, 0);
+      const diffMins = Math.round((bookingStartTime.getTime() - now.getTime()) / (60 * 1000));
 
       // 1-Hour window: 45 to 75 minutes before game starts
       if (diffMins >= 45 && diffMins <= 75) {

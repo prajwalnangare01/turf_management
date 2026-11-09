@@ -104,7 +104,16 @@ export class SupabaseSyncService {
       // 4. Fetch Customers
       const { data: customers, error: custErr } = await supabase.from('customers').select('*');
       if (!custErr && customers) {
-        store.setCustomers(customers);
+        // Merge with existing local store to avoid wiping in-flight registrations
+        const existingLocal = store.getCustomers();
+        const mergedCustomers = [...customers];
+        for (const loc of existingLocal) {
+          const found = mergedCustomers.some(c => c.id === loc.id || c.phone === loc.phone);
+          if (!found) {
+            mergedCustomers.push(loc);
+          }
+        }
+        store.setCustomers(mergedCustomers);
       }
 
       // 5. Fetch Bookings

@@ -49,8 +49,8 @@ export class BookingService {
       return {
         success: false,
         message: activeConflict.status === 'confirmed'
-          ? `Slot is already booked (${activeConflict.booking_ref}).`
-          : `Slot is temporarily held for another user's payment. Please try another timing.`
+          ? `Slot is already booked.`
+          : `Slot is temporarily held for another player's payment. Please try another timing.`
       };
     }
 
