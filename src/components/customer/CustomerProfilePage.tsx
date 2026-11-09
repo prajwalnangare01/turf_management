@@ -12,6 +12,7 @@ import {
 import { EmailVerificationService } from '../../services/emailVerificationService';
 import { CustomerAuthService } from '../../services/customerAuthService';
 import { EmailService } from '../../services/emailService';
+import { SupabaseSyncService } from '../../services/supabaseSyncService';
 
 interface CustomerProfilePageProps {
   currentCustomer: Customer;
@@ -204,6 +205,9 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
     if (idx !== -1) {
       customers[idx] = updated;
       store.setCustomers(customers);
+      SupabaseSyncService.syncCustomerToSupabase(updated).catch(err => {
+        console.warn('[CustomerProfilePage] Error syncing updated profile to Supabase:', err);
+      });
     }
 
     onUpdateCustomer(updated);
@@ -235,6 +239,9 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
       if (idx !== -1) {
         customers[idx] = finalCustomer;
         store.setCustomers(customers);
+        SupabaseSyncService.syncCustomerToSupabase(finalCustomer).catch(err => {
+          console.warn('[CustomerProfilePage] Error syncing confirmed email to Supabase:', err);
+        });
       }
 
       onUpdateCustomer(finalCustomer);
