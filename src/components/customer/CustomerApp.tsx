@@ -669,7 +669,10 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
           selectedSlots={selectedSlots}
           sessionId={effectiveSessionId}
           currentCustomer={currentCustomer}
-          onClose={() => setShowCheckout(false)}
+          onClose={() => {
+            setShowCheckout(false);
+            refreshSlots();
+          }}
           onSuccess={(ref) => {
             setShowCheckout(false);
             setSelectedSlots([]);

@@ -8,6 +8,7 @@ interface ActiveCustomerHoldModalProps {
   court: Court;
   date: string;
   time: string;
+  initialRemainingSec?: number;
   onClose: () => void;
 }
 
@@ -15,24 +16,30 @@ export const ActiveCustomerHoldModal: React.FC<ActiveCustomerHoldModalProps> = (
   court,
   date,
   time,
+  initialRemainingSec,
   onClose
 }) => {
   const [remainingSec, setRemainingSec] = useState<number>(() => {
+    if (initialRemainingSec !== undefined && initialRemainingSec > 0) {
+      return initialRemainingSec;
+    }
     const lockInfo = RedisLockService.checkAdminConflict(court.id, date, time);
     return lockInfo.remainingSeconds;
   });
 
   useEffect(() => {
     const timer = setInterval(() => {
-      const lockInfo = RedisLockService.checkAdminConflict(court.id, date, time);
-      setRemainingSec(lockInfo.remainingSeconds);
-      if (lockInfo.remainingSeconds <= 0) {
-        clearInterval(timer);
-      }
+      setRemainingSec(prev => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [court.id, date, time]);
+  }, []);
 
   const mins = Math.floor(remainingSec / 60);
   const secs = remainingSec % 60;

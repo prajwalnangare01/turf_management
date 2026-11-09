@@ -154,18 +154,44 @@ export class RedisLockService {
   }
 
   /**
-   * Check if slot has active customer lock (used by Admin Offline Booking warning)
+   * Check if slot has active customer lock (used by Admin Offline Booking warning & Hold Modal)
    */
   public static checkAdminConflict(courtId: string, date: string, startTime: string): { hasLock: boolean; lock?: SlotLock; remainingSeconds: number } {
     const lock = this.getLock(courtId, date, startTime);
-    if (!lock) {
-      return { hasLock: false, remainingSeconds: 0 };
+    if (lock) {
+      const remainingSeconds = Math.max(0, Math.ceil((lock.expires_at - Date.now()) / 1000));
+      return {
+        hasLock: true,
+        lock,
+        remainingSeconds
+      };
     }
-    const remainingSeconds = Math.max(0, Math.ceil((lock.expires_at - Date.now()) / 1000));
-    return {
-      hasLock: true,
-      lock,
-      remainingSeconds
-    };
+
+    // Also check active pending holds from bookings
+    const pending = store.getBookings().find(b => 
+      b.court_id === courtId &&
+      b.booking_date === date &&
+      b.start_time === startTime &&
+      b.status === 'pending_payment'
+    );
+    if (pending) {
+      const expiresAt = new Date(pending.created_at).getTime() + 300 * 1000;
+      const remainingSeconds = Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
+      if (remainingSeconds > 0) {
+        return {
+          hasLock: true,
+          lock: {
+            court_id: courtId,
+            date,
+            start_time: startTime,
+            locked_by: pending.customer_phone || pending.customer_name || 'Customer Hold',
+            expires_at: expiresAt
+          },
+          remainingSeconds
+        };
+      }
+    }
+
+    return { hasLock: false, remainingSeconds: 0 };
   }
 }

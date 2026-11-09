@@ -38,8 +38,15 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
     });
   }, []);
 
+  // 1-second live ticker for real-time hold countdowns in the grid
+  const [currentTimeMs, setCurrentTimeMs] = useState(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTimeMs(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   // Detail modal for active hold slot
-  const [selectedHoldSlot, setSelectedHoldSlot] = useState<{ court: Court; date: string; time: string } | null>(null);
+  const [selectedHoldSlot, setSelectedHoldSlot] = useState<{ court: Court; date: string; time: string; remainingSec?: number } | null>(null);
 
   // Emergency Weather Rainout Modal (CC-D02)
   const [showRainoutModal, setShowRainoutModal] = useState(false);
@@ -332,19 +339,30 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
                         </button>
                       )}
 
-                      {slot.status === 'locked' && (
-                        <button
-                          type="button"
-                          onClick={() => setSelectedHoldSlot({ court, date: selectedDate, time: timeStr })}
-                          className="w-full h-14 rounded-lg bg-sky-100 hover:bg-sky-200 border border-sky-300 text-sky-900 text-[10px] font-headline font-bold flex flex-col items-center justify-center p-1.5 text-center animate-pulse transition-colors"
-                          title="Click to view hold remaining time and unlock slot"
-                        >
-                          <span className="flex items-center gap-1">⏱️ 5-Min Hold</span>
-                          <span className="text-[9px] underline font-bold">
-                            {slot.locked_by?.startsWith('+91') || (slot.locked_by && slot.locked_by.length === 10) ? 'WhatsApp Hold' : 'Online Hold'}
-                          </span>
-                        </button>
-                      )}
+                      {slot.status === 'locked' && (() => {
+                        const remainingSec = slot.lock_expires_at
+                          ? Math.max(0, Math.ceil((slot.lock_expires_at - currentTimeMs) / 1000))
+                          : 0;
+                        const m = Math.floor(remainingSec / 60);
+                        const s = remainingSec % 60;
+                        const timerStr = `${m}:${s < 10 ? '0' + s : s}`;
+
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedHoldSlot({ court, date: selectedDate, time: timeStr, remainingSec })}
+                            className="w-full h-14 rounded-lg bg-sky-100 hover:bg-sky-200 border border-sky-300 text-sky-950 text-[10px] font-headline font-bold flex flex-col items-center justify-center p-1.5 text-center animate-pulse transition-colors cursor-pointer"
+                            title="Click to view hold remaining time and unlock slot"
+                          >
+                            <span className="flex items-center gap-1 font-mono font-black text-xs text-sky-900">
+                              ⏱️ {timerStr}
+                            </span>
+                            <span className="text-[9px] underline font-bold truncate max-w-full text-sky-800">
+                              {slot.locked_by?.startsWith('+91') || (slot.locked_by && slot.locked_by.length === 10) ? 'WhatsApp Hold' : 'Online Hold'}
+                            </span>
+                          </button>
+                        );
+                      })()}
 
                       {slot.status === 'past' && (
                         <div className="w-full h-14 rounded-lg bg-gray-50 text-gray-400 text-[10px] flex items-center justify-center font-medium">
@@ -471,6 +489,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
           court={selectedHoldSlot.court}
           date={selectedHoldSlot.date}
           time={selectedHoldSlot.time}
+          initialRemainingSec={selectedHoldSlot.remainingSec}
           onClose={() => setSelectedHoldSlot(null)}
         />
       )}

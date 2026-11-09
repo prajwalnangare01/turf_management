@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Customer, Court, DynamicSlot, Coupon, Booking } from '../../types/schema';
 import { store } from '../../services/store';
 import { PostgresEngine } from '../../services/postgresEngine';
@@ -78,8 +78,17 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
   const [couponError, setCouponError] = useState('');
 
-  // Lock countdown timer (5 mins hold)
-  const [timeLeft, setTimeLeft] = useState(300);
+  // 5-minute hold target timestamp (computed once on modal mount)
+  const [targetExpiryMs] = useState<number>(() => {
+    const first = selectedSlots[0];
+    const existingLock = first ? RedisLockService.getLock(court.id, dateStr, first.start_time) : undefined;
+    return existingLock?.expires_at || (Date.now() + 300 * 1000);
+  });
+
+  // Lock countdown timer in seconds
+  const [timeLeft, setTimeLeft] = useState<number>(() => {
+    return Math.max(0, Math.ceil((targetExpiryMs - Date.now()) / 1000));
+  });
 
   // OTP & Payment step
   const [step, setStep] = useState<'details' | 'otp' | 'payment'>('details');
@@ -90,26 +99,36 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [paymentError, setPaymentError] = useState('');
 
+  // Extend locks to 5 minutes once on modal mount
+  const hasAcquiredLocksRef = useRef(false);
   useEffect(() => {
-    // Extend slot holds to full 5 minutes upon entering checkout
-    selectedSlots.forEach(s => {
-      RedisLockService.acquireLock(court.id, dateStr, s.start_time, sessionId);
-    });
-
-    const timer = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          alert('Your 5-minute slot hold expired! Please select your slots again.');
-          onClose();
-          return 0;
-        }
-        return prev - 1;
+    if (!hasAcquiredLocksRef.current) {
+      hasAcquiredLocksRef.current = true;
+      selectedSlots.forEach(s => {
+        RedisLockService.acquireLock(court.id, dateStr, s.start_time, sessionId);
       });
+    }
+  }, [court.id, dateStr, sessionId, selectedSlots]);
+
+  // Live 1-second countdown timer. If user does not complete in 5 minutes, release holds and refresh the page!
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const remaining = Math.max(0, Math.ceil((targetExpiryMs - Date.now()) / 1000));
+      setTimeLeft(remaining);
+
+      if (remaining <= 0) {
+        clearInterval(timer);
+        // Release all held slots across local and Supabase stores
+        selectedSlots.forEach(s => {
+          RedisLockService.releaseLock(court.id, dateStr, s.start_time, sessionId);
+        });
+        alert('Your 5-minute reservation hold has expired! The page will now refresh to show current slot availability.');
+        window.location.reload();
+      }
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [onClose, court.id, dateStr, sessionId]);
+  }, [targetExpiryMs, court.id, dateStr, sessionId, selectedSlots]);
 
   const rawTotal = selectedSlots.reduce((sum, s) => sum + s.price, 0);
   const discount = appliedCoupon
@@ -364,7 +383,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             </div>
 
             <button
-              onClick={onClose}
+              onClick={() => {
+                selectedSlots.forEach(s => {
+                  RedisLockService.releaseLock(court.id, dateStr, s.start_time, sessionId);
+                });
+                onClose();
+              }}
               className="text-on-surface-variant hover:text-on-surface p-1 rounded-full hover:bg-surface-container-high transition"
             >
               <X className="w-5 h-5" />
