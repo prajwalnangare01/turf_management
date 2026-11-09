@@ -938,6 +938,85 @@ async function runResendTests() {
   assert(smsReminder.success, '1-Hour kickoff reminder SMS dispatched');
   assert(smsReminder.message.includes('1 hour'), 'Reminder SMS includes 1-hour warning');
 
+  // --- TEST 19: Time-Windowed & Multi-Day Pitch Maintenance Blocking ---
+  console.log('\n--- TEST 19: Time-Windowed & Multi-Day Pitch Maintenance Blocking ---');
+  const targetCourt = store.getCourts()[0]; // crt-001
+  const testDateTomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+  const testDateDay2 = new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0];
+  const testDateDay3 = new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0];
+  const testDateDay4 = new Date(Date.now() + 86400000 * 4).toISOString().split('T')[0];
+
+  // 19.1: Single-Day Windowed Maintenance Block (Tomorrow from 14:00 to 18:00)
+  const singleDayBlock: BlockedSlot = {
+    id: `blk-test-single-${Date.now()}`,
+    court_id: targetCourt.id,
+    date: testDateTomorrow,
+    start_time: '14:00',
+    end_date: testDateTomorrow,
+    end_time: '18:00',
+    reason: 'maintenance',
+    created_by_admin_id: 'adm-001'
+  };
+  store.setBlockedSlots([...store.getBlockedSlots(), singleDayBlock]);
+
+  const tomorrowSlots = SlotEngine.computeSlotsForCourt(targetCourt, testDateTomorrow);
+  const slot11am = tomorrowSlots.find(s => s.start_time === '11:00');
+  const slot14pm = tomorrowSlots.find(s => s.start_time === '14:00');
+  const slot17pm = tomorrowSlots.find(s => s.start_time === '17:00');
+  const slot18pm = tomorrowSlots.find(s => s.start_time === '18:00');
+
+  assert(slot11am?.status === 'available', 'Morning 11:00 slot remains available before maintenance starts');
+  assert(slot14pm?.status === 'blocked' && slot14pm.blocked_reason === 'Maintenance', '14:00 slot is blocked for maintenance');
+  assert(slot17pm?.status === 'blocked' && slot17pm.blocked_reason === 'Maintenance', '17:00 slot is blocked for maintenance');
+  assert(slot18pm?.status === 'available', '18:00 slot is restored to available after maintenance window ends');
+
+  // 19.2: Multi-Day Pitch Maintenance Block (Day 2 16:00 to Day 4 12:00)
+  const multiDayCourt = store.getCourts()[1] || targetCourt;
+  const multiDayBlock: BlockedSlot = {
+    id: `blk-test-multi-${Date.now()}`,
+    court_id: multiDayCourt.id,
+    date: testDateDay2,
+    start_time: '16:00',
+    end_date: testDateDay4,
+    end_time: '12:00',
+    reason: 'maintenance',
+    created_by_admin_id: 'adm-001'
+  };
+  store.setBlockedSlots([...store.getBlockedSlots(), multiDayBlock]);
+
+  // Day 2 check (Start day: before 16:00 available, after 16:00 blocked)
+  const day2Slots = SlotEngine.computeSlotsForCourt(multiDayCourt, testDateDay2);
+  const day2Morning = day2Slots.find(s => s.start_time === '10:00');
+  const day2Evening = day2Slots.find(s => s.start_time === '17:00');
+  assert(day2Morning?.status === 'available', 'Multi-day block: Day 1 morning slot is available');
+  assert(day2Evening?.status === 'blocked', 'Multi-day block: Day 1 evening slot starting after 16:00 is blocked');
+
+  // Day 3 check (Intermediate day: entire day blocked)
+  const day3Slots = SlotEngine.computeSlotsForCourt(multiDayCourt, testDateDay3);
+  assert(day3Slots.every(s => s.status === 'blocked'), 'Multi-day block: Intermediate full day is 100% blocked');
+
+  // Day 4 check (End day: before 12:00 blocked, after 12:00 available)
+  const day4Slots = SlotEngine.computeSlotsForCourt(multiDayCourt, testDateDay4);
+  const day4Morning = day4Slots.find(s => s.start_time === '09:00');
+  const day4Afternoon = day4Slots.find(s => s.start_time === '14:00');
+  assert(day4Morning?.status === 'blocked', 'Multi-day block: Day 4 slot before 12:00 is blocked');
+  assert(day4Afternoon?.status === 'available', 'Multi-day block: Day 4 slot after 12:00 is available');
+
+  // 19.3: Active Booking Conflict Guard (Rejection of booking inside blocked maintenance window)
+  const blockedInsertAttempt = PostgresEngine.createBooking({
+    customer_id: 'cust-001',
+    court_id: multiDayCourt.id,
+    sport_id: 'sp-football',
+    booking_date: testDateDay3,
+    start_time: '15:00',
+    end_time: '16:00',
+    total_amount: 1200,
+    status: 'pending_payment',
+    source: 'online'
+  });
+  assert(!blockedInsertAttempt.success, 'PostgresEngine cleanly rejects booking creation during active pitch maintenance');
+  assert(blockedInsertAttempt.message.includes('[Court Blocked Guard]'), 'Error message informs user the pitch is closed for maintenance');
+
   console.log('\n🎉 ALL CORNER & EDGE CASE TESTS (INCLUDING RESEND EMAIL & SMS INTEGRATIONS) PASSED PERFECTLY!\n');
 }
 

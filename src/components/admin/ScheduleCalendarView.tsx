@@ -292,14 +292,24 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
                         <div
                           onClick={() => setSelectedBooking(booking)}
                           className={`w-full h-14 rounded-lg p-2 flex flex-col justify-between text-[11px] cursor-pointer transition-all shadow-sm ${
-                            slot.status === 'booked_online'
+                            booking.source === 'offline_whatsapp'
+                              ? 'bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-950'
+                              : booking.source === 'online'
                               ? 'bg-red-50 hover:bg-red-100 border border-red-200 text-red-900'
                               : 'bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900'
                           }`}
                         >
                           <div className="flex justify-between items-center font-bold">
-                            <span className="truncate">{store.getCustomers().find(c => c.id === booking.customer_id)?.name || 'Guest'}</span>
-                            <span className="text-[9px] px-1 bg-white/80 rounded uppercase font-black">{slot.status === 'booked_online' ? 'ONL' : 'WLK'}</span>
+                            <span className="truncate">{store.getCustomers().find(c => c.id === booking.customer_id)?.name || booking.customer_name || 'Guest'}</span>
+                            <span className={`text-[9px] px-1.5 py-0.2 rounded uppercase font-black tracking-tight ${
+                              booking.source === 'offline_whatsapp'
+                                ? 'bg-emerald-600 text-white'
+                                : booking.source === 'online'
+                                ? 'bg-red-600 text-white'
+                                : 'bg-amber-600 text-white'
+                            }`}>
+                              {booking.source === 'offline_whatsapp' ? 'WA' : booking.source === 'online' ? 'ONL' : 'WLK'}
+                            </span>
                           </div>
                           <div className="flex items-center justify-between text-[10px]">
                             <span className="font-mono font-bold bg-white/90 px-1 py-0.5 rounded border border-black/10 text-on-surface">
@@ -369,11 +379,22 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
             </div>
 
             <div className="bg-surface-container-low p-4 rounded-xl space-y-2 text-xs border border-outline-variant/30">
-              <p className="text-on-surface-variant">Customer: <strong className="text-on-surface font-semibold">{store.getCustomers().find(c => c.id === selectedBooking.customer_id)?.name}</strong></p>
-              <p className="text-on-surface-variant">Phone: <strong className="text-on-surface font-semibold">+91 {store.getCustomers().find(c => c.id === selectedBooking.customer_id)?.phone}</strong></p>
-              <p className="text-on-surface-variant">Court: <strong className="text-on-surface font-semibold">{store.getCourts().find(c => c.id === selectedBooking.court_id)?.name}</strong></p>
+              <p className="text-on-surface-variant">Customer: <strong className="text-on-surface font-semibold">{store.getCustomers().find(c => c.id === selectedBooking.customer_id)?.name || selectedBooking.customer_name || 'Customer'}</strong></p>
+              <p className="text-on-surface-variant">Phone: <strong className="text-on-surface font-semibold">{selectedBooking.customer_phone || store.getCustomers().find(c => c.id === selectedBooking.customer_id)?.phone || 'N/A'}</strong></p>
+              <p className="text-on-surface-variant">Court: <strong className="text-on-surface font-semibold">{store.getCourts().find(c => c.id === selectedBooking.court_id)?.name || selectedBooking.court_id}</strong></p>
               <p className="text-on-surface-variant">Date & Time: <strong className="text-primary font-bold">{selectedBooking.booking_date} | {formatTimeRange12h(selectedBooking.start_time, selectedBooking.end_time)}</strong></p>
-              <p className="text-on-surface-variant">Source: <strong className="text-secondary font-headline uppercase">{selectedBooking.source}</strong></p>
+              <div className="flex items-center gap-1.5 text-on-surface-variant">
+                <span>Source:</span>
+                <span className={`px-2 py-0.5 rounded-full font-headline font-bold text-[10px] uppercase ${
+                  selectedBooking.source === 'offline_whatsapp'
+                    ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                    : selectedBooking.source === 'online'
+                    ? 'bg-primary/10 text-primary border border-primary/20'
+                    : 'bg-amber-100 text-amber-900 border border-amber-300'
+                }`}>
+                  {selectedBooking.source === 'offline_whatsapp' ? '💬 WhatsApp AI Agent' : selectedBooking.source === 'offline_walkin' ? '🚶 Walk-in Counter' : selectedBooking.source === 'offline_phone' ? '📞 Phone Reservation' : '🌐 Website Online'}
+                </span>
+              </div>
               <p className="text-on-surface-variant">Status: <strong className="text-primary font-headline uppercase">{selectedBooking.status}</strong></p>
               <p className="text-on-surface-variant">Amount Paid: <strong className="text-on-surface font-headline font-extrabold text-sm">₹{selectedBooking.total_amount}</strong></p>
               {selectedBooking.refund_amount !== undefined && (
