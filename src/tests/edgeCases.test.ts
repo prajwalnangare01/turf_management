@@ -9,6 +9,8 @@ import { store } from '../services/store';
 import { groupContiguousSlots } from '../components/customer/CheckoutModal';
 import { EmailService } from '../services/emailService';
 import { EmailVerificationService } from '../services/emailVerificationService';
+import { SmsService } from '../services/smsService';
+import { SmsVerificationService } from '../services/smsVerificationService';
 import { ReminderScheduler } from '../services/reminderScheduler';
 import { Court, DynamicSlot } from '../types/schema';
 
@@ -880,10 +882,66 @@ async function runResendTests() {
   assert(schedulerCheck.dispatchedCount >= 1, 'ReminderScheduler detected and dispatched 1-hour reminder automatically');
   assert(scheduledBooking.booking!.reminder_sent === true, 'Booking reminder_sent flag set to true');
 
-  console.log('\n🎉 ALL CORNER & EDGE CASE TESTS (INCLUDING RESEND EMAIL INTEGRATION) PASSED PERFECTLY!\n');
+  // --------------------------------------------------------------------------
+  // TEST 18: SMS Integration (Signup OTP, Forgot Password Reset OTP, Booking Confirmation & 1-Hour Reminder SMS)
+  // --------------------------------------------------------------------------
+  console.log('\n--- TEST 18: SMS Service Integration (Signup OTP, Forgot Password Reset OTP, Booking Confirmation & 1-Hour Reminder) ---');
+
+  // 18.1: Request Mobile Signup OTP via SMS
+  const testPhone = '9811223344';
+  const reqSms = await SmsVerificationService.requestOtp(testPhone, 'signup');
+  assert(reqSms.success, 'SmsVerificationService generates and dispatches signup OTP via SMS');
+  assert(!!reqSms.code && reqSms.code.length === 4, 'Generated 4-digit numeric SMS code');
+
+  // 18.2: Verify Invalid vs Valid SMS OTP
+  const invalidSms = SmsVerificationService.verifyOtp(testPhone, '9999', 'signup');
+  assert(!invalidSms.success, 'Invalid 4-digit SMS OTP rejected');
+
+  const validSms = SmsVerificationService.verifyOtp(testPhone, reqSms.code!, 'signup');
+  assert(validSms.success, 'Valid 4-digit SMS OTP verified and consumed');
+
+  // 18.3: Request Forgot Password OTP for Registered User
+  const rahulPhone = '9876543210';
+  const forgotOtpReq = await CustomerAuthService.sendPasswordResetOtp(rahulPhone);
+  assert(forgotOtpReq.success, 'Password reset OTP dispatched via SMS for registered customer');
+  assert(!!forgotOtpReq.code && forgotOtpReq.code.length === 4, 'Generated 4-digit password reset OTP');
+
+  // 18.4: Request Forgot Password OTP for Non-Existent User
+  const nonExistentReq = await CustomerAuthService.sendPasswordResetOtp('9000000000');
+  assert(!nonExistentReq.success, 'Password reset OTP cleanly rejected for unregistered phone number');
+
+  // 18.5: Reset Password with OTP & Verify Login with New Password
+  const resetRes = CustomerAuthService.resetPasswordWithOtp(rahulPhone, forgotOtpReq.code!, 'newsecretpassword');
+  assert(resetRes.success && !!resetRes.session, 'Password successfully reset and active session created');
+  assert(resetRes.session!.customer.password === 'newsecretpassword', 'Customer profile reflects new password');
+
+  const reLogin = CustomerAuthService.loginWithPassword(rahulPhone, 'newsecretpassword');
+  assert(reLogin.success, 'Customer successfully logs in with new updated password');
+
+  // 18.6: Dispatch Booking Confirmation SMS with 4-Digit Gatepass
+  const smsConfirm = await SmsService.sendBookingConfirmation({
+    booking: testBooking,
+    customer: testCust,
+    courtName,
+    venue
+  });
+  assert(smsConfirm.success, 'Booking confirmation SMS sent successfully');
+  assert(smsConfirm.message.includes(testBooking.booking_ref.slice(-4)), 'SMS contains 4-digit gate pass OTP');
+
+  // 18.7: Dispatch 1-Hour Matchday Kickoff Reminder SMS
+  const smsReminder = await SmsService.sendBookingReminder({
+    booking: testBooking,
+    customer: testCust,
+    courtName,
+    venue
+  });
+  assert(smsReminder.success, '1-Hour kickoff reminder SMS dispatched');
+  assert(smsReminder.message.includes('1 hour'), 'Reminder SMS includes 1-hour warning');
+
+  console.log('\n🎉 ALL CORNER & EDGE CASE TESTS (INCLUDING RESEND EMAIL & SMS INTEGRATIONS) PASSED PERFECTLY!\n');
 }
 
 runResendTests().catch(err => {
-  console.error('❌ Resend test failed:', err);
+  console.error('❌ Resend/SMS test failed:', err);
   process.exit(1);
 });

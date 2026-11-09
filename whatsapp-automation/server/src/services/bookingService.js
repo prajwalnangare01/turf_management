@@ -4,6 +4,7 @@ import { LockService } from './lockService.js';
 import { RazorpayService } from './razorpayService.js';
 import { NotificationService } from './notificationService.js';
 import { EmailService } from './emailService.js';
+import { SmsService } from './smsService.js';
 import { SlotEngine } from './slotEngine.js';
 import { SupabaseService } from './supabaseService.js';
 
@@ -166,6 +167,11 @@ export class BookingService {
     // Trigger Outbound Resend Email Confirmation & Gate Pass if customer has email
     EmailService.sendBookingConfirmation(booking).catch(err => {
       console.warn('Backend Resend confirmation email error:', err.message);
+    });
+
+    // Trigger Outbound SMS Confirmation with 4-digit Gate Pass
+    SmsService.sendBookingConfirmation(booking).catch(err => {
+      console.warn('Backend SMS confirmation error:', err.message);
     });
 
     return {

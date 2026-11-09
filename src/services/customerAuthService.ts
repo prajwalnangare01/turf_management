@@ -3,6 +3,7 @@ import { store } from './store';
 import { normalizeIndianPhone } from '../utils/venueTime';
 import { EmailService } from './emailService';
 import { EmailVerificationService, RequestOtpResult } from './emailVerificationService';
+import { SmsVerificationService, RequestSmsOtpResult } from './smsVerificationService';
 
 const CUSTOMER_SESSION_KEY = 'turfflow_customer_session';
 
@@ -15,19 +16,115 @@ export interface CustomerSession {
 
 export class CustomerAuthService {
   /**
-   * Send simulated OTP to phone number
+   * Send Signup Mobile OTP via SMS
    */
-  public static sendOtp(phone: string): { success: boolean; message: string } {
+  public static async sendMobileSignupOtp(phone: string, name?: string): Promise<RequestSmsOtpResult> {
+    const cleanDigits = phone.replace(/\D/g, '');
+    if (cleanDigits.length < 10) {
+      return { success: false, message: 'Please enter a valid 10-digit mobile number.' };
+    }
+    return SmsVerificationService.requestOtp(phone, 'signup', name);
+  }
+
+  /**
+   * Synchronous / legacy helper for mobile OTP dispatch (calls SmsVerificationService async)
+   */
+  public static sendOtp(phone: string): { success: boolean; message: string; code?: string } {
     const normalizedPhone = normalizeIndianPhone(phone);
     const cleanDigits = phone.replace(/\D/g, '');
     if (cleanDigits.length < 10) {
       return { success: false, message: 'Please enter a valid 10-digit mobile number.' };
     }
 
+    // Trigger async SMS request
+    SmsVerificationService.requestOtp(phone, 'signup').catch(err => {
+      console.warn('[CustomerAuthService] sendOtp error:', err);
+    });
+
+    const activeCode = SmsVerificationService.getActiveCode(phone, 'signup') || '1234';
+
     return {
       success: true,
-      message: `OTP sent to ${normalizedPhone}. Demo verification code: 1234`
+      code: activeCode,
+      message: `OTP sent via SMS to ${normalizedPhone}. Demo verification code: ${activeCode} (or 1234)`
     };
+  }
+
+  /**
+   * Request Password Reset OTP via SMS
+   */
+  public static async sendPasswordResetOtp(identity: string): Promise<RequestSmsOtpResult> {
+    const cleanIdentity = identity.trim().toLowerCase();
+    const normalizedPhone = normalizeIndianPhone(identity);
+    const cleanDigits = identity.replace(/\D/g, '');
+
+    const customers = store.getCustomers();
+    const customer = customers.find(c =>
+      normalizeIndianPhone(c.phone) === normalizedPhone ||
+      (cleanDigits.length >= 10 && c.phone.replace(/\D/g, '').slice(-10) === cleanDigits.slice(-10)) ||
+      (c.email && c.email.toLowerCase() === cleanIdentity)
+    );
+
+    if (!customer) {
+      return {
+        success: false,
+        message: 'No registered customer account found with this mobile number or email.'
+      };
+    }
+
+    if (customer.is_blacklisted) {
+      return {
+        success: false,
+        message: 'This account has been suspended. Please contact venue management.'
+      };
+    }
+
+    return SmsVerificationService.requestOtp(customer.phone, 'forgot_password', customer.name);
+  }
+
+  /**
+   * Reset Customer Password using SMS OTP verification
+   */
+  public static resetPasswordWithOtp(
+    phone: string,
+    otpCode: string,
+    newPassword: string
+  ): { success: boolean; session?: CustomerSession; customer?: Customer; error?: string } {
+    const normalizedPhone = normalizeIndianPhone(phone);
+    const cleanDigits = phone.replace(/\D/g, '');
+
+    if (cleanDigits.length < 10) {
+      return { success: false, error: 'Please enter a valid 10-digit mobile number.' };
+    }
+
+    if (!newPassword || newPassword.trim().length < 4) {
+      return { success: false, error: 'New password must be at least 4 characters long.' };
+    }
+
+    // Verify OTP
+    const verifyRes = SmsVerificationService.verifyOtp(phone, otpCode, 'forgot_password');
+    if (!verifyRes.success) {
+      return { success: false, error: verifyRes.message };
+    }
+
+    const customers = store.getCustomers();
+    const customer = customers.find(c =>
+      normalizeIndianPhone(c.phone) === normalizedPhone ||
+      (cleanDigits.length >= 10 && c.phone.replace(/\D/g, '').slice(-10) === cleanDigits.slice(-10))
+    );
+
+    if (!customer) {
+      return { success: false, error: 'Customer account not found.' };
+    }
+
+    // Update password
+    customer.password = newPassword.trim();
+    store.setCustomers(customers);
+
+    console.info(`[CustomerAuthService] 🔑 Password reset successfully for customer ${customer.name} (${customer.phone})`);
+
+    // Log the user in and return active session
+    return this.createSession(customer);
   }
 
 
@@ -152,12 +249,20 @@ export class CustomerAuthService {
       return { success: false, error: 'Valid 10-digit mobile phone number is required.' };
     }
 
-    // 1. Mobile Phone OTP Check (Mandatory)
+    // 1. Mobile Phone OTP Check (Mandatory via SMS)
     const cleanOtp = (otp || '').trim();
-    if (!cleanOtp || cleanOtp !== '1234') {
+    if (!cleanOtp) {
       return { 
         success: false, 
-        error: 'Invalid mobile verification code. Please enter the 4-digit OTP sent to your phone (Demo code: 1234).' 
+        error: 'Mobile phone verification OTP is required.' 
+      };
+    }
+
+    const mobileVerify = SmsVerificationService.verifyOtp(phone, cleanOtp, 'signup');
+    if (!mobileVerify.success) {
+      return { 
+        success: false, 
+        error: mobileVerify.message 
       };
     }
 

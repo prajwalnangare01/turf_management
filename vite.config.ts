@@ -88,6 +88,67 @@ export default defineConfig(({ mode }) => {
               }
             });
           });
+
+          // SMS Dispatch Middleware (/api/sms/send)
+          server.middlewares.use('/api/sms/send', async (req, res) => {
+            if (req.method !== 'POST') {
+              res.statusCode = 405;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ error: 'Method Not Allowed' }));
+              return;
+            }
+
+            let body = '';
+            req.on('data', chunk => {
+              body += chunk;
+            });
+
+            req.on('end', async () => {
+              try {
+                const data = JSON.parse(body || '{}');
+                const rawTo = data.to || '';
+                const cleanDigits = data.phone10 || rawTo.replace(/\D/g, '').slice(-10);
+                const cleanMessage = data.message || '';
+                const activeSenderId = data.senderId || env.SMS_SENDER_ID || 'TRFFLW';
+
+                const fast2smsKey = env.FAST2SMS_API_KEY || (env.SMS_PROVIDER === 'fast2sms' ? env.SMS_API_KEY : null);
+                if (fast2smsKey && !fast2smsKey.includes('your_')) {
+                  const payload = data.route === 'otp' && data.otpCode
+                    ? { route: 'otp', variables_values: data.otpCode, numbers: cleanDigits }
+                    : { route: 'q', message: cleanMessage, numbers: cleanDigits, flash: 0 };
+
+                  const f2sRes = await fetch('https://www.fast2sms.com/dev/bulkV2', {
+                    method: 'POST',
+                    headers: { 'authorization': fast2smsKey, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                  });
+                  const f2sData = await f2sRes.json();
+                  res.setHeader('Content-Type', 'application/json');
+                  res.end(JSON.stringify({
+                    success: f2sData.return === true,
+                    simulated: false,
+                    id: f2sData.request_id || `sms_${Date.now()}`,
+                    provider: 'fast2sms'
+                  }));
+                  return;
+                }
+
+                // Default Simulation Mode
+                console.log(`[SMS Dev Simulation] To: +91${cleanDigits} | Sender: ${activeSenderId} | Msg: "${cleanMessage.slice(0, 80)}..."`);
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({
+                  success: true,
+                  simulated: true,
+                  id: `sim_dev_sms_${Date.now()}`,
+                  provider: 'simulation'
+                }));
+              } catch (err: any) {
+                res.statusCode = 500;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ success: false, error: err.message || 'SMS error' }));
+              }
+            });
+          });
         }
       }
     ],

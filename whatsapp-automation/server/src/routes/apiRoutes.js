@@ -8,6 +8,7 @@ import { AiAgentService } from '../services/aiAgentService.js';
 import { WhatsAppService } from '../services/whatsappService.js';
 import { GatePassService } from '../services/gatePassService.js';
 import { EmailService } from '../services/emailService.js';
+import { SmsService } from '../services/smsService.js';
 import { getSupabase } from '../data/supabaseClient.js';
 
 export const apiRouter = express.Router();
@@ -448,6 +449,49 @@ apiRouter.post('/email/reminder/:ref', async (req, res) => {
       success: true,
       message: `1-Hour reminder dispatched for booking ${booking.booking_ref}!`,
       emailResult: emailRes
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * 25. Dispatch Outbound SMS via Fast2SMS / Twilio / Simulation
+ */
+apiRouter.post('/sms/send', async (req, res) => {
+  try {
+    const { to, message, senderId, route, otpCode } = req.body || {};
+    if (!to || !message) {
+      return res.status(400).json({ success: false, error: 'Recipient "to" and "message" are required' });
+    }
+
+    const result = await SmsService.sendSms({ to, message, senderId, route, otpCode });
+    if (!result.success && !result.simulated) {
+      return res.status(400).json(result);
+    }
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * 26. Trigger 1-Hour Matchday SMS Reminder for Booking
+ */
+apiRouter.post('/sms/reminder/:ref', async (req, res) => {
+  try {
+    const ref = req.params.ref;
+    const booking = await findOrResolveBooking(ref);
+    if (!booking) {
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+
+    booking.reminder_sent = true;
+    const smsRes = await SmsService.sendBookingReminder(booking);
+    res.json({
+      success: true,
+      message: `1-Hour SMS reminder dispatched for booking ${booking.booking_ref}!`,
+      smsResult: smsRes
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

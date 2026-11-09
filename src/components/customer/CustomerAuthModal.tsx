@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { CustomerAuthService } from '../../services/customerAuthService';
 import { EmailVerificationService } from '../../services/emailVerificationService';
 import { Customer } from '../../types/schema';
-import { User, Phone, Mail, ShieldCheck, KeyRound, Lock, X, Check, Sparkles, AlertCircle, ArrowRight } from 'lucide-react';
+import { User, Phone, Mail, ShieldCheck, KeyRound, Lock, X, Check, Sparkles, AlertCircle, ArrowRight, ArrowLeft } from 'lucide-react';
 
 interface CustomerAuthModalProps {
   onSuccess: (customer: Customer) => void;
@@ -11,7 +11,7 @@ interface CustomerAuthModalProps {
 }
 
 export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess, onClose, customNotice }) => {
-  const [authMethod, setAuthMethod] = useState<'login' | 'signup'>('login');
+  const [authMethod, setAuthMethod] = useState<'login' | 'signup' | 'forgot_password'>('login');
   
   // Login form fields (Password only)
   const [loginIdentity, setLoginIdentity] = useState('9876543210');
@@ -23,6 +23,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
   const [signupMobileOtp, setSignupMobileOtp] = useState('');
   const [mobileOtpSent, setMobileOtpSent] = useState(false);
   const [mobileOtpNotice, setMobileOtpNotice] = useState<string | null>(null);
+  const [isSendingMobileOtp, setIsSendingMobileOtp] = useState(false);
 
   const [signupEmail, setSignupEmail] = useState('');
   const [signupEmailOtp, setSignupEmailOtp] = useState('');
@@ -31,26 +32,44 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
   const [isSendingEmailOtp, setIsSendingEmailOtp] = useState(false);
 
   const [signupPassword, setSignupPassword] = useState('');
+
+  // Forgot Password fields (SMS OTP Reset)
+  const [forgotPhone, setForgotPhone] = useState('9876543210');
+  const [forgotOtp, setForgotOtp] = useState('');
+  const [forgotNewPassword, setForgotNewPassword] = useState('');
+  const [forgotConfirmPassword, setForgotConfirmPassword] = useState('');
+  const [forgotOtpSent, setForgotOtpSent] = useState(false);
+  const [forgotOtpNotice, setForgotOtpNotice] = useState<string | null>(null);
+  const [isSendingForgotOtp, setIsSendingForgotOtp] = useState(false);
   
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSendSignupMobileOtp = () => {
+  const handleSendSignupMobileOtp = async () => {
     setError(null);
     setMobileOtpNotice(null);
     if (!signupPhone.trim()) {
       setError('Please enter a 10-digit mobile phone number first.');
       return;
     }
-    const res = CustomerAuthService.sendOtp(signupPhone);
-    if (res.success) {
-      setMobileOtpSent(true);
-      setMobileOtpNotice(res.message);
-      if (!signupMobileOtp) {
-        setSignupMobileOtp('1234');
+
+    setIsSendingMobileOtp(true);
+    try {
+      const res = await CustomerAuthService.sendMobileSignupOtp(signupPhone, signupName || 'Player');
+      setIsSendingMobileOtp(false);
+
+      if (res.success) {
+        setMobileOtpSent(true);
+        setMobileOtpNotice(res.message);
+        if (res.code && !signupMobileOtp) {
+          setSignupMobileOtp(res.code);
+        }
+      } else {
+        setError(res.message || 'Failed to dispatch mobile OTP via SMS');
       }
-    } else {
-      setError(res.message);
+    } catch (err: any) {
+      setIsSendingMobileOtp(false);
+      setError(err?.message || 'Error communicating with SMS service');
     }
   };
 
@@ -81,6 +100,67 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
       setIsSendingEmailOtp(false);
       setError(err?.message || 'Error communicating with Resend email service');
     }
+  };
+
+  const handleSendForgotOtp = async () => {
+    setError(null);
+    setForgotOtpNotice(null);
+    if (!forgotPhone.trim()) {
+      setError('Please enter your registered mobile number.');
+      return;
+    }
+
+    setIsSendingForgotOtp(true);
+    try {
+      const res = await CustomerAuthService.sendPasswordResetOtp(forgotPhone);
+      setIsSendingForgotOtp(false);
+
+      if (res.success) {
+        setForgotOtpSent(true);
+        setForgotOtpNotice(res.message);
+        if (res.code && !forgotOtp) {
+          setForgotOtp(res.code);
+        }
+      } else {
+        setError(res.message || 'No account found with this phone number.');
+      }
+    } catch (err: any) {
+      setIsSendingForgotOtp(false);
+      setError(err?.message || 'Error communicating with SMS service');
+    }
+  };
+
+  const handleForgotSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    if (!forgotOtp.trim()) {
+      setError('Please enter the 4-digit SMS verification code (Demo code: 1234).');
+      return;
+    }
+
+    if (!forgotNewPassword || forgotNewPassword.length < 4) {
+      setError('New password must be at least 4 characters long.');
+      return;
+    }
+
+    if (forgotNewPassword !== forgotConfirmPassword) {
+      setError('New password and confirmation password do not match.');
+      return;
+    }
+
+    setIsLoading(true);
+
+    setTimeout(() => {
+      const res = CustomerAuthService.resetPasswordWithOtp(forgotPhone, forgotOtp, forgotNewPassword);
+      setIsLoading(false);
+
+      if (res.success && res.session) {
+        onSuccess(res.session.customer);
+      } else {
+        setError(res.error || 'Password reset failed. Please check the code.');
+      }
+    }, 400);
   };
 
   const handleLoginSubmit = (e: React.FormEvent) => {
@@ -158,7 +238,10 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-outline-variant/60 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-200 text-on-surface max-h-[90vh] overflow-y-auto">
+      <div 
+        className={`bg-white rounded-3xl p-5 sm:p-6 w-full border border-outline-variant/60 shadow-2xl space-y-3 animate-in fade-in zoom-in-95 duration-200 text-on-surface max-h-[92vh] overflow-y-auto no-scrollbar ${authMethod === 'signup' ? 'max-w-lg' : 'max-w-md'}`}
+        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+      >
         
         {/* Header */}
         <div className="flex justify-between items-center pb-2 border-b border-outline-variant/40">
@@ -168,12 +251,14 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
             </div>
             <div>
               <h3 className="font-headline font-bold text-lg text-primary leading-none">
-                {authMethod === 'login' ? 'Customer Log In' : 'Create New Account'}
+                {authMethod === 'login' ? 'Customer Log In' : authMethod === 'signup' ? 'Create New Account' : 'Reset Password'}
               </h3>
               <p className="text-[11px] text-on-surface-variant font-medium mt-0.5">
                 {authMethod === 'login' 
                   ? 'Access your saved bookings and account' 
-                  : 'Dual OTP verified registration (Mobile + Email)'}
+                  : authMethod === 'signup'
+                    ? 'Dual OTP verified registration (SMS + Email)'
+                    : 'Verify SMS OTP to set a new account password'}
               </p>
             </div>
           </div>
@@ -244,9 +329,18 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
             </div>
 
             <div className="space-y-1">
-              <label className="font-headline font-bold text-on-surface-variant flex items-center gap-1.5">
-                <Lock className="w-3.5 h-3.5 text-primary" /> Account Password
-              </label>
+              <div className="flex justify-between items-center">
+                <label className="font-headline font-bold text-on-surface-variant flex items-center gap-1.5">
+                  <Lock className="w-3.5 h-3.5 text-primary" /> Account Password
+                </label>
+                <button
+                  type="button"
+                  onClick={() => { setAuthMethod('forgot_password'); setError(null); }}
+                  className="text-[11px] text-primary hover:underline font-bold"
+                >
+                  Forgot Password?
+                </button>
+              </div>
               <input
                 type="password"
                 required
@@ -285,146 +379,251 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
 
         {/* OPTION 2: SIGN UP (Both Mobile OTP and Resend Email OTP Mandatory) */}
         {authMethod === 'signup' && (
-          <form onSubmit={handleSignupSubmit} className="space-y-3.5 text-xs">
-            {/* Full Name */}
-            <div className="space-y-1">
-              <label className="font-headline font-bold text-on-surface-variant flex items-center gap-1.5">
-                <User className="w-3.5 h-3.5 text-primary" /> Full Name *
-              </label>
-              <input
-                type="text"
-                required
-                value={signupName}
-                onChange={e => setSignupName(e.target.value)}
-                placeholder="e.g. Rahul Sharma"
-                className="w-full px-4 py-2.5 rounded-2xl border border-outline-variant focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 bg-surface-container-lowest font-medium"
-              />
+          <form onSubmit={handleSignupSubmit} className="space-y-2.5 text-xs">
+            {/* Full Name & Password Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <label className="font-headline font-bold text-on-surface-variant flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5 text-primary" /> Full Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={signupName}
+                  onChange={e => setSignupName(e.target.value)}
+                  placeholder="e.g. Rahul Sharma"
+                  className="w-full px-3 py-2 rounded-xl border border-outline-variant focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 bg-surface-container-lowest font-medium"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-headline font-bold text-on-surface-variant flex items-center gap-1.5">
+                  <Lock className="w-3.5 h-3.5 text-primary" /> Password *
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={signupPassword}
+                  onChange={e => setSignupPassword(e.target.value)}
+                  placeholder="Min 4 characters"
+                  className="w-full px-3 py-2 rounded-xl border border-outline-variant focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 bg-surface-container-lowest font-medium"
+                />
+              </div>
             </div>
 
-            {/* 1. Mobile Number & Mobile OTP (Mandatory) */}
-            <div className="space-y-2 bg-surface-container-low p-3.5 rounded-2xl border border-outline-variant/40">
-              <div className="space-y-1">
-                <label className="font-headline font-bold text-on-surface-variant flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
-                    <Phone className="w-3.5 h-3.5 text-primary" /> Mobile Phone Number *
-                  </span>
-                  <span className="text-[10px] text-primary font-bold">10 Digits</span>
+            {/* 1. Mobile Phone Number & Mobile OTP */}
+            <div className="space-y-1.5 bg-surface-container-low p-2.5 sm:p-3 rounded-2xl border border-outline-variant/40">
+              <div className="flex items-center justify-between text-[11px]">
+                <label className="font-headline font-bold text-on-surface-variant flex items-center gap-1.5">
+                  <Phone className="w-3.5 h-3.5 text-primary" /> Mobile Phone Number *
                 </label>
-                <div className="flex gap-2">
+                <span className="text-[10px] text-primary font-bold">Demo OTP: 1234</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                <div className="sm:col-span-8 flex gap-1.5">
                   <input
                     type="tel"
                     required
                     value={signupPhone}
                     onChange={e => setSignupPhone(e.target.value)}
                     placeholder="10-digit mobile number"
-                    className="w-full px-3.5 py-2 rounded-xl border border-outline-variant focus:outline-none focus:border-primary bg-white font-medium"
+                    className="w-full px-3 py-1.5 rounded-xl border border-outline-variant focus:outline-none focus:border-primary bg-white font-medium text-xs"
                   />
                   <button
                     type="button"
                     onClick={handleSendSignupMobileOtp}
-                    className="btn-secondary text-[11px] px-3.5 whitespace-nowrap font-bold shrink-0"
+                    className="btn-secondary text-[11px] px-2.5 whitespace-nowrap font-bold shrink-0"
                   >
                     {mobileOtpSent ? 'Resend' : 'Send OTP'}
                   </button>
                 </div>
+                <div className="sm:col-span-4">
+                  <input
+                    type="text"
+                    required
+                    maxLength={4}
+                    value={signupMobileOtp}
+                    onChange={e => setSignupMobileOtp(e.target.value)}
+                    placeholder="4-digit OTP"
+                    className="w-full px-2 py-1.5 rounded-xl border border-outline-variant focus:outline-none focus:border-primary bg-white font-mono font-bold tracking-wider text-center text-xs"
+                  />
+                </div>
               </div>
 
               {mobileOtpNotice && (
-                <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-2 rounded-xl text-[11px] font-medium flex items-center gap-1.5">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                  <span>{mobileOtpNotice}</span>
+                <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-2 py-1 rounded-xl text-[10px] font-medium flex items-center gap-1.5">
+                  <ShieldCheck className="w-3 h-3 text-emerald-600 shrink-0" />
+                  <span className="truncate">{mobileOtpNotice}</span>
                 </div>
               )}
-
-              <div className="space-y-1 pt-1">
-                <label className="font-headline font-bold text-on-surface-variant flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
-                    <KeyRound className="w-3.5 h-3.5 text-secondary" /> 4-Digit Mobile OTP *
-                  </span>
-                  <span className="text-[10px] text-primary font-bold">Demo: 1234</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  maxLength={4}
-                  value={signupMobileOtp}
-                  onChange={e => setSignupMobileOtp(e.target.value)}
-                  placeholder="Enter 4-digit mobile OTP"
-                  className="w-full px-4 py-2 rounded-xl border border-outline-variant focus:outline-none focus:border-primary bg-white font-mono font-bold tracking-widest text-center text-sm"
-                />
-              </div>
             </div>
 
-            {/* 2. Email Address & Email OTP via Resend (Mandatory) */}
-            <div className="space-y-2 bg-surface-container-low p-3.5 rounded-2xl border border-outline-variant/40">
-              <div className="space-y-1">
-                <label className="font-headline font-bold text-on-surface-variant flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
-                    <Mail className="w-3.5 h-3.5 text-primary" /> Email Address *
-                  </span>
-                  <span className="text-[10px] text-secondary font-bold">Resend Verified</span>
+            {/* 2. Email Address & Email OTP via Resend */}
+            <div className="space-y-1.5 bg-surface-container-low p-2.5 sm:p-3 rounded-2xl border border-outline-variant/40">
+              <div className="flex items-center justify-between text-[11px]">
+                <label className="font-headline font-bold text-on-surface-variant flex items-center gap-1.5">
+                  <Mail className="w-3.5 h-3.5 text-primary" /> Email Address (Resend) *
                 </label>
-                <div className="flex gap-2">
+                <span className="text-[10px] text-primary font-mono font-bold">Demo: 123456</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                <div className="sm:col-span-8 flex gap-1.5">
                   <input
                     type="email"
                     required
                     value={signupEmail}
                     onChange={e => setSignupEmail(e.target.value)}
-                    placeholder="e.g. rahul.sharma@example.com"
-                    className="w-full px-3.5 py-2 rounded-xl border border-outline-variant focus:outline-none focus:border-primary bg-white font-medium"
+                    placeholder="name@example.com"
+                    className="w-full px-3 py-1.5 rounded-xl border border-outline-variant focus:outline-none focus:border-primary bg-white font-medium text-xs"
                   />
                   <button
                     type="button"
                     disabled={isSendingEmailOtp}
                     onClick={handleSendSignupEmailOtp}
-                    className="btn-secondary text-[11px] px-3.5 whitespace-nowrap font-bold shrink-0 flex items-center gap-1"
+                    className="btn-secondary text-[11px] px-2.5 whitespace-nowrap font-bold shrink-0 flex items-center gap-1"
                   >
                     {isSendingEmailOtp ? (
-                      <div className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                      <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                     ) : (
                       emailOtpSent ? 'Resend' : 'Send Code'
                     )}
                   </button>
                 </div>
+                <div className="sm:col-span-4">
+                  <input
+                    type="text"
+                    required
+                    maxLength={6}
+                    value={signupEmailOtp}
+                    onChange={e => setSignupEmailOtp(e.target.value)}
+                    placeholder="6-digit Code"
+                    className="w-full px-2 py-1.5 rounded-xl border border-outline-variant focus:outline-none focus:border-primary bg-white font-mono font-bold tracking-wider text-center text-xs"
+                  />
+                </div>
               </div>
 
               {emailOtpNotice && (
-                <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-2 rounded-xl text-[11px] font-medium flex items-center gap-1.5">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                  <span>{emailOtpNotice}</span>
+                <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-2 py-1 rounded-xl text-[10px] font-medium flex items-center gap-1.5">
+                  <ShieldCheck className="w-3 h-3 text-emerald-600 shrink-0" />
+                  <span className="truncate">{emailOtpNotice}</span>
                 </div>
               )}
+            </div>
 
-              <div className="space-y-1 pt-1">
-                <label className="font-headline font-bold text-on-surface-variant flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
-                    <KeyRound className="w-3.5 h-3.5 text-secondary" /> 6-Digit Email Code *
-                  </span>
-                  <span className="text-[10px] text-primary font-mono font-bold">Demo: 123456</span>
-                </label>
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full btn-cta py-2.5 text-xs font-headline font-bold uppercase tracking-wider flex items-center justify-center gap-2 shadow-md mt-1 cursor-pointer"
+            >
+              {isLoading ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <>
+                  <Check className="w-4 h-4" /> Verify Both OTPs & Register
+                </>
+              )}
+            </button>
+
+            <div className="text-center pt-0.5">
+              <button
+                type="button"
+                onClick={() => { setAuthMethod('login'); setError(null); }}
+                className="text-xs text-primary hover:underline font-headline font-bold inline-flex items-center gap-1 cursor-pointer"
+              >
+                Already have an account? Log In <ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* OPTION 3: FORGOT PASSWORD (SMS OTP Verification & Reset) */}
+        {authMethod === 'forgot_password' && (
+          <form onSubmit={handleForgotSubmit} className="space-y-3.5 text-xs">
+            <div className="bg-primary/5 border border-primary/20 rounded-2xl p-3 text-primary text-[11px] flex items-start gap-2">
+              <KeyRound className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+              <p>Enter your registered mobile phone number to receive a 4-digit SMS verification code to reset your password.</p>
+            </div>
+
+            <div className="space-y-1">
+              <label className="font-headline font-bold text-on-surface-variant flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Phone className="w-3.5 h-3.5 text-primary" /> Registered Mobile Number *
+                </span>
+                <span className="text-[10px] text-primary font-bold">10 Digits</span>
+              </label>
+              <div className="flex gap-2">
                 <input
-                  type="text"
+                  type="tel"
                   required
-                  maxLength={6}
-                  value={signupEmailOtp}
-                  onChange={e => setSignupEmailOtp(e.target.value)}
-                  placeholder="Enter 6-digit email code"
-                  className="w-full px-4 py-2 rounded-xl border border-outline-variant focus:outline-none focus:border-primary bg-white font-mono font-bold tracking-[0.25em] text-center text-sm"
+                  value={forgotPhone}
+                  onChange={e => setForgotPhone(e.target.value)}
+                  placeholder="Enter 10-digit mobile number"
+                  className="w-full px-3.5 py-2 rounded-xl border border-outline-variant focus:outline-none focus:border-primary bg-white font-medium"
                 />
+                <button
+                  type="button"
+                  disabled={isSendingForgotOtp}
+                  onClick={handleSendForgotOtp}
+                  className="btn-secondary text-[11px] px-3.5 whitespace-nowrap font-bold shrink-0 flex items-center gap-1"
+                >
+                  {isSendingForgotOtp ? (
+                    <div className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    forgotOtpSent ? 'Resend' : 'Send OTP'
+                  )}
+                </button>
               </div>
             </div>
 
-            {/* Set Password */}
+            {forgotOtpNotice && (
+              <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-2.5 rounded-xl text-[11px] font-medium flex items-center gap-1.5 animate-in fade-in">
+                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{forgotOtpNotice}</span>
+              </div>
+            )}
+
+            <div className="space-y-1">
+              <label className="font-headline font-bold text-on-surface-variant flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <KeyRound className="w-3.5 h-3.5 text-secondary" /> 4-Digit SMS OTP *
+                </span>
+                <span className="text-[10px] text-primary font-mono font-bold">Demo: 1234</span>
+              </label>
+              <input
+                type="text"
+                required
+                maxLength={4}
+                value={forgotOtp}
+                onChange={e => setForgotOtp(e.target.value)}
+                placeholder="Enter 4-digit code"
+                className="w-full px-4 py-2 rounded-xl border border-outline-variant focus:outline-none focus:border-primary bg-white font-mono font-bold tracking-widest text-center text-sm"
+              />
+            </div>
+
             <div className="space-y-1">
               <label className="font-headline font-bold text-on-surface-variant flex items-center gap-1.5">
-                <Lock className="w-3.5 h-3.5 text-primary" /> Set Account Password *
+                <Lock className="w-3.5 h-3.5 text-primary" /> New Password *
               </label>
               <input
                 type="password"
                 required
-                value={signupPassword}
-                onChange={e => setSignupPassword(e.target.value)}
-                placeholder="Create a password (min 4 characters)"
+                value={forgotNewPassword}
+                onChange={e => setForgotNewPassword(e.target.value)}
+                placeholder="Create new password (min 4 chars)"
+                className="w-full px-4 py-2.5 rounded-2xl border border-outline-variant focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 bg-surface-container-lowest font-medium"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="font-headline font-bold text-on-surface-variant flex items-center gap-1.5">
+                <Lock className="w-3.5 h-3.5 text-primary" /> Confirm New Password *
+              </label>
+              <input
+                type="password"
+                required
+                value={forgotConfirmPassword}
+                onChange={e => setForgotConfirmPassword(e.target.value)}
+                placeholder="Re-enter new password"
                 className="w-full px-4 py-2.5 rounded-2xl border border-outline-variant focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 bg-surface-container-lowest font-medium"
               />
             </div>
@@ -438,7 +637,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
               ) : (
                 <>
-                  <Check className="w-4 h-4" /> Verify Both OTPs & Register
+                  <Check className="w-4 h-4" /> Reset Password & Log In
                 </>
               )}
             </button>
@@ -449,28 +648,28 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
                 onClick={() => { setAuthMethod('login'); setError(null); }}
                 className="text-xs text-primary hover:underline font-headline font-bold inline-flex items-center gap-1"
               >
-                Already have an account? Log In <ArrowRight className="w-3 h-3" />
+                <ArrowLeft className="w-3 h-3" /> Back to Log In
               </button>
             </div>
           </form>
         )}
 
         {/* Demo Fast Fill Section */}
-        <div className="pt-2.5 border-t border-outline-variant/40 space-y-2">
-          <div className="flex items-center justify-between text-[11px] font-headline font-bold text-on-surface-variant">
+        <div className="pt-2 border-t border-outline-variant/30 space-y-1.5">
+          <div className="flex items-center justify-between text-[10px] font-headline font-bold text-on-surface-variant">
             <span className="flex items-center gap-1">
-              <Sparkles className="w-3.5 h-3.5 text-secondary" /> Demo Quick Fill:
+              <Sparkles className="w-3 h-3 text-secondary" /> Demo Quick Fill:
             </span>
             <span className="text-[10px] text-primary">Demo Password: pass123</span>
           </div>
-          <div className="grid grid-cols-2 gap-2 text-[11px]">
+          <div className="grid grid-cols-2 gap-1.5 text-[11px]">
             <button
               type="button"
               onClick={() => {
                 setAuthMethod('login');
                 handleQuickDemoLogin('9876543210', 'pass123');
               }}
-              className="p-2 rounded-xl bg-surface-container-low hover:bg-primary/10 border border-outline-variant/40 text-left transition font-semibold text-primary"
+              className="py-1.5 px-2.5 rounded-xl bg-surface-container-low hover:bg-primary/10 border border-outline-variant/40 text-left transition font-semibold text-primary text-xs cursor-pointer"
             >
               👤 Log In as Rahul
             </button>
@@ -480,10 +679,29 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
                 setAuthMethod('signup');
                 handleQuickDemoSignup();
               }}
-              className="p-2 rounded-xl bg-surface-container-low hover:bg-primary/10 border border-outline-variant/40 text-left transition font-semibold text-primary"
+              className="py-1.5 px-2.5 rounded-xl bg-surface-container-low hover:bg-primary/10 border border-outline-variant/40 text-left transition font-semibold text-primary text-xs cursor-pointer"
             >
               ✨ Sign Up (Dual OTP Auto-Fill)
             </button>
+            {authMethod !== 'signup' && (
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMethod('forgot_password');
+                  setForgotPhone('9876543210');
+                  setForgotOtp('1234');
+                  setForgotOtpSent(true);
+                  setForgotOtpNotice('Reset OTP sent via SMS to +91 9876543210. Demo code: 1234');
+                  setForgotNewPassword('pass123');
+                  setForgotConfirmPassword('pass123');
+                  setError(null);
+                }}
+                className="col-span-2 py-1.5 px-2.5 rounded-xl bg-surface-container-low hover:bg-primary/10 border border-outline-variant/40 text-left transition font-semibold text-primary flex items-center justify-between text-xs cursor-pointer"
+              >
+                <span>🔑 Demo Forgot Password (Rahul: 9876543210)</span>
+                <span className="text-[10px] text-primary font-bold">Auto-Fill & Reset</span>
+              </button>
+            )}
           </div>
         </div>
 

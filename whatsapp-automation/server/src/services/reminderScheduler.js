@@ -1,6 +1,7 @@
 // Automated 1-Hour Reminder Scheduler for TurfFlow Backend
 import { store } from '../data/store.js';
 import { EmailService } from './emailService.js';
+import { SmsService } from './smsService.js';
 import { NotificationService } from './notificationService.js';
 import { SlotEngine } from './slotEngine.js';
 
@@ -39,7 +40,12 @@ export class ReminderScheduler {
             console.warn('[ReminderScheduler] Resend reminder error:', err.message);
           });
 
-          // 2. Dispatch WhatsApp reminder
+          // 2. Dispatch Matchday Kickoff SMS Reminder
+          SmsService.sendBookingReminder(booking).catch(err => {
+            console.warn('[ReminderScheduler] SMS reminder error:', err.message);
+          });
+
+          // 3. Dispatch WhatsApp reminder
           const venue = store.getVenue();
           const court = store.getCourts().find(c => c.id === booking.court_id);
           const otpCode = booking.booking_ref ? booking.booking_ref.slice(-4) : '0000';

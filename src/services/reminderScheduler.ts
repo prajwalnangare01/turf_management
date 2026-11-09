@@ -82,7 +82,7 @@ export class ReminderScheduler {
 
     return {
       success: true,
-      message: `1-Hour reminder successfully dispatched via Resend to ${target}!`
+      message: `1-Hour reminder successfully dispatched via Email & SMS to ${target}!`
     };
   }
 

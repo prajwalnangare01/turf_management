@@ -1,6 +1,7 @@
 import { store } from './store';
 import { Booking, NotificationLog } from '../types/schema';
 import { EmailService } from './emailService';
+import { SmsService } from './smsService';
 
 export class NotificationService {
   public static enqueueNotification(
@@ -101,6 +102,25 @@ export class NotificationService {
           metTerms: booking.cancellation_met_terms,
           noticeHours: booking.cancellation_notice_hours
         }).catch(err => console.warn('[NotificationService] Email cancellation dispatch failed:', err));
+      }
+    }
+
+    // 3. Dispatch SMS notification for Confirmation & Kickoff Reminder
+    if (venue.sms_fallback_enabled !== false) {
+      if (type === 'confirmation') {
+        SmsService.sendBookingConfirmation({
+          booking,
+          customer,
+          courtName,
+          venue
+        }).catch(err => console.warn('[NotificationService] SMS confirmation dispatch failed:', err));
+      } else if (type === 'reminder') {
+        SmsService.sendBookingReminder({
+          booking,
+          customer,
+          courtName,
+          venue
+        }).catch(err => console.warn('[NotificationService] SMS reminder dispatch failed:', err));
       }
     }
 
