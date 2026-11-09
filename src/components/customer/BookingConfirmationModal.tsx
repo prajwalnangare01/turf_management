@@ -1,6 +1,6 @@
 import React from 'react';
 import { store } from '../../services/store';
-import { formatTimeRange12h } from '../../utils/formatters';
+import { formatTimeRange12h, formatDateDDMMYYYY } from '../../utils/formatters';
 import { CheckCircle2, MapPin, MessageSquare, Download, X, KeyRound, Calendar, Mail, Printer } from 'lucide-react';
 
 interface BookingConfirmationModalProps {
@@ -150,7 +150,7 @@ export const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> =
               </div>
               <div class="info-item">
                 <span class="info-label">Booking Date</span>
-                <span class="info-value">${booking.booking_date}</span>
+                <span class="info-value">${formatDateDDMMYYYY(booking.booking_date)}</span>
               </div>
               <div class="info-item">
                 <span class="info-label">Slot Time</span>
@@ -247,7 +247,7 @@ export const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> =
             <div className="flex justify-between items-center text-on-surface-variant">
               <span className="font-medium">Date & Time:</span>
               <span className="font-headline font-bold text-primary text-xs">
-                {booking.booking_date} | {formatTimeRange12h(booking.start_time, booking.end_time)}
+                {formatDateDDMMYYYY(booking.booking_date)} | {formatTimeRange12h(booking.start_time, booking.end_time)}
               </span>
             </div>
             <div className="flex justify-between items-center text-on-surface-variant border-t border-outline-variant/30 pt-2">

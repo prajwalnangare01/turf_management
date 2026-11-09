@@ -4,6 +4,7 @@ import { PostgresEngine } from '../../services/postgresEngine';
 import { Booking, Customer } from '../../types/schema';
 import { CancelBookingConfirmModal } from './CancelBookingConfirmModal';
 import { Calendar, XCircle, AlertCircle, X, ShieldCheck, Tag, RotateCcw } from 'lucide-react';
+import { formatDateDDMMYYYY, formatTimeRange12h } from '../../utils/formatters';
 
 interface BookingLookupModalProps {
   currentCustomer: Customer;
@@ -143,12 +144,12 @@ export const BookingLookupModal: React.FC<BookingLookupModalProps> = ({ currentC
                     <div className="flex items-center gap-4 text-xs text-on-surface-variant bg-surface-container-low p-2.5 rounded-xl border border-outline-variant/30">
                       <div>
                         <span className="block text-[10px] uppercase font-bold text-on-surface-variant/70">Date</span>
-                        <span className="font-bold text-on-surface">{b.booking_date}</span>
+                        <span className="font-bold text-on-surface">{formatDateDDMMYYYY(b.booking_date)}</span>
                       </div>
                       <div className="h-6 border-r border-outline-variant/40" />
                       <div>
                         <span className="block text-[10px] uppercase font-bold text-on-surface-variant/70">Slot Time</span>
-                        <span className="font-bold text-on-surface">{b.start_time} - {b.end_time}</span>
+                        <span className="font-bold text-on-surface">{formatTimeRange12h(b.start_time, b.end_time)}</span>
                       </div>
                     </div>
 

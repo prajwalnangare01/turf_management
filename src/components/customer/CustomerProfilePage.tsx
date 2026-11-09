@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { store } from '../../services/store';
 import { PostgresEngine } from '../../services/postgresEngine';
 import { Customer, Booking } from '../../types/schema';
-import { formatTimeRange12h } from '../../utils/formatters';
+import { formatTimeRange12h, formatDateDDMMYYYY } from '../../utils/formatters';
 import { CancelBookingConfirmModal } from './CancelBookingConfirmModal';
 import { 
   User, Phone, Mail, Calendar, ArrowLeft, ShieldCheck, Ticket, 
@@ -580,7 +580,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
                         <Calendar className="w-4 h-4 text-primary shrink-0" />
                         <div>
                           <span className="text-[10px] font-headline font-bold text-on-surface-variant uppercase block">Date</span>
-                          <span className="font-bold text-on-surface">{b.booking_date}</span>
+                          <span className="font-bold text-on-surface">{formatDateDDMMYYYY(b.booking_date)}</span>
                         </div>
                       </div>
                       <div className="h-6 border-r border-outline-variant/40" />
@@ -693,7 +693,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
                     Match Date
                   </span>
                   <span className="font-medium text-on-surface">
-                    {passModalBooking.booking_date}
+                    {formatDateDDMMYYYY(passModalBooking.booking_date)}
                   </span>
                 </div>
 

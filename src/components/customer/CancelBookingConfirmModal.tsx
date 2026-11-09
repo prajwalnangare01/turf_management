@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Booking } from '../../types/schema';
 import { store } from '../../services/store';
-import { formatTimeRange12h } from '../../utils/formatters';
+import { formatTimeRange12h, formatDateDDMMYYYY } from '../../utils/formatters';
 import { 
   AlertCircle, 
   CheckCircle2, 
@@ -100,7 +100,7 @@ export const CancelBookingConfirmModal: React.FC<CancelBookingConfirmModalProps>
             <div className="flex justify-between">
               <span>Slot:</span>
               <strong className="text-primary font-bold">
-                {booking.booking_date} ({formatTimeRange12h(booking.start_time, booking.end_time)})
+                {formatDateDDMMYYYY(booking.booking_date)} ({formatTimeRange12h(booking.start_time, booking.end_time)})
               </strong>
             </div>
             <div className="flex justify-between items-center pt-0.5">

@@ -7,7 +7,7 @@ import { RedisLockService } from '../../services/redisLockService';
 import { CouponService } from '../../services/couponService';
 import { normalizeIndianPhone } from '../../utils/venueTime';
 import { ShieldCheck, Tag, CreditCard, Smartphone, AlertTriangle, X, Timer, PersonStanding } from 'lucide-react';
-import { formatTimeRange12h } from '../../utils/formatters';
+import { formatTimeRange12h, formatDateDDMMYYYY } from '../../utils/formatters';
 
 interface CheckoutModalProps {
   court: Court;
@@ -377,7 +377,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             <div className="flex justify-between text-xs text-on-surface-variant">
               <span className="font-medium">Date & Slot Time:</span>
               <span className="font-headline font-bold text-primary text-xs text-right max-w-[280px]">
-                {dateStr} | {formattedSlotsSummary} ({selectedSlots.length} slot{selectedSlots.length > 1 ? 's' : ''})
+                {formatDateDDMMYYYY(dateStr)} | {formattedSlotsSummary} ({selectedSlots.length} slot{selectedSlots.length > 1 ? 's' : ''})
               </span>
             </div>
             <div className="border-t border-outline-variant/30 pt-2 flex justify-between items-center">
