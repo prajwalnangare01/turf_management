@@ -124,6 +124,7 @@ export interface Booking {
   cancellation_notice_hours?: number;
   cancellation_met_terms?: boolean;
   reminder_sent?: boolean;
+  gate_pass_otp?: string;
   gateway_payment_id?: string;
   created_at: string;
   updated_at: string;
