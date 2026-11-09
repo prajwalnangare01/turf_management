@@ -3,10 +3,47 @@
 
 export class WhatsAppFormatter {
   /**
+   * Convert any date (YYYY-MM-DD, ISO string, Date) to DD/MM/YYYY
+   */
+  static formatDate(dateStr) {
+    if (!dateStr) return '';
+    const cleanStr = String(dateStr).trim();
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(cleanStr)) return cleanStr;
+    const match = cleanStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      return `${match[3]}/${match[2]}/${match[1]}`;
+    }
+    const d = new Date(cleanStr);
+    if (isNaN(d.getTime())) return cleanStr;
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
+
+  /**
+   * Convert 24h time "HH:mm" to 12h format "hh:mm AM/PM"
+   */
+  static formatTime(timeStr) {
+    if (!timeStr) return '';
+    const cleanStr = String(timeStr).trim();
+    if (/am|pm/i.test(cleanStr)) return cleanStr;
+    const parts = cleanStr.split(':');
+    let h = parseInt(parts[0], 10);
+    const m = parts[1] || '00';
+    if (isNaN(h)) return cleanStr;
+    const period = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    const formattedH = h12 < 10 ? `0${h12}` : `${h12}`;
+    return `${formattedH}:${m} ${period}`;
+  }
+
+  /**
    * Format available slots into a clean WhatsApp message
    */
   static formatAvailableSlots({ sport, date, courts }) {
-    let out = `🏆 *AVAILABLE SLOTS — ${date}*\n`;
+    const formattedDate = this.formatDate(date);
+    let out = `🏆 *AVAILABLE SLOTS — ${formattedDate}*\n`;
     if (sport) {
       out += `Sport: *${sport.icon} ${sport.name}*\n`;
     }
@@ -24,13 +61,15 @@ export class WhatsAppFormatter {
       for (const s of c.slots) {
         totalAvailable++;
         const peakTag = s.is_peak ? '🔥 *Peak*' : '🟢 Regular';
-        out += `  • \`${s.start_time}\` to \`${s.end_time}\` — *₹${s.price}* (${peakTag})\n`;
+        const start12 = this.formatTime(s.start_time);
+        const end12 = this.formatTime(s.end_time);
+        out += `  • \`${start12}\` to \`${end12}\` — *₹${s.price}* (${peakTag})\n`;
       }
       out += `\n`;
     }
 
     if (totalAvailable === 0) {
-      out += `😔 Sorry, no slots are available for ${date}. Would you like to check another date?\n`;
+      out += `😔 Sorry, no slots are available for ${formattedDate}. Would you like to check another date?\n`;
     } else {
       out += `━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
       out += `💡 *To book:* Just reply with the court name and time (e.g., *"Book Turf A at 7:00 PM"*).\n`;
@@ -44,12 +83,16 @@ export class WhatsAppFormatter {
    * Format booking checkout & payment link for WhatsApp
    */
   static formatPaymentCheckout({ booking, payment }) {
+    const formattedDate = this.formatDate(booking.booking_date);
+    const start12 = this.formatTime(booking.start_time);
+    const end12 = this.formatTime(booking.end_time);
+
     return `💳 *RESERVATION PENDING PAYMENT*\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `🎟️ *Ref:* \`${booking.booking_ref}\`\n` +
       `🏟️ *Court:* ${booking.court_name}\n` +
-      `📅 *Date:* ${booking.booking_date}\n` +
-      `⏰ *Time:* ${booking.start_time} — ${booking.end_time}\n` +
+      `📅 *Date:* ${formattedDate}\n` +
+      `⏰ *Time:* ${start12} — ${end12}\n` +
       `💰 *Total Amount:* ₹${booking.total_amount}\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `⏳ *Slot Locked for 5 Minutes!*\n` +
@@ -71,11 +114,14 @@ export class WhatsAppFormatter {
     for (const b of bookings) {
       const isConfirmed = b.status === 'confirmed';
       const otpCode = b.booking_ref ? b.booking_ref.slice(-4) : '0000';
+      const formattedDate = this.formatDate(b.booking_date);
+      const start12 = this.formatTime(b.start_time);
+      const end12 = this.formatTime(b.end_time);
 
       if (isConfirmed) {
         out += `✅ *${b.booking_ref}* (UPCOMING MATCH)\n`;
         out += `🏟️ ${b.court_name}\n`;
-        out += `📅 ${b.booking_date} | ⏰ ${b.start_time} — ${b.end_time}\n`;
+        out += `📅 ${formattedDate} | ⏰ ${start12} — ${end12}\n`;
         out += `🔑 *Gate Pass OTP:* *${otpCode}*\n`;
         out += `💰 ₹${b.total_amount} (PAID)\n`;
         out += `📄 *Download PDF Pass:* http://localhost:5000/api/bookings/${b.booking_ref}/pass\n`;
@@ -83,7 +129,7 @@ export class WhatsAppFormatter {
       } else {
         out += `⏳ *${b.booking_ref}* (PENDING PAYMENT)\n`;
         out += `🏟️ ${b.court_name}\n`;
-        out += `📅 ${b.booking_date} | ⏰ ${b.start_time} — ${b.end_time}\n`;
+        out += `📅 ${formattedDate} | ⏰ ${start12} — ${end12}\n`;
         out += `💰 ₹${b.total_amount}\n`;
         out += `👉 *Complete Payment:* https://rzp.io/l/${b.booking_ref.toLowerCase()}\n`;
       }
@@ -116,7 +162,7 @@ export class WhatsAppFormatter {
 
     out += `\n💰 *Pricing Breakdown:*\n`;
     for (const c of courts) {
-      out += `  • *${c.name}:* ₹${c.base_price_per_hour}/hr (Weekday) | ₹${c.peak_price_per_hour || c.base_price_per_hour}/hr (Peak 6PM-11PM)\n`;
+      out += `  • *${c.name}:* ₹${c.base_price_per_hour}/hr (Weekday) | ₹${c.peak_price_per_hour || c.base_price_per_hour}/hr (Peak 6:00 PM - 11:00 PM)\n`;
     }
 
     out += `\n🔄 *Cancellation Policy:*\n` +
