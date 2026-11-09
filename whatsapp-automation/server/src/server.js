@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import { apiRouter } from './routes/apiRoutes.js';
 import { webhookRouter } from './routes/webhookRoutes.js';
 import { store } from './data/store.js';
+import { BookingService } from './services/bookingService.js';
 import { SupabaseService } from './services/supabaseService.js';
 import { WhatsAppService } from './services/whatsappService.js';
 import { ReminderScheduler } from './services/reminderScheduler.js';
@@ -29,6 +30,11 @@ app.use(express.json());
 
 // Main REST API
 app.use('/api', apiRouter);
+
+// Direct shortcut for Razorpay payment links (e.g. http://localhost:5000/pay/TRF-...)
+app.get('/pay/:ref', (req, res) => {
+  res.redirect('/api/pay/' + req.params.ref);
+});
 
 // Supabase Status Endpoint
 app.get('/api/supabase/status', async (req, res) => {
@@ -120,6 +126,11 @@ async function startServer() {
 
   // Start automated 1-hour matchday reminder background service
   ReminderScheduler.start();
+
+  // Start 15-second auto-expiration sweeper for unpaid WhatsApp holds (5-minute TTL)
+  setInterval(() => {
+    BookingService.expireUnpaidPendingBookings();
+  }, 15000);
 
   const server = app.listen(PORT, () => {
     console.log(`\n======================================================`);

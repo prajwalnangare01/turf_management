@@ -163,6 +163,10 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: 'http://localhost:5000',
           changeOrigin: true
+        },
+        '/pay': {
+          target: 'http://localhost:5000',
+          changeOrigin: true
         }
       }
     }

@@ -5,15 +5,16 @@ export class RazorpayService {
   /**
    * Create a simulated / live Razorpay Payment Link
    */
-  static createPaymentLink({ bookingRef, amount, customerName, customerPhone, courtName, date, startTime }) {
+  static createPaymentLink({ bookingId, bookingRef, amount, customerName, customerPhone, courtName, date, startTime }) {
     const keyId = process.env.RAZORPAY_KEY_ID || 'rzp_test_turfflow';
     const orderId = `order_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
     
-    // In production with RAZORPAY_KEY_SECRET, you can call https://api.razorpay.com/v1/payment_links
-    // Here we generate an interactive payment URL and UPI intent format
+    // Use bookingId (e.g. bk-173...) so reference code TRF-... is not exposed in chat URLs
     const linkId = `plink_${Date.now()}`;
-    const paymentUrl = `https://rzp.io/l/${bookingRef.toLowerCase()}`;
-    const upiIntent = `upi://pay?pa=turfflow@icici&pn=TurfFlowArena&am=${amount}&tr=${bookingRef}&cu=INR`;
+    const baseUrl = (process.env.BASE_URL || 'http://localhost:5000').replace(/\/$/, '');
+    const payIdentifier = bookingId || bookingRef;
+    const paymentUrl = `${baseUrl}/pay/${payIdentifier}`;
+    const upiIntent = `upi://pay?pa=turfflow@icici&pn=TurfFlowArena&am=${amount}&tr=${payIdentifier}&cu=INR`;
 
     return {
       order_id: orderId,

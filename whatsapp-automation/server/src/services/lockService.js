@@ -36,18 +36,24 @@ export class LockService {
       };
     }
 
-    // Check if already booked in DB
+    // Check if already booked in DB (only confirmed bookings, or active pending holds under 5 minutes)
     const activeBooking = store.getBookings().find(b => 
       b.court_id === courtId &&
       b.booking_date === date &&
       b.start_time === startTime &&
-      (b.status === 'confirmed' || b.status === 'pending_payment')
+      (b.status === 'confirmed' || (b.status === 'pending_payment' && (now - new Date(b.created_at).getTime() < 300000)))
     );
 
     if (activeBooking) {
+      if (activeBooking.status === 'confirmed') {
+        return {
+          success: false,
+          message: `Slot is already booked (${activeBooking.booking_ref}).`
+        };
+      }
       return {
         success: false,
-        message: `Slot is already booked (${activeBooking.status}).`
+        message: `Slot is temporarily held for checkout until ${new Date(new Date(activeBooking.created_at).getTime() + 300000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`
       };
     }
 

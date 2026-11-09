@@ -14,6 +14,9 @@ export class BookingService {
    * Acquires concurrency lock, creates pending booking, generates Razorpay payment link
    */
   static initiateBooking({ courtId, sportId, date, startTime, customerName, customerPhone }) {
+    // 1. Purge any expired unpaid pending holds first
+    this.expireUnpaidPendingBookings();
+
     const courts = store.getCourts();
     const court = courts.find(c => c.id === courtId || c.name.toLowerCase().includes(courtId.toLowerCase()));
     if (!court) {
@@ -24,7 +27,7 @@ export class BookingService {
     const startMins = SlotEngine.timeToMinutes(startTime);
     const endTime = SlotEngine.minutesToTime(startMins + durationMins);
 
-    // Concurrency Layer 1: Acquire Slot Lock
+    // Concurrency Layer 1: Acquire Slot Lock for 5 minutes (300 seconds)
     const lockResult = LockService.acquireLock(court.id, date, startTime, customerPhone, 300);
     if (!lockResult.success) {
       return {
@@ -33,11 +36,11 @@ export class BookingService {
       };
     }
 
-    // Concurrency Layer 2: Postgres Unique Constraint Check
+    // Concurrency Layer 2: Postgres Unique Constraint Check (only confirmed bookings, or active pending holds under 5m)
     const activeConflict = store.getBookings().find(b => 
       b.court_id === court.id &&
       b.booking_date === date &&
-      (b.status === 'confirmed' || b.status === 'pending_payment') &&
+      (b.status === 'confirmed' || (b.status === 'pending_payment' && (Date.now() - new Date(b.created_at).getTime() < 300000))) &&
       b.start_time === startTime
     );
 
@@ -45,7 +48,9 @@ export class BookingService {
       LockService.releaseLock(court.id, date, startTime, customerPhone);
       return {
         success: false,
-        message: `Slot is already booked (${activeConflict.booking_ref}).`
+        message: activeConflict.status === 'confirmed'
+          ? `Slot is already booked (${activeConflict.booking_ref}).`
+          : `Slot is temporarily held for another user's payment. Please try another timing.`
       };
     }
 
@@ -60,6 +65,7 @@ export class BookingService {
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
     const bookingRef = `TRF-${date.replace(/-/g, '')}-${randomSuffix}`;
     const now = new Date().toISOString();
+    const expiresAt = Date.now() + (300 * 1000); // 5 minutes hold
 
     const newBooking = {
       id: `bk-${Date.now()}-${randomSuffix}`,
@@ -75,9 +81,11 @@ export class BookingService {
       end_time: endTime,
       source: 'offline_whatsapp',
       status: 'pending_payment',
+      gate_pass_otp: null, // Gate pass is only minted AFTER payment is verified!
       total_amount: finalPrice,
       discount_amount: 0,
-      notes: 'Initiated via WhatsApp AI Agent',
+      notes: 'Initiated via WhatsApp AI Agent (5-minute hold)',
+      expires_at: expiresAt,
       created_at: now,
       updated_at: now
     };
@@ -92,8 +100,18 @@ export class BookingService {
       return SupabaseService.insertBooking(newBooking);
     }).catch(err => console.warn('Supabase booking persistence error:', err.message));
 
+    // Also persist 5-minute slot lock to Supabase so website SlotGrid shows "Held"
+    SupabaseService.insertSlotLock({
+      court_id: court.id,
+      date,
+      start_time: startTime,
+      locked_by: customerPhone,
+      expires_at: expiresAt
+    }).catch(err => console.warn('Supabase slot_lock insert error:', err.message));
+
     // Generate Razorpay Payment Link
     const payment = RazorpayService.createPaymentLink({
+      bookingId: newBooking.id,
       bookingRef,
       amount: finalPrice,
       customerName: customer.name,
@@ -107,9 +125,47 @@ export class BookingService {
       success: true,
       booking: newBooking,
       payment,
-      lockExpiresAt: lockResult.expiresAt,
-      message: `Slot reserved for 5 minutes! Complete payment using the link below.`
+      message: '5-minute payment hold placed successfully.'
     };
+  }
+
+  /**
+   * Expire unpaid pending bookings after 5 minutes
+   */
+  static expireUnpaidPendingBookings() {
+    const now = Date.now();
+    const bookings = store.getBookings();
+    let expiredCount = 0;
+
+    for (const b of bookings) {
+      if (b.status === 'pending_payment') {
+        const createdMs = new Date(b.created_at).getTime();
+        const ageMs = now - createdMs;
+        if (ageMs >= 300 * 1000) { // 5 minutes
+          b.status = 'cancelled';
+          b.notes = (b.notes ? b.notes + ' | ' : '') + 'Expired - Unpaid after 5 minute hold';
+          b.updated_at = new Date().toISOString();
+          expiredCount++;
+
+          console.log(`⏳ [EXPIRED] Unpaid WhatsApp booking ${b.booking_ref} released after 5m hold.`);
+
+          // Release Concurrency Lock
+          LockService.releaseLock(b.court_id, b.booking_date, b.start_time, b.customer_phone);
+
+          // Update Supabase booking
+          SupabaseService.updateBooking(b.id, {
+            status: 'cancelled',
+            notes: b.notes,
+            updated_at: b.updated_at
+          }).catch(err => console.warn('Supabase expire booking error:', err.message));
+
+          // Delete Supabase slot lock
+          SupabaseService.deleteSlotLock(b.court_id, b.booking_date, b.start_time).catch(err => console.warn('Supabase deleteSlotLock error:', err.message));
+        }
+      }
+    }
+
+    return expiredCount;
   }
 
   /**
@@ -125,12 +181,39 @@ export class BookingService {
       return { success: true, booking, alreadyConfirmed: true };
     }
 
+    // Check if the 5-minute payment window has expired
+    if (booking.status === 'cancelled' || booking.status === 'expired') {
+      return {
+        success: false,
+        message: 'This booking has expired because the 5-minute payment window closed. The slot was released back to available. Please book a fresh slot.'
+      };
+    }
+
+    const ageMs = Date.now() - new Date(booking.created_at).getTime();
+    if (booking.status === 'pending_payment' && ageMs >= 300 * 1000) {
+      booking.status = 'cancelled';
+      booking.notes = (booking.notes ? booking.notes + ' | ' : '') + 'Expired - Unpaid after 5 minute hold';
+      booking.updated_at = new Date().toISOString();
+      LockService.releaseLock(booking.court_id, booking.booking_date, booking.start_time, booking.customer_phone);
+      SupabaseService.deleteSlotLock(booking.court_id, booking.booking_date, booking.start_time).catch(() => {});
+      SupabaseService.updateBooking(booking.id, { status: 'cancelled', notes: booking.notes, updated_at: booking.updated_at }).catch(() => {});
+      return {
+        success: false,
+        message: 'Your 5-minute payment window has expired and this slot has been released back to available. Please book a fresh slot.'
+      };
+    }
+
     booking.status = 'confirmed';
     booking.updated_at = new Date().toISOString();
     booking.gateway_payment_id = paymentId || `pay_${Date.now()}`;
+    // Securely mint unpredictable 4-digit Gate Pass OTP ONLY upon verified payment
+    if (!booking.gate_pass_otp) {
+      booking.gate_pass_otp = Math.floor(1000 + Math.random() * 9000).toString();
+    }
 
     // Release lock (now permanently guarded by status = 'confirmed')
     LockService.releaseLock(booking.court_id, booking.booking_date, booking.start_time, booking.customer_phone);
+    SupabaseService.deleteSlotLock(booking.court_id, booking.booking_date, booking.start_time).catch(() => {});
 
     // Update customer stats
     const customer = store.getCustomers().find(c => c.id === booking.customer_id);
@@ -220,8 +303,13 @@ export class BookingService {
             if (b.booking_date < todayStr) return false;
             if (b.booking_date === todayStr && (b.end_time || b.start_time) < currentHourMin) return false;
           }
+          // For pending_payment bookings, only show active holds under 5 minutes
+          if (b.status === 'pending_payment') {
+            const ageMs = Date.now() - new Date(b.created_at).getTime();
+            return ageMs < 300 * 1000;
+          }
           // Keep active upcoming bookings
-          return b.status === 'pending_payment' || b.status === 'confirmed';
+          return b.status === 'confirmed';
         });
       }
     }

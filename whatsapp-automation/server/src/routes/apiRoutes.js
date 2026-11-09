@@ -168,6 +168,20 @@ apiRouter.post('/slots/release-lock', (req, res) => {
 });
 
 /**
+ * Concurrency & Hold Expiration: Simulate 5-Minute Hold Timeout
+ */
+apiRouter.post('/bookings/simulate-expire', (req, res) => {
+  const { bookingRef } = req.body;
+  const booking = store.getBookings().find(b => b.booking_ref === bookingRef || b.id === bookingRef);
+  if (!booking) {
+    return res.status(404).json({ success: false, message: 'Booking not found' });
+  }
+  booking.created_at = new Date(Date.now() - 305 * 1000).toISOString();
+  const expiredCount = BookingService.expireUnpaidPendingBookings();
+  res.json({ success: true, booking, expiredCount });
+});
+
+/**
  * 7. Initiate Booking (WhatsApp / Online)
  */
 apiRouter.post('/bookings/initiate', (req, res) => {
@@ -496,4 +510,232 @@ apiRouter.post('/sms/reminder/:ref', async (req, res) => {
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
+});
+
+/**
+ * 27. Interactive Razorpay Payment Checkout Portal with Live 5-Minute Countdown
+ */
+apiRouter.get('/pay/:ref', async (req, res) => {
+  BookingService.expireUnpaidPendingBookings();
+
+  const ref = req.params.ref.toUpperCase();
+  const booking = await findOrResolveBooking(ref);
+  const venue = store.getVenue();
+
+  if (!booking) {
+    return res.status(404).send(`
+      <!DOCTYPE html>
+      <html><head><title>Booking Not Found</title><meta name="viewport" content="width=device-width, initial-scale=1.0"><script src="https://cdn.tailwindcss.com"></script></head>
+      <body class="bg-slate-50 min-h-screen flex items-center justify-center p-4 font-sans">
+        <div class="bg-white p-6 rounded-3xl max-w-md w-full text-center shadow-lg border border-slate-200">
+          <div class="text-4xl mb-2">🔍</div>
+          <h2 class="text-lg font-bold text-slate-800">Booking Not Found</h2>
+          <p class="text-xs text-slate-500 mt-1">Reference <code>${ref}</code> does not exist.</p>
+        </div>
+      </body></html>
+    `);
+  }
+
+  const court = store.getCourts().find(c => c.id === booking.court_id);
+  const courtName = court?.name || booking.court_name || 'Turf Pitch';
+  const createdMs = new Date(booking.created_at).getTime();
+  const expiresAtMs = createdMs + (300 * 1000); // 5 minutes
+  const remainingSec = Math.max(0, Math.floor((expiresAtMs - Date.now()) / 1000));
+
+  // If already confirmed:
+  if (booking.status === 'confirmed') {
+    return res.send(`
+      <!DOCTYPE html>
+      <html><head><title>Booking Confirmed - ${booking.booking_ref}</title><meta name="viewport" content="width=device-width, initial-scale=1.0"><script src="https://cdn.tailwindcss.com"></script></head>
+      <body class="bg-slate-50 min-h-screen flex items-center justify-center p-4 font-sans text-slate-800">
+        <div class="bg-white p-6 sm:p-8 rounded-3xl max-w-md w-full text-center shadow-xl border border-slate-200 space-y-4">
+          <div class="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center text-3xl mx-auto font-bold">✓</div>
+          <h2 class="text-xl font-black text-slate-900">Payment Already Completed!</h2>
+          <p class="text-xs text-slate-600">Booking <span class="font-mono font-bold text-emerald-700">${booking.booking_ref}</span> is confirmed and secured.</p>
+          <div class="bg-slate-50 p-4 rounded-2xl text-left text-xs space-y-1.5 border border-slate-200">
+            <p><strong>🏟️ Court:</strong> ${courtName}</p>
+            <p><strong>📅 Date:</strong> ${booking.booking_date}</p>
+            <p><strong>⏰ Time:</strong> ${booking.start_time} - ${booking.end_time}</p>
+            <p><strong>💰 Paid:</strong> ₹${booking.total_amount} (Razorpay UPI)</p>
+          </div>
+          <div class="pt-2 flex flex-col gap-2">
+            <a href="/api/bookings/${booking.booking_ref}/pass.pdf" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-3 px-4 rounded-xl text-xs shadow transition">⬇️ Download PDF Gate Pass</a>
+            <a href="/api/bookings/${booking.booking_ref}/pass" target="_blank" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 px-4 rounded-xl text-xs transition">🖨️ View / Print Pass</a>
+          </div>
+        </div>
+      </body></html>
+    `);
+  }
+
+  // If expired or cancelled:
+  if (booking.status === 'cancelled' || booking.status === 'expired' || remainingSec <= 0) {
+    return res.send(`
+      <!DOCTYPE html>
+      <html><head><title>Hold Expired - ${booking.booking_ref}</title><meta name="viewport" content="width=device-width, initial-scale=1.0"><script src="https://cdn.tailwindcss.com"></script></head>
+      <body class="bg-slate-50 min-h-screen flex items-center justify-center p-4 font-sans text-slate-800">
+        <div class="bg-white p-6 sm:p-8 rounded-3xl max-w-md w-full text-center shadow-xl border border-slate-200 space-y-4">
+          <div class="w-16 h-16 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center text-3xl mx-auto font-bold">⏰</div>
+          <h2 class="text-xl font-black text-slate-900">Payment Window Expired</h2>
+          <p class="text-xs text-slate-600 leading-relaxed">
+            The 5-minute temporary hold on this slot has expired. The slot has been released back to available slots for other players.
+          </p>
+          <div class="bg-amber-50 p-4 rounded-2xl text-left text-xs space-y-1 border border-amber-200 text-amber-900">
+            <p><strong>Booking Ref:</strong> <span class="font-mono">${booking.booking_ref}</span></p>
+            <p><strong>Requested Pitch:</strong> ${courtName}</p>
+            <p><strong>Slot:</strong> ${booking.booking_date} @ ${booking.start_time} - ${booking.end_time}</p>
+          </div>
+          <p class="text-xs text-slate-500 pt-1">Please return to WhatsApp or our website to check current available slots and book again.</p>
+        </div>
+      </body></html>
+    `);
+  }
+
+  // Active Pending Hold - Show Interactive Checkout with Live Countdown
+  return res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8"/>
+      <title>Complete Payment — ${booking.booking_ref}</title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+      <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+    <body class="bg-slate-100 min-h-screen flex items-center justify-center p-4 font-sans text-slate-800">
+      <div class="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden">
+        
+        <!-- Header -->
+        <div class="bg-[#006b30] text-white p-5 text-center">
+          <div class="text-2xl font-black tracking-tight">${venue.name}</div>
+          <p class="text-xs text-white/80 uppercase tracking-widest mt-0.5 font-bold">Secure Razorpay Payment Portal</p>
+        </div>
+
+        <div class="p-6 space-y-4">
+          
+          <!-- Live 5-Minute Countdown Box -->
+          <div id="timer-box" class="bg-amber-50 border-2 border-dashed border-amber-400 rounded-2xl p-4 text-center">
+            <span class="text-[10px] font-extrabold text-amber-800 uppercase tracking-wider block">
+              Slot Held on Website & WhatsApp
+            </span>
+            <div id="countdown" class="text-3xl font-mono font-black text-amber-700 my-1">
+              --:--
+            </div>
+            <p class="text-[11px] text-amber-800 font-medium">
+              Complete payment before timer expires to secure your pitch reservation.
+            </p>
+          </div>
+
+          <!-- Match Summary Card -->
+          <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs space-y-2">
+            <div class="flex justify-between items-center pb-2 border-b border-slate-200">
+              <span class="text-slate-500 font-bold uppercase text-[10px]">Reservation</span>
+              <span class="font-bold text-amber-800 text-xs uppercase bg-amber-100 px-2.5 py-0.5 rounded-full">5-Min Hold Active</span>
+            </div>
+            <div class="flex justify-between items-center">
+              <span class="text-slate-500 font-bold uppercase text-[10px]">Pitch</span>
+              <span class="font-bold text-slate-800">${courtName}</span>
+            </div>
+            <div class="flex justify-between items-center">
+              <span class="text-slate-500 font-bold uppercase text-[10px]">Date & Timing</span>
+              <span class="font-medium text-slate-800">${booking.booking_date} | ${booking.start_time} - ${booking.end_time}</span>
+            </div>
+            <div class="flex justify-between items-center">
+              <span class="text-slate-500 font-bold uppercase text-[10px]">Customer</span>
+              <span class="font-medium text-slate-800">${booking.customer_name || 'Player'}</span>
+            </div>
+            <div class="flex justify-between items-center">
+              <span class="text-slate-500 font-bold uppercase text-[10px]">Gate Entry Pass</span>
+              <span class="text-slate-400 italic text-[11px]">Minted securely upon payment</span>
+            </div>
+            <div class="flex justify-between items-center pt-2 border-t border-slate-200">
+              <span class="text-slate-700 font-extrabold text-xs">Total Amount</span>
+              <span class="font-black text-lg text-emerald-700">₹${booking.total_amount}</span>
+            </div>
+          </div>
+
+          <!-- Pay Button -->
+          <button id="pay-btn" onclick="executePayment()" class="w-full bg-[#006b30] hover:bg-[#005224] text-white font-black py-3.5 px-4 rounded-2xl text-sm shadow-lg transition flex items-center justify-center gap-2 cursor-pointer">
+            <span>💳 Pay ₹${booking.total_amount} with Razorpay UPI</span>
+          </button>
+
+          <!-- Success Area (Hidden by default) -->
+          <div id="success-box" class="hidden text-center space-y-3 pt-2">
+            <div class="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center text-2xl mx-auto font-bold">✓</div>
+            <h3 class="text-lg font-black text-emerald-800">Payment Confirmed!</h3>
+            <p class="text-xs text-slate-600">Your slot is now permanently booked. The official gate pass has been dispatched to your WhatsApp.</p>
+            <div class="flex flex-col gap-2 pt-2">
+              <a href="/api/bookings/${booking.booking_ref}/pass.pdf" class="bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs shadow">⬇️ Download PDF Pass</a>
+              <a href="/api/bookings/${booking.booking_ref}/pass" target="_blank" class="bg-slate-100 text-slate-700 font-bold py-2 px-4 rounded-xl text-xs">🖨️ View Pass</a>
+            </div>
+          </div>
+
+          <!-- Expired Area (Hidden by default) -->
+          <div id="expired-box" class="hidden text-center space-y-2 pt-2">
+            <div class="w-12 h-12 bg-amber-100 text-amber-700 rounded-full flex items-center justify-center text-2xl mx-auto font-bold">⏰</div>
+            <h3 class="text-base font-black text-amber-800">5-Minute Window Expired</h3>
+            <p class="text-xs text-slate-600">This slot has been released back to available. Please book a fresh slot.</p>
+          </div>
+
+        </div>
+
+        <div class="bg-slate-50 p-3 border-t border-slate-200 text-center text-[10px] text-slate-500 font-medium">
+          🔒 256-Bit SSL Encrypted Razorpay Payments | TurfFlow Arena
+        </div>
+      </div>
+
+      <script>
+        let remaining = ${remainingSec};
+        const countdownEl = document.getElementById('countdown');
+        const payBtn = document.getElementById('pay-btn');
+        const timerBox = document.getElementById('timer-box');
+        const successBox = document.getElementById('success-box');
+        const expiredBox = document.getElementById('expired-box');
+
+        function updateCountdown() {
+          if (remaining <= 0) {
+            countdownEl.innerText = '00:00';
+            if (payBtn) payBtn.classList.add('hidden');
+            if (timerBox) timerBox.classList.add('hidden');
+            if (expiredBox) expiredBox.classList.remove('hidden');
+            return;
+          }
+          const mins = Math.floor(remaining / 60);
+          const secs = remaining % 60;
+          countdownEl.innerText = String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+          remaining--;
+          setTimeout(updateCountdown, 1000);
+        }
+        updateCountdown();
+
+        async function executePayment() {
+          payBtn.disabled = true;
+          payBtn.innerText = 'Processing Razorpay UPI...';
+          try {
+            const res = await fetch('/api/bookings/confirm', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                bookingRef: '${booking.booking_ref}',
+                paymentId: 'pay_rzp_' + Date.now()
+              })
+            });
+            const data = await res.json();
+            if (data.success) {
+              payBtn.classList.add('hidden');
+              timerBox.classList.add('hidden');
+              successBox.classList.remove('hidden');
+            } else {
+              alert(data.message || 'Payment confirmation failed');
+              payBtn.disabled = false;
+              payBtn.innerText = '💳 Pay ₹${booking.total_amount} with Razorpay UPI';
+            }
+          } catch (e) {
+            alert('Error connecting to server: ' + e.message);
+            payBtn.disabled = false;
+            payBtn.innerText = '💳 Pay ₹${booking.total_amount} with Razorpay UPI';
+          }
+        }
+      </script>
+    </body>
+    </html>
+  `);
 });

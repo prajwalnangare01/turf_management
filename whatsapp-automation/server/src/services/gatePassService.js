@@ -17,7 +17,7 @@ export class GatePassService {
       phone: booking.customer_phone || ''
     };
 
-    const otpCode = booking.booking_ref ? booking.booking_ref.slice(-4) : '0000';
+    const otpCode = booking.gate_pass_otp || (booking.status === 'confirmed' && booking.booking_ref ? booking.booking_ref.slice(-4) : '----');
     const courtName = (court?.name || booking.court_name || 'Turf Pitch').replace(/[^\x00-\x7F]/g, '');
     const sportName = (sport?.name || booking.sport_name || 'Football').replace(/[^\x00-\x7F]/g, '');
 
@@ -173,7 +173,7 @@ export class GatePassService {
       name: booking.customer_name || 'Customer',
       phone: booking.customer_phone || ''
     };
-    const otpCode = booking.booking_ref ? booking.booking_ref.slice(-4) : '0000';
+    const otpCode = booking.gate_pass_otp || (booking.status === 'confirmed' && booking.booking_ref ? booking.booking_ref.slice(-4) : '----');
 
     return `<!DOCTYPE html>
 <html>

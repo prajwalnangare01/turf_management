@@ -80,9 +80,19 @@ export class SlotEngine {
         return cursor >= bStart && cursor < bEnd;
       });
 
-      // Check Active Bookings
-      const existingBooking = bookings.find(b => {
-        if (b.status !== 'confirmed' && b.status !== 'pending_payment') return false;
+      // Check Confirmed Bookings (permanently booked)
+      const confirmedBooking = bookings.find(b => {
+        if (b.status !== 'confirmed') return false;
+        const bStart = this.timeToMinutes(b.start_time);
+        const bEnd = this.timeToMinutes(b.end_time);
+        return cursor < bEnd && (cursor + stepMins) > bStart;
+      });
+
+      // Check Active 5-minute Pending Payment Holds (temporary hold)
+      const pendingHold = bookings.find(b => {
+        if (b.status !== 'pending_payment') return false;
+        const ageMs = Date.now() - new Date(b.created_at).getTime();
+        if (ageMs >= 300 * 1000) return false; // 5-minute hold expired!
         const bStart = this.timeToMinutes(b.start_time);
         const bEnd = this.timeToMinutes(b.end_time);
         return cursor < bEnd && (cursor + stepMins) > bStart;
@@ -96,11 +106,19 @@ export class SlotEngine {
         status = 'past';
       } else if (isBlocked) {
         status = 'blocked';
-      } else if (existingBooking) {
-        status = existingBooking.source === 'online' ? 'booked_online' : 'booked_offline';
-      } else if (isLocked) {
+      } else if (confirmedBooking) {
+        status = confirmedBooking.source === 'online' ? 'booked_online' : 'booked_offline';
+      } else if (pendingHold || isLocked) {
         status = 'locked';
       }
+
+      const effectiveLockExpiresAt = pendingHold 
+        ? (new Date(pendingHold.created_at).getTime() + 300 * 1000)
+        : (isLocked ? (Date.now() + 300000) : undefined);
+
+      const effectiveLockedBy = pendingHold 
+        ? (pendingHold.source === 'offline_whatsapp' ? 'WhatsApp Hold (5m)' : 'Customer Hold (5m)')
+        : (isLocked ? 'Customer Hold' : undefined);
 
       slots.push({
         start_time: slotStart,
@@ -108,6 +126,8 @@ export class SlotEngine {
         price: slotPrice,
         is_peak: isPeak,
         status,
+        locked_by: effectiveLockedBy,
+        lock_expires_at: effectiveLockExpiresAt,
         court_id: court.id,
         court_name: court.name,
         date: dateStr,

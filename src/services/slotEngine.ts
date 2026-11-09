@@ -135,9 +135,21 @@ export class SlotEngine {
         return cursor >= bStart && cursor < bEnd;
       });
 
-      // Check Existing DB Active Bookings (including multi-slot spans with true interval overlap)
-      const existingBooking = bookings.find(b => {
-        if (b.status !== 'confirmed' && b.status !== 'pending_payment') return false;
+      // Check Existing DB Confirmed Bookings (permanently booked)
+      const confirmedBooking = bookings.find(b => {
+        if (b.status !== 'confirmed') return false;
+        const bStart = this.timeToMinutes(b.start_time);
+        let bEnd = this.timeToMinutes(b.end_time);
+        if (bEnd <= bStart) bEnd += 1440;
+        return cursor < bEnd && (cursor + stepMins) > bStart;
+      });
+
+      // Check Active 5-minute Pending Payment Holds (temporary hold)
+      const pendingHold = bookings.find(b => {
+        if (b.status !== 'pending_payment') return false;
+        const createdMs = new Date(b.created_at).getTime();
+        const ageMs = Date.now() - createdMs;
+        if (ageMs >= 300 * 1000) return false; // 5-minute hold expired!
         const bStart = this.timeToMinutes(b.start_time);
         let bEnd = this.timeToMinutes(b.end_time);
         if (bEnd <= bStart) bEnd += 1440;
@@ -160,11 +172,21 @@ export class SlotEngine {
         status = 'blocked';
         blockedReason = blocked.reason === 'maintenance' ? 'Maintenance' : 
                         blocked.reason === 'private_event' ? 'Private Event' : 'Owner Block';
-      } else if (existingBooking) {
-        status = existingBooking.source === 'online' ? 'booked_online' : 'booked_offline';
+      } else if (confirmedBooking) {
+        status = confirmedBooking.source === 'online' ? 'booked_online' : 'booked_offline';
+      } else if (pendingHold) {
+        status = 'locked';
       } else if (redisLock) {
         status = 'locked';
       }
+
+      const effectiveLockExpiresAt = pendingHold 
+        ? (new Date(pendingHold.created_at).getTime() + 300 * 1000)
+        : redisLock?.expires_at;
+
+      const effectiveLockedBy = pendingHold 
+        ? (pendingHold.source === 'offline_whatsapp' ? 'WhatsApp Hold (5m)' : 'Customer Hold (5m)')
+        : redisLock?.locked_by;
 
       slots.push({
         start_time: slotStart,
@@ -172,18 +194,19 @@ export class SlotEngine {
         price: slotPrice,
         is_peak: isPeak,
         status,
-        lock_expires_at: redisLock?.expires_at,
-        locked_by: redisLock?.locked_by,
-        existing_booking: existingBooking,
+        lock_expires_at: effectiveLockExpiresAt,
+        locked_by: effectiveLockedBy,
+        existing_booking: confirmedBooking || pendingHold,
         blocked_reason: blockedReason
       });
 
       // CC-S01: Multi-Hour Consecutive Slot Booking Buffer Suppression
       // If the slot is inside an existing consecutive booking that continues further, do not inject turnover buffer!
       let effectiveBuffer = bufferMins;
-      if (existingBooking) {
-        let bEnd = this.timeToMinutes(existingBooking.end_time);
-        if (bEnd <= this.timeToMinutes(existingBooking.start_time)) bEnd += 1440;
+      const refBooking = confirmedBooking || pendingHold;
+      if (refBooking) {
+        let bEnd = this.timeToMinutes(refBooking.end_time);
+        if (bEnd <= this.timeToMinutes(refBooking.start_time)) bEnd += 1440;
         if (cursor + stepMins < bEnd) {
           effectiveBuffer = 0; // Suppress buffer inside consecutive booking
         }

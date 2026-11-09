@@ -357,4 +357,66 @@ export class SupabaseService {
       return null;
     }
   }
+
+  /**
+   * Persist a temporary 5-minute slot lock to Supabase
+   */
+  static async insertSlotLock({ court_id, date, start_time, locked_by, expires_at }) {
+    if (!isSupabaseConfigured()) return null;
+
+    try {
+      const supabase = getSupabase();
+      if (!supabase) return null;
+
+      const payload = {
+        court_id,
+        date,
+        start_time,
+        locked_by,
+        expires_at
+      };
+
+      const { data, error } = await supabase
+        .from('slot_locks')
+        .upsert([payload], { onConflict: 'court_id,date,start_time' })
+        .select();
+
+      if (error) {
+        console.warn('⚠️ Supabase insertSlotLock warning:', error.message);
+        return null;
+      }
+      return data;
+    } catch (err) {
+      console.warn('⚠️ Supabase insertSlotLock exception:', err.message);
+      return null;
+    }
+  }
+
+  /**
+   * Remove a slot lock from Supabase when expired or confirmed
+   */
+  static async deleteSlotLock(court_id, date, start_time) {
+    if (!isSupabaseConfigured()) return null;
+
+    try {
+      const supabase = getSupabase();
+      if (!supabase) return null;
+
+      const { data, error } = await supabase
+        .from('slot_locks')
+        .delete()
+        .eq('court_id', court_id)
+        .eq('date', date)
+        .eq('start_time', start_time);
+
+      if (error) {
+        console.warn('⚠️ Supabase deleteSlotLock warning:', error.message);
+        return null;
+      }
+      return data;
+    } catch (err) {
+      console.warn('⚠️ Supabase deleteSlotLock exception:', err.message);
+      return null;
+    }
+  }
 }

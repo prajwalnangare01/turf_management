@@ -81,6 +81,7 @@ export class WhatsAppFormatter {
 
   /**
    * Format booking checkout & payment link for WhatsApp
+   * Note: Pre-payment reference is deliberately hidden to prevent leaking Gate Pass OTP before payment
    */
   static formatPaymentCheckout({ booking, payment }) {
     const formattedDate = this.formatDate(booking.booking_date);
@@ -89,17 +90,16 @@ export class WhatsAppFormatter {
 
     return `💳 *RESERVATION PENDING PAYMENT*\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `🎟️ *Ref:* \`${booking.booking_ref}\`\n` +
       `🏟️ *Court:* ${booking.court_name}\n` +
       `📅 *Date:* ${formattedDate}\n` +
       `⏰ *Time:* ${start12} — ${end12}\n` +
       `💰 *Total Amount:* ₹${booking.total_amount}\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `⏳ *Slot Locked for 5 Minutes!*\n` +
-      `Please complete payment to guarantee your slot:\n\n` +
+      `Please complete payment below to guarantee your reservation:\n\n` +
       `👉 *Pay via Razorpay UPI / Card:*\n${payment.payment_url}\n\n` +
       `📱 *Instant UPI Payment Link:*\n${payment.upi_intent}\n\n` +
-      `_Once paid, your booking will be instantly confirmed and your ticket dispatched here!_`;
+      `🔒 _Your official Gate Pass & Entry OTP will be generated and dispatched here immediately after payment is completed._`;
   }
 
   /**
@@ -107,13 +107,13 @@ export class WhatsAppFormatter {
    */
   static formatCustomerBookings(bookings) {
     if (!bookings || bookings.length === 0) {
-      return `ℹ️ You have no pending or upcoming bookings.\n_(Completed and cancelled bookings are hidden to keep your chat clean)._\n\n👉 Reply *1* or *"Show slots"* to book your next game! ⚽🏏`;
+      return `ℹ️ You have no pending or upcoming bookings.\n_(Completed and cancelled bookings are hidden to keep your chat clean)._\n\n👉 Reply *1* or *"Book Turf"* to reserve your slot! ⚽🏏`;
     }
 
     let out = `📋 *YOUR ACTIVE & PENDING BOOKINGS*\n━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
     for (const b of bookings) {
       const isConfirmed = b.status === 'confirmed';
-      const otpCode = b.booking_ref ? b.booking_ref.slice(-4) : '0000';
+      const otpCode = b.gate_pass_otp || (b.booking_ref ? b.booking_ref.slice(-4) : '0000');
       const formattedDate = this.formatDate(b.booking_date);
       const start12 = this.formatTime(b.start_time);
       const end12 = this.formatTime(b.end_time);
@@ -127,11 +127,13 @@ export class WhatsAppFormatter {
         out += `📄 *Download PDF Pass:* http://localhost:5000/api/bookings/${b.booking_ref}/pass\n`;
         out += `⚙️ _To cancel/reschedule, reply: "Cancel ${b.booking_ref}"_\n`;
       } else {
-        out += `⏳ *${b.booking_ref}* (PENDING PAYMENT)\n`;
+        out += `⏳ *PENDING RESERVATION*\n`;
         out += `🏟️ ${b.court_name}\n`;
         out += `📅 ${formattedDate} | ⏰ ${start12} — ${end12}\n`;
-        out += `💰 ₹${b.total_amount}\n`;
-        out += `👉 *Complete Payment:* https://rzp.io/l/${b.booking_ref.toLowerCase()}\n`;
+        out += `💰 ₹${b.total_amount} (5-min hold active)\n`;
+        const baseUrl = (process.env.BASE_URL || 'http://localhost:5000').replace(/\/$/, '');
+        const payKey = b.id || b.booking_ref;
+        out += `👉 *Complete Payment:* ${baseUrl}/pay/${payKey}\n`;
       }
       out += `─────────────────────────\n`;
     }
