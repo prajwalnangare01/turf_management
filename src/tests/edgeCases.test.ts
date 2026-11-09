@@ -12,7 +12,7 @@ import { EmailVerificationService } from '../services/emailVerificationService';
 import { SmsService } from '../services/smsService';
 import { SmsVerificationService } from '../services/smsVerificationService';
 import { ReminderScheduler } from '../services/reminderScheduler';
-import { Court, DynamicSlot } from '../types/schema';
+import { Court, DynamicSlot, BlockedSlot, Booking } from '../types/schema';
 
 declare const process: { exit: (code: number) => void };
 
@@ -1004,6 +1004,7 @@ async function runResendTests() {
 
   // 19.3: Active Booking Conflict Guard (Rejection of booking inside blocked maintenance window)
   const blockedInsertAttempt = PostgresEngine.createBooking({
+    booking_ref: `TRF-${Date.now()}`,
     customer_id: 'cust-001',
     court_id: multiDayCourt.id,
     sport_id: 'sp-football',
@@ -1011,6 +1012,7 @@ async function runResendTests() {
     start_time: '15:00',
     end_time: '16:00',
     total_amount: 1200,
+    discount_amount: 0,
     status: 'pending_payment',
     source: 'online'
   });

@@ -187,8 +187,9 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
             className="form-input py-1.5 text-xs font-medium w-full"
           >
             <option value="all">All Sources</option>
-            <option value="online">Online</option>
-            <option value="offline_walkin">Walk-in</option>
+            <option value="offline_whatsapp">WhatsApp AI Agent</option>
+            <option value="online">Online (Website)</option>
+            <option value="offline_walkin">Walk-in Counter</option>
             <option value="offline_phone">Phone Call</option>
           </select>
         </div>
@@ -261,9 +262,17 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
                     <span className="text-on-surface-variant font-medium">Date & Slot:</span>
                     <strong className="text-primary font-bold">{b.booking_date} ({formatTimeRange12h(b.start_time, b.end_time)})</strong>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex justify-between items-center">
                     <span className="text-on-surface-variant font-medium">Channel Source:</span>
-                    <span className="font-headline uppercase text-[10px] font-bold text-secondary">{b.source.replace('_', ' ')}</span>
+                    <span className={`font-headline text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      b.source === 'offline_whatsapp'
+                        ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                        : b.source === 'online'
+                        ? 'bg-primary/10 text-primary border border-primary/20'
+                        : 'bg-amber-100 text-amber-900 border border-amber-300'
+                    }`}>
+                      {b.source === 'offline_whatsapp' ? '💬 WhatsApp' : b.source === 'offline_walkin' ? '🚶 Walk-in' : b.source === 'offline_phone' ? '📞 Phone' : '🌐 Online'}
+                    </span>
                   </div>
                   {b.refund_reason && (
                     <div className="flex justify-between text-[11px] text-red-700 bg-red-50/70 p-1 rounded">
@@ -360,10 +369,15 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
                       <div className="text-[11px] text-primary font-bold">{formatTimeRange12h(b.start_time, b.end_time)}</div>
                     </td>
                     <td className="p-3">
-                      <span className={`px-2 py-0.5 rounded-full font-headline font-bold text-[10px] uppercase ${
-                        b.source === 'online' ? 'bg-primary/10 text-primary border border-primary/20' : 'bg-amber-100 text-amber-900 border border-amber-300'
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-headline font-bold text-[10px] uppercase ${
+                        b.source === 'offline_whatsapp'
+                          ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                          : b.source === 'online'
+                          ? 'bg-primary/10 text-primary border border-primary/20'
+                          : 'bg-amber-100 text-amber-900 border border-amber-300'
                       }`}>
-                        {(b.source || 'online').replace('_', ' ')}
+                        {b.source === 'offline_whatsapp' && <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>}
+                        {b.source === 'offline_whatsapp' ? 'WhatsApp' : b.source === 'offline_walkin' ? 'Walk-in' : b.source === 'offline_phone' ? 'Phone' : 'Online'}
                       </span>
                     </td>
                     <td className="p-3">

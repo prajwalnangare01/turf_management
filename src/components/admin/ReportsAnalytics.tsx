@@ -18,7 +18,8 @@ export const ReportsAnalytics: React.FC<ReportsAnalyticsProps> = ({ currentAdmin
 
   const totalRevenue = confirmedBookings.reduce((sum, b) => sum + b.total_amount, 0);
   const onlineCount = confirmedBookings.filter(b => b.source === 'online').length;
-  const offlineCount = confirmedBookings.filter(b => b.source !== 'online').length;
+  const whatsappCount = confirmedBookings.filter(b => b.source === 'offline_whatsapp').length;
+  const walkinCount = confirmedBookings.filter(b => b.source === 'offline_walkin' || b.source === 'offline_phone').length;
 
   const exportToCsv = () => {
     if (currentAdmin.role === 'staff') {
@@ -83,10 +84,11 @@ export const ReportsAnalytics: React.FC<ReportsAnalyticsProps> = ({ currentAdmin
         </div>
 
         <div className="bg-white p-5 rounded-xl border border-outline-variant/50 shadow-sm space-y-1">
-          <span className="text-xs text-on-surface-variant font-headline font-bold uppercase tracking-wider">Booking Mix</span>
-          <div className="flex items-center gap-3 pt-2 text-xs font-headline font-bold">
-            <span className="bg-primary/10 text-primary px-2.5 py-1 rounded-full border border-primary/20">Online: {onlineCount}</span>
-            <span className="bg-secondary-container text-on-secondary-container px-2.5 py-1 rounded-full">Walk-in: {offlineCount}</span>
+          <span className="text-xs text-on-surface-variant font-headline font-bold uppercase tracking-wider">Booking Channel Mix</span>
+          <div className="flex flex-wrap items-center gap-2 pt-2 text-[11px] font-headline font-bold">
+            <span className="bg-emerald-100 text-emerald-900 border border-emerald-300 px-2.5 py-0.5 rounded-full">WhatsApp: {whatsappCount}</span>
+            <span className="bg-primary/10 text-primary border border-primary/20 px-2.5 py-0.5 rounded-full">Website: {onlineCount}</span>
+            <span className="bg-amber-100 text-amber-900 border border-amber-300 px-2.5 py-0.5 rounded-full">Walk-in: {walkinCount}</span>
           </div>
         </div>
       </div>
