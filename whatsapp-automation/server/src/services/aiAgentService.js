@@ -42,6 +42,15 @@ export class AiAgentService {
       }
     }
 
+    // Direct DD/MM/YYYY or DD-MM-YYYY (e.g. 10/11/2026 or 10-11-2026)
+    const matchDMY = text.match(/\b([0-3]?\d)[\/\-]([0-1]?\d)[\/\-](202\d)\b/);
+    if (matchDMY) {
+      const d = String(matchDMY[1]).padStart(2, '0');
+      const m = String(matchDMY[2]).padStart(2, '0');
+      const y = matchDMY[3];
+      return `${y}-${m}-${d}`;
+    }
+
     // Direct YYYY-MM-DD
     const match = text.match(/\b(202\d-[0-1]\d-[0-3]\d)\b/);
     if (match) return match[1];
@@ -148,7 +157,7 @@ export class AiAgentService {
       const availData = SlotEngine.getAvailableSlots(null, parsedDate, phone);
       const reply = WhatsAppFormatter.formatAvailableSlots(availData);
       return {
-        reply: `📅 *Here are the available slots for tomorrow (${parsedDate}):*\n\n` + reply,
+        reply: `📅 *Here are the available slots for tomorrow (${WhatsAppFormatter.formatDate(parsedDate)}):*\n\n` + reply,
         action: 'check_availability',
         data: availData
       };
@@ -265,7 +274,7 @@ export class AiAgentService {
           reply: `⚠️ *Cancellation Policy & Refund Terms (CC-A02 Guardrail):*\n━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
             `🎟️ *Booking Ref:* \`${bookingRef}\`\n` +
             `🏟️ *Court:* ${booking.court_name}\n` +
-            `📅 *Match Date:* ${booking.booking_date} (${booking.start_time} - ${booking.end_time})\n` +
+            `📅 *Match Date:* ${WhatsAppFormatter.formatDate(booking.booking_date)} (${WhatsAppFormatter.formatTime(booking.start_time)} — ${WhatsAppFormatter.formatTime(booking.end_time)})\n` +
             `💰 *Original Paid:* ₹${booking.total_amount}\n` +
             `💸 *Refund Amount:* *₹${refundCalc.refundAmount}* (${refundCalc.refundPct}% tier, ${refundCalc.hoursRemaining} hrs notice)\n` +
             `⏱️ *Processing Timeline:* 5-7 business days\n━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
