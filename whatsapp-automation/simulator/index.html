@@ -220,17 +220,51 @@
   <script>
     const API_BASE = window.location.origin + '/api';
 
+    function formatDateDDMMYYYY(dateInput) {
+      if (!dateInput) return '';
+      const str = String(dateInput).trim();
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(str)) return str;
+      const match = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (match) return `${match[3]}/${match[2]}/${match[1]}`;
+      const d = new Date(str);
+      if (isNaN(d.getTime())) return str;
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      return `${day}/${month}/${year}`;
+    }
+
+    function formatTime12h(timeStr) {
+      if (!timeStr) return '';
+      const str = String(timeStr).trim();
+      if (/am|pm/i.test(str)) return str;
+      const parts = str.split(':');
+      let h = parseInt(parts[0], 10);
+      const m = parts[1] || '00';
+      if (isNaN(h)) return str;
+      const period = h >= 12 ? 'PM' : 'AM';
+      const h12 = h % 12 === 0 ? 12 : h % 12;
+      const formattedH = h12 < 10 ? `0${h12}` : `${h12}`;
+      return `${formattedH}:${m} ${period}`;
+    }
+
+    function formatChatTimestamp(d = new Date()) {
+      const datePart = formatDateDDMMYYYY(d);
+      const timePart = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+      return `${datePart}, ${timePart}`;
+    }
+
     // State
     let messages = [
       {
         sender: 'bot',
         text: `👋 *Welcome to TurfFlow Arena!* ⚽🏏🏸\n\nI am your 24/7 WhatsApp Booking Agent. You can ask for available slots, book a turf, check your booking status, or inquire about pricing & directions.\n\nTry clicking one of the quick suggestions below to start!`,
-        time: formatTime(new Date())
+        time: formatChatTimestamp(new Date())
       }
     ];
 
     function formatTime(d) {
-      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return formatChatTimestamp(d);
     }
 
     function renderMessages() {
@@ -249,6 +283,7 @@
 
         // Format WhatsApp markdown: *bold*, _italic_, `code`
         let formattedText = m.text
+          .replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, '$3/$2/$1')
           .replace(/\*(.*?)\*/g, '<strong>$1</strong>')
           .replace(/_(.*?)_/g, '<em>$1</em>')
           .replace(/`([^`]+)`/g, '<code class="bg-black/10 px-1 py-0.5 rounded font-mono text-[11px]">$1</code>')
@@ -399,7 +434,7 @@
           <td class="py-2.5 px-3 font-bold text-slate-200">${b.booking_ref}</td>
           <td class="py-2.5 px-3">
             <span class="text-slate-200 font-semibold">${courtTitle}</span><br/>
-            <span class="text-slate-400 text-[10px]">${b.booking_date} @ ${b.start_time} - ${b.end_time}</span>
+            <span class="text-slate-400 text-[10px]">${formatDateDDMMYYYY(b.booking_date)} @ ${formatTime12h(b.start_time)} - ${formatTime12h(b.end_time)}</span>
           </td>
           <td class="py-2.5 px-3 text-emerald-400 font-bold">₹${b.total_amount}</td>
           <td class="py-2.5 px-3">

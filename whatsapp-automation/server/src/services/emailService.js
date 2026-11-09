@@ -5,6 +5,18 @@ export class EmailService {
   static DEFAULT_SENDER = 'TurfFlow Arena <onboarding@resend.dev>';
 
   /**
+   * Helper to format YYYY-MM-DD to DD/MM/YYYY
+   */
+  static formatDate(dateStr) {
+    if (!dateStr) return '';
+    const cleanStr = String(dateStr).trim();
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(cleanStr)) return cleanStr;
+    const match = cleanStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) return `${match[3]}/${match[2]}/${match[1]}`;
+    return cleanStr;
+  }
+
+  /**
    * Helper to format 24h "18:00" to 12h "06:00 PM"
    */
   static formatTime12h(timeStr) {
@@ -108,7 +120,7 @@ export class EmailService {
       `Booking Ref: ${booking.booking_ref}`,
       `Gate Entry OTP: ${otpCode}`,
       `Court: ${court?.name || 'Main Pitch'} (${sport?.name || 'Football'})`,
-      `Date: ${booking.booking_date}`,
+      `Date: ${this.formatDate(booking.booking_date)}`,
       `Time: ${timeRangeStr}`,
       `Total Paid: INR ${booking.total_amount}`,
       `Address: ${venue.address}`,
@@ -152,7 +164,7 @@ export class EmailService {
           </tr>
           <tr>
             <td style="padding: 12px 16px; font-size: 13px; color: #64748b; border-bottom: 1px solid #f1f5f9;">Date & Time</td>
-            <td style="padding: 12px 16px; font-size: 13px; font-weight: 700; color: #006b30; border-bottom: 1px solid #f1f5f9;">${booking.booking_date} &bull; ${timeRangeStr}</td>
+            <td style="padding: 12px 16px; font-size: 13px; font-weight: 700; color: #006b30; border-bottom: 1px solid #f1f5f9;">${this.formatDate(booking.booking_date)} &bull; ${timeRangeStr}</td>
           </tr>
           <tr>
             <td style="padding: 12px 16px; font-size: 13px; color: #64748b; border-bottom: 1px solid #f1f5f9;">Total Paid</td>

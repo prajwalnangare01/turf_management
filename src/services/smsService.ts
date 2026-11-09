@@ -15,8 +15,9 @@ export interface SendSmsPayload {
   to: string;
   message: string;
   senderId?: string;
-  route?: 'otp' | 'transactional';
+  route?: 'otp' | 'transactional' | 'dlt';
   otpCode?: string;
+  templateId?: string;
 }
 
 export class SmsService {
@@ -63,7 +64,8 @@ export class SmsService {
           message: cleanMessage,
           senderId,
           route: payload.route || 'transactional',
-          otpCode: payload.otpCode
+          otpCode: payload.otpCode,
+          templateId: payload.templateId
         })
       });
 

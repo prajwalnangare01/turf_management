@@ -338,9 +338,10 @@ export class AiAgentService {
       const parsedTime = this.parseTime(text);
 
       if (!parsedTime) {
+        const formattedDateStr = WhatsAppFormatter.formatDate(parsedDate);
         return {
-          reply: `⏰ What time would you like to play on ${parsedDate}?\n\n` +
-            `You can reply e.g. *"Book Turf A at 7:00 PM"* or ask *"Show slots for ${parsedDate}"* to view all available timings.`,
+          reply: `⏰ What time would you like to play on ${formattedDateStr}?\n\n` +
+            `You can reply e.g. *"Book Turf A at 7:00 PM"* or ask *"Show slots for ${formattedDateStr}"* to view all available timings.`,
           action: 'booking_need_time'
         };
       }
@@ -368,11 +369,12 @@ export class AiAgentService {
         const freshAvail = SlotEngine.getAvailableSlots(court.sport_ids[0], parsedDate, phone);
         const courtData = freshAvail.courts?.find(c => c.id === court.id);
         const openCourtSlots = courtData?.slots?.filter(s => s.status === 'available') || [];
-        const timesText = openCourtSlots.slice(0, 4).map(s => `• \`${s.start_time}\` to \`${s.end_time}\` (₹${s.price})`).join('\n');
+        const formattedConflictDate = WhatsAppFormatter.formatDate(parsedDate);
+        const timesText = openCourtSlots.slice(0, 4).map(s => `• \`${WhatsAppFormatter.formatTime(s.start_time)}\` to \`${WhatsAppFormatter.formatTime(s.end_time)}\` (₹${s.price})`).join('\n');
 
         return {
           reply: `⚠️ *Slot No Longer Available:*\n${bookingRes.message}\n\n` +
-            (timesText ? `🏟️ *Remaining open timings on ${court.name} for ${parsedDate}:*\n${timesText}\n\n` : '') +
+            (timesText ? `🏟️ *Remaining open timings on ${court.name} for ${formattedConflictDate}:*\n${timesText}\n\n` : '') +
             `Reply with any of the available times above to lock it in! ⚽`,
           action: 'booking_conflict',
           alternatives: openCourtSlots

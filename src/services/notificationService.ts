@@ -2,6 +2,7 @@ import { store } from './store';
 import { Booking, NotificationLog } from '../types/schema';
 import { EmailService } from './emailService';
 import { SmsService } from './smsService';
+import { formatDateDDMMYYYY, formatTime12hPlain } from '../utils/formatters';
 
 export class NotificationService {
   public static enqueueNotification(
@@ -18,17 +19,21 @@ export class NotificationService {
 
     let primaryChannel: 'whatsapp' | 'sms' | 'email' = forceChannel || (venue.whatsapp_enabled ? 'whatsapp' : 'sms');
     
+    const formattedDate = formatDateDDMMYYYY(booking.booking_date);
+    const start12 = formatTime12hPlain(booking.start_time);
+    const end12 = formatTime12hPlain(booking.end_time);
+
     let message = '';
     if (type === 'confirmation') {
-      message = `🎉 Booking Confirmed! Ref: ${booking.booking_ref}. Venue: ${venue.name}. Court: ${courtName}. Date: ${booking.booking_date} @ ${booking.start_time} - ${booking.end_time}. Amount: ₹${booking.total_amount}. See you on the turf!`;
+      message = `🎉 Booking Confirmed! Ref: ${booking.booking_ref}. Venue: ${venue.name}. Court: ${courtName}. Date: ${formattedDate} @ ${start12} - ${end12}. Amount: ₹${booking.total_amount}. See you on the turf!`;
     } else if (type === 'reminder') {
       const otp = (booking.booking_ref || booking.id || '').slice(-4);
-      message = `⏰ Reminder: Your game at ${venue.name} starts in 1 hour (${booking.start_time})! Court: ${courtName}. Gate Entry OTP: ${otp}. Please arrive 10 mins early with turf shoes.`;
+      message = `⏰ Reminder: Your game at ${venue.name} starts in 1 hour (${start12})! Court: ${courtName}. Gate Entry OTP: ${otp}. Please arrive 10 mins early with turf shoes.`;
     } else if (type === 'cancellation') {
       if (booking.refund_amount && booking.refund_amount > 0) {
-        message = `❌ Booking Cancelled: Ref ${booking.booking_ref} (${booking.booking_date} @ ${booking.start_time}). A refund of ₹${booking.refund_amount} has been initiated to your original payment method.`;
+        message = `❌ Booking Cancelled: Ref ${booking.booking_ref} (${formattedDate} @ ${start12}). A refund of ₹${booking.refund_amount} has been initiated to your original payment method.`;
       } else {
-        message = `❌ Booking Cancelled: Ref ${booking.booking_ref} for ${booking.booking_date} @ ${booking.start_time}. Per venue cancellation window policy, no refund is due.`;
+        message = `❌ Booking Cancelled: Ref ${booking.booking_ref} for ${formattedDate} @ ${start12}. Per venue cancellation window policy, no refund is due.`;
       }
     }
 

@@ -4,6 +4,7 @@ import { EmailService } from './emailService.js';
 import { SmsService } from './smsService.js';
 import { NotificationService } from './notificationService.js';
 import { SlotEngine } from './slotEngine.js';
+import { WhatsAppFormatter } from '../utils/whatsappFormatter.js';
 
 export class ReminderScheduler {
   static timerId = null;
@@ -53,7 +54,7 @@ export class ReminderScheduler {
             `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
             `Hi ${booking.customer_name || 'Player'}, your pitch reservation starts in 1 hour!\n\n` +
             `🏟️ *Court:* ${court?.name || 'Pitch'}\n` +
-            `⏰ *Time:* ${booking.start_time} — ${booking.end_time}\n` +
+            `⏰ *Time:* ${WhatsAppFormatter.formatTime(booking.start_time)} — ${WhatsAppFormatter.formatTime(booking.end_time)}\n` +
             `🔑 *Gate Pass OTP:* *${otpCode}*\n` +
             `📍 *Address:* ${venue.address}\n` +
             `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +

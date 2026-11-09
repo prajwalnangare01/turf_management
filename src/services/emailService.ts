@@ -1,5 +1,5 @@
 import { Booking, Customer, Court, Venue } from '../types/schema';
-import { formatTimeRange12h } from '../utils/formatters';
+import { formatTimeRange12h, formatDateDDMMYYYY } from '../utils/formatters';
 
 export interface EmailDispatchResult {
   success: boolean;
@@ -172,7 +172,7 @@ export class EmailService {
       `Booking Reference: ${booking.booking_ref}`,
       `Gate Check-in OTP: ${otpCode}`,
       `Pitch / Court: ${courtName}`,
-      `Date: ${booking.booking_date}`,
+      `Date: ${formatDateDDMMYYYY(booking.booking_date)}`,
       `Slot Time: ${timeRangeStr}`,
       `Total Paid: INR ${booking.total_amount}`,
       `Venue Address: ${venue.address}`,
@@ -237,7 +237,7 @@ export class EmailService {
           </tr>
           <tr>
             <td style="padding: 12px 16px; font-size: 13px; color: #64748b; border-bottom: 1px solid #f1f5f9;">Date</td>
-            <td style="padding: 12px 16px; font-size: 13px; font-weight: 700; color: #0f172a; border-bottom: 1px solid #f1f5f9;">${booking.booking_date}</td>
+            <td style="padding: 12px 16px; font-size: 13px; font-weight: 700; color: #0f172a; border-bottom: 1px solid #f1f5f9;">${formatDateDDMMYYYY(booking.booking_date)}</td>
           </tr>
           <tr>
             <td style="padding: 12px 16px; font-size: 13px; color: #64748b; border-bottom: 1px solid #f1f5f9;">Slot Time</td>
@@ -312,7 +312,7 @@ export class EmailService {
       `Your booking ref ${booking.booking_ref} at ${venue.name} has been cancelled.`,
       ``,
       `Court: ${courtName}`,
-      `Date: ${booking.booking_date} (${timeRangeStr})`,
+      `Date: ${formatDateDDMMYYYY(booking.booking_date)} (${timeRangeStr})`,
       `Total Booking Amount: INR ${booking.total_amount}`,
       refundAmount > 0
         ? `Refund Amount Approved: INR ${refundAmount} (${refundPercentage || 100}% refund)`
@@ -348,7 +348,7 @@ export class EmailService {
       <td style="padding: 28px 24px;">
         <p style="font-size: 15px; margin: 0 0 20px 0; color: #334155;">
           Hi <strong>${customer.name}</strong>,<br/>
-          Your reservation for <strong>${courtName}</strong> on <strong>${booking.booking_date} (${timeRangeStr})</strong> has been cancelled.
+          Your reservation for <strong>${courtName}</strong> on <strong>${formatDateDDMMYYYY(booking.booking_date)} (${timeRangeStr})</strong> has been cancelled.
         </p>
 
         <!-- Refund Card -->

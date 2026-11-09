@@ -112,10 +112,14 @@ export default defineConfig(({ mode }) => {
                 const activeSenderId = data.senderId || env.SMS_SENDER_ID || 'TRFFLW';
 
                 const fast2smsKey = env.FAST2SMS_API_KEY || (env.SMS_PROVIDER === 'fast2sms' ? env.SMS_API_KEY : null);
+                const activeTemplateId = data.templateId || env.FAST2SMS_DLT_TEMPLATE_ID;
+
                 if (fast2smsKey && !fast2smsKey.includes('your_')) {
                   const payload = data.route === 'otp' && data.otpCode
                     ? { route: 'otp', variables_values: data.otpCode, numbers: cleanDigits }
-                    : { route: 'q', message: cleanMessage, numbers: cleanDigits, flash: 0 };
+                    : activeTemplateId
+                      ? { route: 'dlt', sender_id: activeSenderId, message: activeTemplateId, variables_values: cleanMessage, numbers: cleanDigits }
+                      : { route: 'q', message: cleanMessage, numbers: cleanDigits, flash: 0 };
 
                   const f2sRes = await fetch('https://www.fast2sms.com/dev/bulkV2', {
                     method: 'POST',

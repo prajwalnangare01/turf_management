@@ -8,11 +8,12 @@ export class SmsService {
   /**
    * Send SMS via configured SMS Gateway or simulation
    */
-  static async sendSms({ to, message, senderId, route = 'transactional', otpCode }) {
+  static async sendSms({ to, message, senderId, route = 'transactional', otpCode, templateId }) {
     const rawTo = (to || '').toString().trim();
     const cleanDigits = rawTo.replace(/\D/g, '').slice(-10);
     const cleanMessage = (message || '').trim();
     const activeSenderId = senderId || process.env.SMS_SENDER_ID || this.DEFAULT_SENDER_ID;
+    const activeTemplateId = templateId || process.env.FAST2SMS_DLT_TEMPLATE_ID;
 
     if (cleanDigits.length < 10) {
       return { success: false, error: 'Recipient phone must have 10 digits' };
@@ -22,19 +23,33 @@ export class SmsService {
     const fast2smsKey = process.env.FAST2SMS_API_KEY || (process.env.SMS_PROVIDER === 'fast2sms' ? process.env.SMS_API_KEY : null);
     if (fast2smsKey && !fast2smsKey.includes('your_')) {
       try {
-        const payload = route === 'otp' && otpCode
-          ? {
-              route: 'otp',
-              variables_values: otpCode,
-              numbers: cleanDigits
-            }
-          : {
-              route: 'q',
-              message: cleanMessage,
-              language: 'english',
-              flash: 0,
-              numbers: cleanDigits
-            };
+        let payload;
+        if (route === 'otp' && otpCode) {
+          // Dedicated Fast2SMS OTP Route
+          payload = {
+            route: 'otp',
+            variables_values: otpCode,
+            numbers: cleanDigits
+          };
+        } else if (activeTemplateId) {
+          // Transactional DLT Route (approved DLT Template ID + Sender ID)
+          payload = {
+            route: 'dlt',
+            sender_id: activeSenderId,
+            message: activeTemplateId,
+            variables_values: cleanMessage,
+            numbers: cleanDigits
+          };
+        } else {
+          // Quick SMS Route (Direct custom transactional text)
+          payload = {
+            route: 'q',
+            message: cleanMessage,
+            language: 'english',
+            flash: 0,
+            numbers: cleanDigits
+          };
+        }
 
         const response = await fetch('https://www.fast2sms.com/dev/bulkV2', {
           method: 'POST',
@@ -47,7 +62,7 @@ export class SmsService {
 
         const data = await response.json();
         if (data.return === true) {
-          console.log(`[Fast2SMS Sent] To: +91${cleanDigits} | ReqId: ${data.request_id}`);
+          console.log(`[Fast2SMS Sent via ${payload.route.toUpperCase()}] To: +91${cleanDigits} | ReqId: ${data.request_id}`);
           return { success: true, simulated: false, id: data.request_id, provider: 'fast2sms' };
         } else {
           console.warn(`[Fast2SMS Error]`, data.message);

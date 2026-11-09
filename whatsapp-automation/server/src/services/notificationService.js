@@ -2,6 +2,7 @@
 import { store } from '../data/store.js';
 import { WhatsAppService } from './whatsappService.js';
 import { GatePassService } from './gatePassService.js';
+import { WhatsAppFormatter } from '../utils/whatsappFormatter.js';
 
 export class NotificationService {
   /**
@@ -47,8 +48,8 @@ export class NotificationService {
       `🔑 *Gate Check-in OTP:* *${otpCode}*\n` +
       `🏟️ *Court:* ${court?.name || 'Main Turf'}\n` +
       `🏅 *Sport:* ${sport?.icon || '⚽'} ${sport?.name || 'Football'}\n` +
-      `📅 *Date:* ${booking.booking_date}\n` +
-      `⏰ *Time:* ${booking.start_time} — ${booking.end_time} (${court?.slot_duration_minutes || 60} mins)\n` +
+      `📅 *Date:* ${WhatsAppFormatter.formatDate(booking.booking_date)}\n` +
+      `⏰ *Time:* ${WhatsAppFormatter.formatTime(booking.start_time)} — ${WhatsAppFormatter.formatTime(booking.end_time)} (${court?.slot_duration_minutes || 60} mins)\n` +
       `💰 *Total Paid:* ₹${booking.total_amount} (via Razorpay UPI)\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `📍 *Venue Address:* ${venue.address}\n` +
@@ -92,7 +93,7 @@ export class NotificationService {
     const message = `❌ *BOOKING CANCELLED*\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `🎟️ *Ref:* \`${booking.booking_ref}\`\n` +
-      `📅 *Original Date:* ${booking.booking_date} @ ${booking.start_time}\n` +
+      `📅 *Original Date:* ${WhatsAppFormatter.formatDate(booking.booking_date)} @ ${WhatsAppFormatter.formatTime(booking.start_time)}\n` +
       `${refundInfo}\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `Hope to see you back on the field soon! Message us anytime to book another slot.`;
@@ -115,7 +116,7 @@ export class NotificationService {
       `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `Hey ${booking.customer_name}! Your game starts soon.\n` +
       `🏟️ *Court:* ${court?.name}\n` +
-      `⏰ *Kick-off:* ${booking.start_time} today (${booking.booking_date})\n` +
+      `⏰ *Kick-off:* ${WhatsAppFormatter.formatTime(booking.start_time)} today (${WhatsAppFormatter.formatDate(booking.booking_date)})\n` +
       `📍 *Location:* ${venue.address}\n` +
       `🗺️ *Navigate:* ${venue.google_maps_link}\n\n` +
       `Water and bibs are ready at the turf dugout. Have a great match! ⚽🔥`;

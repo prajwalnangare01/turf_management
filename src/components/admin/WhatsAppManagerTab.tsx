@@ -6,7 +6,13 @@ import {
 } from 'lucide-react';
 import { store } from '../../services/store';
 import { AdminUser, Booking } from '../../types/schema';
-import { formatTime12h } from '../../utils/formatters';
+import { formatTime12h, formatTime12hPlain, formatDateDDMMYYYY } from '../../utils/formatters';
+
+const formatChatTimestamp = (d: Date = new Date()): string => {
+  const datePart = formatDateDDMMYYYY(d);
+  const timePart = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+  return `${datePart}, ${timePart}`;
+};
 
 interface Props {
   currentAdmin: AdminUser;
@@ -25,7 +31,7 @@ export const WhatsAppManagerTab: React.FC<Props> = ({ currentAdmin }) => {
     {
       sender: 'agent',
       text: '🤖 *TurfFlow AI Agent Operational.*\nConnected to live Supabase PostgreSQL database. Ask me for slot availability or simulate a WhatsApp booking reservation!',
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      time: formatChatTimestamp()
     }
   ]);
 
@@ -159,7 +165,7 @@ export const WhatsAppManagerTab: React.FC<Props> = ({ currentAdmin }) => {
     const text = (textToSend || chatInput).trim();
     if (!text || isSending) return;
 
-    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const time = formatChatTimestamp();
     setChatHistory(prev => [...prev, { sender: 'user', text, time }]);
     setChatInput('');
     setIsSending(true);
@@ -184,7 +190,7 @@ export const WhatsAppManagerTab: React.FC<Props> = ({ currentAdmin }) => {
           {
             sender: 'agent',
             text: data.reply || 'Request executed.',
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            time: formatChatTimestamp()
           }
         ]);
         refreshData();
@@ -194,7 +200,7 @@ export const WhatsAppManagerTab: React.FC<Props> = ({ currentAdmin }) => {
           {
             sender: 'agent',
             text: `⚠️ Error: ${data.message || 'Agent failed to respond'}`,
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            time: formatChatTimestamp()
           }
         ]);
       }
@@ -205,7 +211,7 @@ export const WhatsAppManagerTab: React.FC<Props> = ({ currentAdmin }) => {
         {
           sender: 'agent',
           text: `⚠️ Network error: Could not reach /api/agent/chat (${err.message})`,
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          time: formatChatTimestamp()
         }
       ]);
     }
@@ -226,7 +232,7 @@ export const WhatsAppManagerTab: React.FC<Props> = ({ currentAdmin }) => {
           {
             sender: 'agent',
             text: `🎉 *PAYMENT CAPTURED:* Booking *${bookingRef}* is confirmed! Official pass dispatched.`,
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            time: formatChatTimestamp()
           }
         ]);
       }
@@ -442,7 +448,7 @@ export const WhatsAppManagerTab: React.FC<Props> = ({ currentAdmin }) => {
                   {
                     sender: 'agent',
                     text: '👋 Chat reset! Ready to simulate new inquiries.',
-                    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    time: formatChatTimestamp()
                   }
                 ]);
               }}
@@ -474,7 +480,7 @@ export const WhatsAppManagerTab: React.FC<Props> = ({ currentAdmin }) => {
                       isAgent ? 'bg-white text-slate-900 rounded-tl-xs' : 'bg-[#d9fdd3] text-slate-950 rounded-tr-xs'
                     }`}
                   >
-                    <div className="whitespace-pre-wrap">{msg.text}</div>
+                    <div className="whitespace-pre-wrap">{msg.text.replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, '$3/$2/$1')}</div>
                     <div className="text-[10px] text-slate-400 text-right mt-1">{msg.time}</div>
                   </div>
                 </div>
@@ -579,7 +585,7 @@ export const WhatsAppManagerTab: React.FC<Props> = ({ currentAdmin }) => {
                         <td className="py-2.5 px-3 font-bold text-primary">{b.booking_ref}</td>
                         <td className="py-2.5 px-3 font-sans">
                           <span className="font-semibold text-on-surface">{getCourtName(b.court_id)}</span><br />
-                          <span className="text-[10px] text-on-surface-variant">{b.booking_date} @ {formatTime12h(b.start_time)}</span>
+                          <span className="text-[10px] text-on-surface-variant">{formatDateDDMMYYYY(b.booking_date)} @ {formatTime12hPlain(b.start_time)}</span>
                         </td>
                         <td className="py-2.5 px-3 font-bold text-emerald-600">₹{b.total_amount}</td>
                         <td className="py-2.5 px-3">
