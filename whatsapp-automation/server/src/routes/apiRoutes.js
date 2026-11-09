@@ -240,6 +240,33 @@ apiRouter.get('/bookings', (req, res) => {
 });
 
 /**
+ * 10b. Reset / Clear All Bookings (Dev / Fresh Test)
+ */
+apiRouter.post('/bookings/reset', async (req, res) => {
+  try {
+    const supabase = getSupabase();
+    if (supabase) {
+      await supabase.from('payments').delete().neq('id', 'dummy_never_match');
+      await supabase.from('slot_locks').delete().neq('id', 'dummy_never_match');
+      await supabase.from('bookings').delete().neq('id', 'dummy_never_match');
+      await supabase.from('customers').update({ total_bookings: 0, total_spent: 0 }).neq('id', 'dummy_never_match');
+    }
+    store.bookings = [];
+    store.locks.clear();
+    if (Array.isArray(store.customers)) {
+      for (const c of store.customers) {
+        c.total_bookings = 0;
+        c.total_spent = 0;
+      }
+    }
+    res.json({ success: true, message: 'All bookings, payments, and slot locks cleared.' });
+  } catch (err) {
+    console.error('Reset bookings error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * 11. Cancel Booking
  */
 apiRouter.post('/bookings/cancel', (req, res) => {

@@ -111,8 +111,8 @@ const DEFAULT_CUSTOMERS: Customer[] = [
     phone: '9876543210',
     email: 'rahul.sharma@example.com',
     created_at: '2026-07-01T10:00:00Z',
-    total_bookings: 8,
-    total_spent: 9600,
+    total_bookings: 0,
+    total_spent: 0,
     no_show_count: 0,
     is_blacklisted: false
   },
@@ -122,8 +122,8 @@ const DEFAULT_CUSTOMERS: Customer[] = [
     phone: '9812345678',
     email: 'ananya@example.com',
     created_at: '2026-07-15T14:30:00Z',
-    total_bookings: 3,
-    total_spent: 3600,
+    total_bookings: 0,
+    total_spent: 0,
     no_show_count: 0,
     is_blacklisted: false
   },
@@ -133,10 +133,10 @@ const DEFAULT_CUSTOMERS: Customer[] = [
     phone: '9900112233',
     email: 'vikram@example.com',
     created_at: '2026-06-20T11:15:00Z',
-    total_bookings: 4,
-    total_spent: 4000,
-    no_show_count: 3,
-    is_blacklisted: true
+    total_bookings: 0,
+    total_spent: 0,
+    no_show_count: 0,
+    is_blacklisted: false
   }
 ];
 
@@ -146,148 +146,9 @@ const DEFAULT_ADMIN_USERS: AdminUser[] = [
   { id: 'adm-003', name: 'Arjun Das (FrontDesk Staff)', email: 'staff@turfflow.com', phone: '9876500003', role: 'staff', is_active: true }
 ];
 
-const TODAY = new Date().toISOString().split('T')[0];
+const DEFAULT_BOOKINGS: Booking[] = [];
 
-const DEFAULT_BOOKINGS: Booking[] = [
-  {
-    id: 'bk-001',
-    booking_ref: 'TRF-20260729-0001',
-    customer_id: 'cust-101',
-    court_id: 'crt-001',
-    sport_id: 'sp-football',
-    booking_date: TODAY,
-    start_time: '18:00',
-    end_time: '19:00',
-    source: 'online',
-    status: 'confirmed',
-    total_amount: 1600,
-    discount_amount: 0,
-    created_at: `${TODAY}T09:00:00Z`,
-    updated_at: `${TODAY}T09:05:00Z`
-  },
-  {
-    id: 'bk-002',
-    booking_ref: 'TRF-20260729-0002',
-    customer_id: 'cust-102',
-    court_id: 'crt-002',
-    sport_id: 'sp-cricket',
-    booking_date: TODAY,
-    start_time: '19:00',
-    end_time: '20:00',
-    source: 'offline_walkin',
-    status: 'confirmed',
-    total_amount: 1400,
-    discount_amount: 0,
-    created_by_admin_id: 'adm-003',
-    notes: 'Walk-in cash customer',
-    created_at: `${TODAY}T11:20:00Z`,
-    updated_at: `${TODAY}T11:20:00Z`
-  },
-  {
-    id: 'bk-003',
-    booking_ref: 'TRF-20260729-4819',
-    customer_id: 'cust-103',
-    court_id: 'crt-001',
-    sport_id: 'sp-football',
-    booking_date: TODAY,
-    start_time: '20:00',
-    end_time: '21:00',
-    source: 'online',
-    status: 'pending_payment',
-    total_amount: 1800,
-    discount_amount: 0,
-    notes: 'Online UPI transfer verification pending from customer',
-    created_at: `${TODAY}T11:45:00Z`,
-    updated_at: `${TODAY}T11:45:00Z`
-  },
-  {
-    id: 'bk-004',
-    booking_ref: 'TRF-20260729-9231',
-    customer_id: 'cust-101',
-    court_id: 'crt-002',
-    sport_id: 'sp-cricket',
-    booking_date: TODAY,
-    start_time: '21:00',
-    end_time: '22:00',
-    source: 'offline_phone',
-    status: 'pending_payment',
-    total_amount: 1400,
-    discount_amount: 0,
-    created_by_admin_id: 'adm-002',
-    notes: 'Phone reservation awaiting advance cash deposit at frontdesk',
-    created_at: `${TODAY}T11:50:00Z`,
-    updated_at: `${TODAY}T11:50:00Z`
-  },
-  {
-    id: 'bk-005',
-    booking_ref: 'TRF-20260729-1005',
-    customer_id: 'cust-101',
-    court_id: 'crt-001',
-    sport_id: 'sp-football',
-    booking_date: TODAY,
-    start_time: '16:00',
-    end_time: '17:00',
-    source: 'online',
-    status: 'completed',
-    total_amount: 1600,
-    discount_amount: 0,
-    notes: 'Checked-in and match completed cleanly',
-    created_at: `${TODAY}T08:00:00Z`,
-    updated_at: `${TODAY}T17:05:00Z`
-  },
-  {
-    id: 'bk-006',
-    booking_ref: 'TRF-20260729-1006',
-    customer_id: 'cust-103',
-    court_id: 'crt-003',
-    sport_id: 'sp-badminton',
-    booking_date: TODAY,
-    start_time: '15:00',
-    end_time: '16:00',
-    source: 'offline_walkin',
-    status: 'no_show',
-    total_amount: 700,
-    discount_amount: 0,
-    created_by_admin_id: 'adm-003',
-    notes: 'Customer failed to show up at scheduled time',
-    created_at: `${TODAY}T10:00:00Z`,
-    updated_at: `${TODAY}T16:10:00Z`
-  },
-  {
-    id: 'bk-007',
-    booking_ref: 'TRF-20260729-1007',
-    customer_id: 'cust-102',
-    court_id: 'crt-002',
-    sport_id: 'sp-cricket',
-    booking_date: TODAY,
-    start_time: '14:00',
-    end_time: '15:00',
-    source: 'online',
-    status: 'cancelled',
-    total_amount: 1400,
-    discount_amount: 0,
-    notes: 'Cancelled by customer 12 hours prior to slot',
-    created_at: `${TODAY}T07:00:00Z`,
-    updated_at: `${TODAY}T08:30:00Z`
-  },
-  {
-    id: 'bk-008',
-    booking_ref: 'TRF-20260729-1008',
-    customer_id: 'cust-101',
-    court_id: 'crt-001',
-    sport_id: 'sp-football',
-    booking_date: TODAY,
-    start_time: '12:00',
-    end_time: '13:00',
-    source: 'online',
-    status: 'refunded',
-    total_amount: 1600,
-    discount_amount: 0,
-    notes: '100% Refund processed via Razorpay API',
-    created_at: `${TODAY}T06:00:00Z`,
-    updated_at: `${TODAY}T07:00:00Z`
-  }
-];
+const TODAY = new Date().toISOString().split('T')[0];
 
 const DEFAULT_BLOCKED_SLOTS: BlockedSlot[] = [
   {

@@ -107,8 +107,8 @@ export const DEFAULT_CUSTOMERS = [
     phone: '+919876543210',
     email: 'rahul.s@example.com',
     created_at: '2026-01-15T10:00:00Z',
-    total_bookings: 5,
-    total_spent: 7200,
+    total_bookings: 0,
+    total_spent: 0,
     no_show_count: 0,
     is_blacklisted: false
   },
@@ -118,36 +118,14 @@ export const DEFAULT_CUSTOMERS = [
     phone: '+919812345678',
     email: 'priya.p@example.com',
     created_at: '2026-02-10T14:30:00Z',
-    total_bookings: 3,
-    total_spent: 3900,
+    total_bookings: 0,
+    total_spent: 0,
     no_show_count: 0,
     is_blacklisted: false
   }
 ];
 
-export const DEFAULT_BOOKINGS = [
-  {
-    id: 'bk-1001',
-    booking_ref: 'TRF-20261105-1001',
-    customer_id: 'cust-101',
-    customer_name: 'Rahul Sharma',
-    customer_phone: '+919876543210',
-    court_id: 'crt-001',
-    court_name: 'Turf A — FIFA 5-a-side Synthetic',
-    sport_id: 'sp-football',
-    sport_name: 'Football',
-    booking_date: '2026-11-05',
-    start_time: '19:00',
-    end_time: '20:00',
-    source: 'offline_whatsapp',
-    status: 'confirmed',
-    total_amount: 1800,
-    discount_amount: 0,
-    notes: 'Booked via WhatsApp AI Agent',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  }
-];
+export const DEFAULT_BOOKINGS = [];
 
 class Store {
   constructor() {
