@@ -25,7 +25,8 @@ export class NotificationService {
 
     let message = '';
     if (type === 'confirmation') {
-      message = `🎉 Booking Confirmed! Ref: ${booking.booking_ref}. Venue: ${venue.name}. Court: ${courtName}. Date: ${formattedDate} @ ${start12} - ${end12}. Amount: ₹${booking.total_amount}. See you on the turf!`;
+      const otp = booking.gate_pass_otp || (booking.booking_ref || booking.id || '').slice(-4);
+      message = `✅ Payment Confirmed! Venue: ${venue.name}. Court: ${courtName}. Date: ${formattedDate} @ ${start12} - ${end12}. Amount Paid: ₹${booking.total_amount}. Gate Entry OTP: ${otp}. See you on the turf!`;
     } else if (type === 'reminder') {
       const otp = (booking.booking_ref || booking.id || '').slice(-4);
       message = `⏰ Reminder: Your game at ${venue.name} starts in 1 hour (${start12})! Court: ${courtName}. Gate Entry OTP: ${otp}. Please arrive 10 mins early with turf shoes.`;

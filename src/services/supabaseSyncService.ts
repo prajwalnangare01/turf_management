@@ -526,4 +526,62 @@ export class SupabaseSyncService {
       return false;
     }
   }
+
+  /**
+   * Persist a slot lock to Supabase (5-minute hold)
+   * This immediately triggers Supabase Realtime so Admin Panel and WhatsApp Bot see the hold!
+   */
+  public static async syncSlotLockToSupabase(lock: SlotLock): Promise<boolean> {
+    const supabase = getSupabase();
+    if (!supabase) return false;
+
+    try {
+      const payload = {
+        court_id: lock.court_id,
+        date: lock.date,
+        start_time: lock.start_time,
+        locked_by: lock.locked_by,
+        expires_at: lock.expires_at
+      };
+
+      const { error } = await supabase
+        .from('slot_locks')
+        .upsert([payload], { onConflict: 'court_id,date,start_time' });
+
+      if (error) {
+        console.warn('⚠️ [Supabase Sync] Error syncing slot lock:', error.message);
+        return false;
+      }
+      return true;
+    } catch (err: any) {
+      console.warn('⚠️ [Supabase Sync] Exception syncing slot lock:', err.message);
+      return false;
+    }
+  }
+
+  /**
+   * Remove a slot lock from Supabase when released
+   */
+  public static async deleteSlotLockFromSupabase(courtId: string, date: string, startTime: string): Promise<boolean> {
+    const supabase = getSupabase();
+    if (!supabase) return false;
+
+    try {
+      const { error } = await supabase
+        .from('slot_locks')
+        .delete()
+        .eq('court_id', courtId)
+        .eq('date', date)
+        .eq('start_time', startTime);
+
+      if (error) {
+        console.warn('⚠️ [Supabase Sync] Error deleting slot lock:', error.message);
+        return false;
+      }
+      return true;
+    } catch (err: any) {
+      console.warn('⚠️ [Supabase Sync] Exception deleting slot lock:', err.message);
+      return false;
+    }
+  }
 }

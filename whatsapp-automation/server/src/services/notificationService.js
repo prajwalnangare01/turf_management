@@ -42,14 +42,15 @@ export class NotificationService {
     const sport = sports.find(s => s.id === booking.sport_id);
     const otpCode = booking.gate_pass_otp || (booking.booking_ref ? booking.booking_ref.slice(-4) : '0000');
 
-    const message = `🎉 *BOOKING CONFIRMED — TURFFLOW ARENA* 🎉\n` +
+    const message = `✅ *PAYMENT CONFIRMED — TURFFLOW ARENA* ✅\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `🎉 *Payment Received & Booking Confirmed!*\n\n` +
       `🔑 *Gate Check-in OTP:* *${otpCode}*\n` +
       `🏟️ *Court:* ${court?.name || 'Main Turf'}\n` +
       `🏅 *Sport:* ${sport?.icon || '⚽'} ${sport?.name || 'Football'}\n` +
       `📅 *Date:* ${WhatsAppFormatter.formatDate(booking.booking_date)}\n` +
       `⏰ *Time:* ${WhatsAppFormatter.formatTime(booking.start_time)} — ${WhatsAppFormatter.formatTime(booking.end_time)} (${court?.slot_duration_minutes || 60} mins)\n` +
-      `💰 *Total Paid:* ₹${booking.total_amount} (via Razorpay UPI)\n` +
+      `💰 *Amount Paid:* ₹${booking.total_amount} (via Razorpay UPI)\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `📍 *Venue Address:* ${venue.address}\n` +
       `🗺️ *Google Maps:* ${venue.google_maps_link}\n` +

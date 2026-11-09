@@ -1,7 +1,8 @@
 import { store } from './store';
 import { SlotLock } from '../types/schema';
+import { SupabaseSyncService } from './supabaseSyncService';
 
-const LOCK_TTL_SECONDS = 120; // 2 minutes hold time
+const LOCK_TTL_SECONDS = 300; // 5 minutes hold time
 
 export class RedisLockService {
   /**
@@ -24,7 +25,8 @@ export class RedisLockService {
   }
 
   /**
-   * Acquire a 2-minute slot lock (SET key session_id NX EX 120)
+   * Acquire a 5-minute slot lock (SET key session_id NX EX 300)
+   * Broadcasts to Supabase Realtime so Admin Panel and WhatsApp Agent lock it immediately!
    */
   public static acquireLock(
     courtId: string, 
@@ -44,6 +46,7 @@ export class RedisLockService {
         // Extend/refresh lock
         existing.expires_at = Date.now() + (LOCK_TTL_SECONDS * 1000);
         store.setSlotLocks(validLocks);
+        SupabaseSyncService.syncSlotLockToSupabase(existing);
         return { success: true, message: 'Lock extended', lock: existing };
       }
       const remainingSec = Math.ceil((existing.expires_at - Date.now()) / 1000);
@@ -53,7 +56,7 @@ export class RedisLockService {
       };
     }
 
-    // Create new lock
+    // Create new lock (5-minute hold)
     const newLock: SlotLock = {
       court_id: courtId,
       date,
@@ -64,6 +67,18 @@ export class RedisLockService {
 
     validLocks.push(newLock);
     store.setSlotLocks(validLocks);
+
+    // Sync to live Supabase and Backend API
+    SupabaseSyncService.syncSlotLockToSupabase(newLock);
+    if (typeof window !== 'undefined') {
+      try {
+        fetch('/api/slots/lock', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ courtId, date, startTime, lockedBy: sessionId, ttlSeconds: LOCK_TTL_SECONDS })
+        }).catch(() => {});
+      } catch (e) {}
+    }
 
     return {
       success: true,
@@ -81,6 +96,16 @@ export class RedisLockService {
       l => !(l.court_id === courtId && l.date === date && l.start_time === startTime && (!sessionId || l.locked_by === sessionId))
     );
     store.setSlotLocks(updated);
+    SupabaseSyncService.deleteSlotLockFromSupabase(courtId, date, startTime);
+    if (typeof window !== 'undefined') {
+      try {
+        fetch('/api/slots/release-lock', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ courtId, date, startTime, lockedBy: sessionId })
+        }).catch(() => {});
+      } catch (e) {}
+    }
   }
 
   /**
@@ -91,15 +116,31 @@ export class RedisLockService {
     const endMins = this.timeToMinutes(endTime);
     const locks = store.getSlotLocks();
 
+    const removedLocks: SlotLock[] = [];
     const updated = locks.filter(l => {
       if (l.court_id !== courtId || l.date !== date) return true;
       if (sessionId && l.locked_by !== sessionId) return true;
       const lMins = this.timeToMinutes(l.start_time);
-      // Keep lock if it's outside the booking range
-      return !(lMins >= startMins && lMins < endMins);
+      const isInside = lMins >= startMins && lMins < endMins;
+      if (isInside) {
+        removedLocks.push(l);
+      }
+      return !isInside;
     });
 
     store.setSlotLocks(updated);
+    for (const l of removedLocks) {
+      SupabaseSyncService.deleteSlotLockFromSupabase(l.court_id, l.date, l.start_time);
+      if (typeof window !== 'undefined') {
+        try {
+          fetch('/api/slots/release-lock', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ courtId: l.court_id, date: l.date, startTime: l.start_time, lockedBy: sessionId })
+          }).catch(() => {});
+        } catch (e) {}
+      }
+    }
   }
 
   /**

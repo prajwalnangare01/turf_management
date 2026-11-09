@@ -204,6 +204,26 @@ export class SupabaseService {
             }
           }
         )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'slot_locks' },
+          (payload) => {
+            console.log(`⚡ [Realtime DB Change] Slot Lock ${payload.eventType}:`, payload.new?.start_time || payload.old?.start_time);
+            if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+              const key = `${payload.new.court_id}:${payload.new.date}:${payload.new.start_time}`;
+              store.locks.set(key, {
+                lockedBy: payload.new.locked_by,
+                expiresAt: Number(payload.new.expires_at),
+                courtId: payload.new.court_id,
+                date: typeof payload.new.date === 'string' ? payload.new.date.slice(0, 10) : payload.new.date,
+                startTime: typeof payload.new.start_time === 'string' ? payload.new.start_time.slice(0, 5) : payload.new.start_time
+              });
+            } else if (payload.eventType === 'DELETE' && payload.old) {
+              const key = `${payload.old.court_id}:${payload.old.date}:${payload.old.start_time}`;
+              store.locks.delete(key);
+            }
+          }
+        )
         .subscribe((status) => {
           console.log(`📡 Supabase Realtime status: ${status}`);
         });

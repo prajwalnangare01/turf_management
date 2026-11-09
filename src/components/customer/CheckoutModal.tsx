@@ -78,8 +78,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
   const [couponError, setCouponError] = useState('');
 
-  // Lock countdown timer (2 mins)
-  const [timeLeft, setTimeLeft] = useState(120);
+  // Lock countdown timer (5 mins hold)
+  const [timeLeft, setTimeLeft] = useState(300);
 
   // OTP & Payment step
   const [step, setStep] = useState<'details' | 'otp' | 'payment'>('details');
@@ -91,11 +91,16 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [paymentError, setPaymentError] = useState('');
 
   useEffect(() => {
+    // Extend slot holds to full 5 minutes upon entering checkout
+    selectedSlots.forEach(s => {
+      RedisLockService.acquireLock(court.id, dateStr, s.start_time, sessionId);
+    });
+
     const timer = setInterval(() => {
       setTimeLeft(prev => {
         if (prev <= 1) {
           clearInterval(timer);
-          alert('Your slot hold expired! Please select your slots again.');
+          alert('Your 5-minute slot hold expired! Please select your slots again.');
           onClose();
           return 0;
         }
@@ -104,7 +109,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [onClose]);
+  }, [onClose, court.id, dateStr, sessionId]);
 
   const rawTotal = selectedSlots.reduce((sum, s) => sum + s.price, 0);
   const discount = appliedCoupon

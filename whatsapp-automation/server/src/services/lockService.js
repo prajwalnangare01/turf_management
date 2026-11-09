@@ -2,6 +2,7 @@
 // Simulates / connects to Redis key: lock:{court_id}:{date}:{start_time} with 5-minute TTL
 
 import { store } from '../data/store.js';
+import { SupabaseService } from './supabaseService.js';
 
 export class LockService {
   static makeKey(courtId, date, startTime) {
@@ -59,6 +60,16 @@ export class LockService {
 
     const expiresAt = now + (ttlSeconds * 1000);
     store.locks.set(key, { lockedBy, expiresAt, courtId, date, startTime });
+
+    // Persist lock to Supabase so website and Admin panel immediately show "Held"
+    SupabaseService.insertSlotLock({
+      court_id: courtId,
+      date,
+      start_time: startTime,
+      locked_by: lockedBy,
+      expires_at: expiresAt
+    }).catch(() => {});
+
     return { success: true, expiresAt };
   }
 
@@ -72,6 +83,7 @@ export class LockService {
 
     if (!lockedBy || existing.lockedBy === lockedBy) {
       store.locks.delete(key);
+      SupabaseService.deleteSlotLock(courtId, date, startTime).catch(() => {});
       return true;
     }
     return false;

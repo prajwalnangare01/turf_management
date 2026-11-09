@@ -119,13 +119,13 @@ export class WhatsAppFormatter {
       const end12 = this.formatTime(b.end_time);
 
       if (isConfirmed) {
-        out += `✅ *${b.booking_ref}* (UPCOMING MATCH)\n`;
+        out += `✅ *CONFIRMED MATCH RESERVATION*\n`;
         out += `🏟️ ${b.court_name}\n`;
         out += `📅 ${formattedDate} | ⏰ ${start12} — ${end12}\n`;
         out += `🔑 *Gate Pass OTP:* *${otpCode}*\n`;
         out += `💰 ₹${b.total_amount} (PAID)\n`;
         out += `📄 *Download PDF Pass:* http://localhost:5000/api/bookings/${b.booking_ref}/pass\n`;
-        out += `⚙️ _To cancel/reschedule, reply: "Cancel ${b.booking_ref}"_\n`;
+        out += `⚙️ _To cancel/reschedule, reply: "Cancel ${otpCode}"_\n`;
       } else {
         out += `⏳ *PENDING RESERVATION*\n`;
         out += `🏟️ ${b.court_name}\n`;

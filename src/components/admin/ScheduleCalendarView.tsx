@@ -339,8 +339,10 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
                           className="w-full h-14 rounded-lg bg-sky-100 hover:bg-sky-200 border border-sky-300 text-sky-900 text-[10px] font-headline font-bold flex flex-col items-center justify-center p-1.5 text-center animate-pulse transition-colors"
                           title="Click to view hold remaining time and unlock slot"
                         >
-                          <span className="flex items-center gap-1">⏱️ 2-Min Hold</span>
-                          <span className="text-[9px] underline font-bold">Click for Time</span>
+                          <span className="flex items-center gap-1">⏱️ 5-Min Hold</span>
+                          <span className="text-[9px] underline font-bold">
+                            {slot.locked_by?.startsWith('+91') || (slot.locked_by && slot.locked_by.length === 10) ? 'WhatsApp Hold' : 'Online Hold'}
+                          </span>
                         </button>
                       )}
 
