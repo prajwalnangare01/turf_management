@@ -40,7 +40,7 @@ export class NotificationService {
     const court = store.getCourts().find(c => c.id === booking.court_id);
     const sports = store.getSports();
     const sport = sports.find(s => s.id === booking.sport_id);
-    const otpCode = booking.gate_pass_otp || (booking.booking_ref ? booking.booking_ref.slice(-4) : '0000');
+    const otpCode = WhatsAppFormatter.getBookingGatePassOtp(booking);
 
     const message = `✅ *PAYMENT CONFIRMED — TURFFLOW ARENA* ✅\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +

@@ -2,7 +2,7 @@ import { store } from './store';
 import { Booking, NotificationLog } from '../types/schema';
 import { EmailService } from './emailService';
 import { SmsService } from './smsService';
-import { formatDateDDMMYYYY, formatTime12hPlain } from '../utils/formatters';
+import { formatDateDDMMYYYY, formatTime12hPlain, getBookingGatePassOtp } from '../utils/formatters';
 
 export class NotificationService {
   public static enqueueNotification(
@@ -25,11 +25,13 @@ export class NotificationService {
 
     let message = '';
     if (type === 'confirmation') {
-      const otp = booking.gate_pass_otp || (booking.booking_ref || booking.id || '').slice(-4);
-      message = `✅ Payment Confirmed! Venue: ${venue.name}. Court: ${courtName}. Date: ${formattedDate} @ ${start12} - ${end12}. Amount Paid: ₹${booking.total_amount}. Gate Entry OTP: ${otp}. See you on the turf!`;
+      const otp = getBookingGatePassOtp(booking);
+      const slotTimesText = booking.formatted_slots || `${start12} - ${end12}`;
+      const totalAmount = booking.total_order_amount || booking.total_amount;
+      message = `✅ Payment Confirmed! Venue: ${venue.name}. Court: ${courtName}. Date: ${formattedDate}. Slot(s): ${slotTimesText}. Amount Paid: ₹${totalAmount}. Gate Entry OTP: ${otp}. See you on the turf!`;
     } else if (type === 'reminder') {
-      const otp = (booking.booking_ref || booking.id || '').slice(-4);
-      message = `⏰ Reminder: Your game at ${venue.name} starts in 1 hour (${start12})! Court: ${courtName}. Gate Entry OTP: ${otp}. Please arrive 10 mins early with turf shoes.`;
+      const otp = getBookingGatePassOtp(booking);
+      message = `⏰ Reminder: Your game at ${venue.name} starts in 1 hour (${start12})! Date: ${formattedDate}. Court: ${courtName}. Gate Entry OTP: ${otp}. Please arrive 10 mins early with turf shoes.`;
     } else if (type === 'cancellation') {
       if (booking.refund_amount && booking.refund_amount > 0) {
         message = `❌ Booking Cancelled: Ref ${booking.booking_ref} (${formattedDate} @ ${start12}). A refund of ₹${booking.refund_amount} has been initiated to your original payment method.`;

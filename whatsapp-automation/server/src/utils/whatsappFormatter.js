@@ -114,7 +114,7 @@ export class WhatsAppFormatter {
     let out = `📋 *YOUR ACTIVE & PENDING BOOKINGS*\n━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
     for (const b of bookings) {
       const isConfirmed = b.status === 'confirmed';
-      const otpCode = b.gate_pass_otp || (b.booking_ref ? b.booking_ref.slice(-4) : '0000');
+      const otpCode = WhatsAppFormatter.getBookingGatePassOtp(b);
       const formattedDate = this.formatDate(b.booking_date);
       const start12 = this.formatTime(b.start_time);
       const end12 = this.formatTime(b.end_time);
@@ -168,9 +168,15 @@ export class WhatsAppFormatter {
       const origText = (c.original_price_per_hour && c.original_price_per_hour > c.base_price_per_hour)
         ? ` ~₹${c.original_price_per_hour}~`
         : '';
-      const effectivePeak = (c.peak_offer_price_per_hour && c.peak_offer_price_per_hour !== c.peak_price_per_hour)
-        ? `~₹${Math.max(c.peak_price_per_hour, c.peak_offer_price_per_hour)}~ ₹${Math.min(c.peak_price_per_hour, c.peak_offer_price_per_hour)}`
-        : `₹${c.peak_price_per_hour || c.base_price_per_hour}`;
+      const peakRate = c.peak_price_per_hour || 1800;
+      let pkOffer = c.peak_offer_price_per_hour;
+      if (pkOffer === undefined && c.original_price_per_hour && c.original_price_per_hour > c.base_price_per_hour) {
+        const discountRatio = (c.original_price_per_hour - c.base_price_per_hour) / c.original_price_per_hour;
+        pkOffer = Math.round(peakRate * (1 - discountRatio));
+      }
+      const effectivePeak = (pkOffer && pkOffer !== peakRate)
+        ? `~₹${Math.max(peakRate, pkOffer)}~ ₹${Math.min(peakRate, pkOffer)}`
+        : `₹${peakRate}`;
       out += `  • *${c.name}:*${origText} ₹${c.base_price_per_hour}/hr (Weekday) | ${effectivePeak}/hr (Peak 6:00 PM - 11:00 PM)\n`;
     }
 
@@ -228,4 +234,37 @@ export class WhatsAppFormatter {
       }
     };
   }
+
+  /**
+   * Universal Gate Pass OTP resolver for multi-slot and sibling bookings
+   */
+  static getBookingGatePassOtp(booking) {
+    if (!booking) return '0000';
+    if (booking.gate_pass_otp && /^\d{4}$/.test(String(booking.gate_pass_otp).trim())) {
+      return String(booking.gate_pass_otp).trim();
+    }
+    const rawRef = (booking.group_ref || booking.booking_ref || booking.id || '').toString().trim();
+    if (!rawRef) return '0000';
+    const siblingMatch = rawRef.match(/^(.*-\d{4})-\d+$/);
+    const baseRef = siblingMatch ? siblingMatch[1] : rawRef;
+    const trailingDigitsMatch = baseRef.match(/\d{4}$/);
+    if (trailingDigitsMatch) return trailingDigitsMatch[0];
+    const allDigits = baseRef.replace(/\D/g, '');
+    if (allDigits.length >= 4) return allDigits.slice(-4);
+    return baseRef.slice(-4) || '0000';
+  }
+
+  /**
+   * Universal booking group reference normalizer
+   */
+  static getBookingGroupRef(booking) {
+    if (!booking) return '';
+    const raw = (booking.group_ref || booking.booking_ref || booking.id || '').toString().trim();
+    const siblingMatch = raw.match(/^(.*-\d{4})-\d+$/);
+    return siblingMatch ? siblingMatch[1] : raw;
+  }
 }
+
+export const getBookingGatePassOtp = WhatsAppFormatter.getBookingGatePassOtp;
+export const getBookingGroupRef = WhatsAppFormatter.getBookingGroupRef;
+

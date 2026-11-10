@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sun, Moon, Tag, Clock, ArrowRight, Check, Lock, Zap } from 'lucide-react';
+import { Sun, Moon, Tag, Clock, Check, Lock, Zap } from 'lucide-react';
 import { DynamicSlot } from '../../types/schema';
 
 export interface BookingSlotCardProps {
@@ -72,15 +72,21 @@ export const BookingSlotCard: React.FC<BookingSlotCardProps> = ({
   // Status conditions
   const isAvailable = slot.status === 'available';
   const isHeldByCurrent = slot.status === 'locked' && isSelected;
+  const isHeld = slot.status === 'locked' && !isSelected;
+  const isBooked = slot.status === 'booked_online' || slot.status === 'booked_offline';
+  const isBlocked = slot.status === 'blocked';
   const isInteractive = isAvailable || isHeldByCurrent;
   const isDisabled = !isInteractive;
 
-  // Dynamic interactive container state classes matching reference design
-  let stateClasses = 'bg-white border-gray-200 hover:border-emerald-500 hover:shadow-sm';
+  // Dynamic interactive container state classes matching design specifications:
+  // - Default Available: bg-white border-gray-200 hover:border-emerald-400 hover:shadow-md
+  // - Selected: bg-emerald-50/50 border-emerald-500 ring-2 ring-emerald-500/20 shadow-sm
+  // - Held / Locked / Disabled: bg-gray-50/70 border-gray-200 opacity-60 cursor-not-allowed
+  let stateClasses = 'bg-white border-gray-200 hover:border-emerald-400 hover:shadow-md cursor-pointer';
   if (isDisabled) {
-    stateClasses = 'opacity-50 grayscale cursor-not-allowed border-dashed bg-gray-50/80 border-gray-200';
+    stateClasses = 'bg-gray-50/70 border-gray-200 opacity-60 cursor-not-allowed';
   } else if (isSelected) {
-    stateClasses = 'border-emerald-600 bg-emerald-50/40 ring-2 ring-emerald-500/20 shadow-sm';
+    stateClasses = 'bg-emerald-50/50 border-emerald-500 ring-2 ring-emerald-500/20 shadow-sm cursor-pointer';
   }
 
   const handleClick = () => {
@@ -102,76 +108,70 @@ export const BookingSlotCard: React.FC<BookingSlotCardProps> = ({
           handleClick();
         }
       }}
-      className={`group rounded-2xl p-3 sm:p-3.5 border transition-all duration-200 select-none flex flex-col justify-between overflow-hidden ${
-        isInteractive ? 'cursor-pointer' : 'cursor-not-allowed'
-      } ${stateClasses} ${className}`}
+      className={`group select-none rounded-2xl p-3.5 sm:p-4 transition-all duration-200 border flex flex-col justify-between overflow-hidden relative ${stateClasses} ${className}`}
     >
-      {/* 1. Header Row: Time Details (Left) & Stacked Deal Badge (Right) */}
-      <div className="flex items-start justify-between gap-1.5 w-full">
-        {/* Left: Sun/Moon Icon Box + Stacked Time & Duration */}
-        <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
-          {/* Squircle Time Icon Box */}
-          <div
-            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 border ${
-              isNight
-                ? 'bg-indigo-50/80 border-indigo-200/60 text-indigo-500'
-                : 'bg-amber-50/90 border-amber-200/60 text-amber-500'
-            }`}
-          >
-            {isNight ? (
-              <Moon className="w-4 h-4 text-indigo-500 fill-indigo-100/50" />
-            ) : (
-              <Sun className="w-4 h-4 text-amber-500 fill-amber-100/50" />
-            )}
-          </div>
-
-          {/* Time & Duration: 02:00 on Line 1, PM on Line 2, 60 mins on Line 3 */}
-          <div className="flex flex-col min-w-0">
-            <span className="font-bold text-gray-900 text-sm sm:text-base leading-none tracking-tight">
-              {time}
-            </span>
-            <span className="font-bold text-gray-900 text-xs sm:text-sm leading-tight mt-0.5">
-              {period}
-            </span>
-            <div className="flex items-center gap-1 text-[11px] text-gray-400 font-medium mt-1 leading-none">
-              <Clock className="w-3 h-3 text-gray-400 shrink-0" />
-              <span className="truncate">{duration} mins</span>
-            </div>
-          </div>
+      {/* 1. Card Header: Left Icon & Top-Right Badges */}
+      <div className="flex items-start justify-between w-full gap-1.5 sm:gap-2">
+        {/* Left Icon: Lucide Sun in soft squircle for day, Moon in soft indigo for night */}
+        <div
+          className={`p-1.5 sm:p-2 rounded-xl shrink-0 flex items-center justify-center ${
+            isNight
+              ? 'bg-indigo-50 text-indigo-500'
+              : 'bg-amber-50 text-amber-500'
+          }`}
+        >
+          {isNight ? (
+            <Moon className="w-4 h-4" />
+          ) : (
+            <Sun className="w-4 h-4" />
+          )}
         </div>
 
-        {/* Right: Stacked Deal Badge Pill (Never overflows) */}
-        <div className="shrink-0 flex items-start gap-1">
-          {hasDiscount && isAvailable && (
-            <div className="bg-emerald-50 text-emerald-700 border border-emerald-200/80 rounded-2xl px-2.5 py-1 flex items-center gap-1.5 shadow-2xs">
-              <Tag className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              <div className="flex flex-col text-left leading-none">
-                <span className="text-[11px] font-bold text-emerald-700 leading-tight">
-                  {discountPct}%
-                </span>
-                <span className="text-[9px] font-extrabold text-emerald-600 tracking-wider uppercase leading-tight">
-                  OFF
-                </span>
-              </div>
+        {/* Top-Right Badges: Stacked cleanly so PEAK never bleeds outside card */}
+        <div className="flex flex-col items-end gap-1 shrink-0 ml-auto">
+          {isSelected ? (
+            <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-xs shrink-0">
+              <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5 stroke-[2.5]" />
             </div>
-          )}
+          ) : (
+            <>
+              {hasDiscount && isAvailable && (
+                <span className="bg-emerald-50 text-emerald-700 border border-emerald-200/60 font-semibold text-[11px] sm:text-xs px-2 sm:px-2.5 py-0.5 rounded-full flex items-center gap-1 shrink-0 whitespace-nowrap">
+                  <Tag className="w-3 h-3 text-emerald-600 shrink-0" />
+                  <span>{discountPct}% OFF</span>
+                </span>
+              )}
 
-          {slot.is_peak && isAvailable && (
-            <span className="bg-amber-50 text-amber-800 border border-amber-200/80 font-bold text-[9px] px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
-              <Zap className="w-2.5 h-2.5 fill-amber-600 text-amber-600 shrink-0" /> PEAK
-            </span>
+              {slot.is_peak && isAvailable && (
+                <span className="bg-amber-50 text-amber-700 border border-amber-200/60 font-semibold text-[10px] sm:text-[11px] px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0 whitespace-nowrap">
+                  <Zap className="w-2.5 h-2.5 text-amber-600 shrink-0" />
+                  <span>PEAK</span>
+                </span>
+              )}
+            </>
           )}
         </div>
       </div>
 
-      {/* 2. Subtle Horizontal Hairline Divider */}
-      <div className="w-full my-3 border-t border-gray-100" />
+      {/* 2. Middle Section: Slot Time in Bold & Duration Directly Below */}
+      <div className="mt-3">
+        <div className="text-base font-bold text-gray-900 leading-tight">
+          {time} <span className="text-sm font-bold text-gray-700">{period}</span>
+        </div>
+        <div className="text-xs text-gray-500 flex items-center gap-1 font-medium mt-1">
+          <Clock className="w-3 h-3 text-gray-400 shrink-0" />
+          <span>{duration} mins</span>
+        </div>
+      </div>
 
-      {/* 3. Pricing & Footer Action Section */}
-      <div className="flex items-baseline justify-between gap-1.5 w-full">
-        {/* Baseline-aligned prices */}
-        <div className="flex items-baseline gap-1.5 min-w-0">
-          <span className="text-lg sm:text-xl font-bold text-emerald-600 tracking-tight leading-none">
+      {/* 3. Bottom Section: Price Alignment (flex items-baseline gap-2) & Subtle Status */}
+      <div className="flex items-baseline justify-between w-full pt-3 mt-3 border-t border-gray-100">
+        <div className="flex items-baseline gap-2 min-w-0">
+          <span
+            className={`text-lg font-bold leading-none ${
+              isDisabled ? 'text-gray-400' : 'text-emerald-600'
+            }`}
+          >
             ₹{slot.price.toLocaleString('en-IN')}
           </span>
           {hasDiscount && (
@@ -181,34 +181,22 @@ export const BookingSlotCard: React.FC<BookingSlotCardProps> = ({
           )}
         </div>
 
-        {/* Footer Right Status / Action */}
-        <div className="shrink-0 flex items-center">
-          {isSelected ? (
-            <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-100/90 px-2 py-0.5 rounded-full">
-              <Check className="w-3 h-3 stroke-[3]" /> Selected
-            </span>
-          ) : isAvailable ? (
-            <span className="inline-flex items-center gap-1 text-xs sm:text-sm font-semibold text-emerald-600 group-hover:text-emerald-700 group-hover:translate-x-0.5 transition-all">
-              Book <ArrowRight className="w-3.5 h-3.5" />
-            </span>
-          ) : slot.status === 'locked' ? (
-            <span className="inline-flex items-center gap-1 text-xs font-medium text-sky-700 bg-sky-50 px-2 py-0.5 rounded-md">
-              <Lock className="w-3 h-3" /> Held
-            </span>
-          ) : (slot.status === 'booked_online' || slot.status === 'booked_offline') ? (
-            <span className="text-xs font-medium text-gray-400">
-              Passed
-            </span>
-          ) : slot.status === 'blocked' ? (
-            <span className="text-xs font-medium text-gray-400">
-              Blocked
-            </span>
-          ) : (
-            <span className="text-xs font-medium text-gray-400">
-              Passed
-            </span>
-          )}
-        </div>
+        {/* Subtle Non-Available Status Indicators */}
+        {isHeld && (
+          <span className="inline-flex items-center gap-1 text-xs text-gray-400 font-medium shrink-0 leading-none">
+            <Lock className="w-3 h-3" /> Held
+          </span>
+        )}
+        {isBooked && (
+          <span className="text-xs text-gray-400 font-medium shrink-0 leading-none">
+            Passed
+          </span>
+        )}
+        {isBlocked && (
+          <span className="text-xs text-gray-400 font-medium shrink-0 leading-none">
+            Blocked
+          </span>
+        )}
       </div>
     </div>
   );

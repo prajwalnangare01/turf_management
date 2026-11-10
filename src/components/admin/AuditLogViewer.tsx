@@ -1,6 +1,7 @@
 import React from 'react';
 import { store } from '../../services/store';
 import { History, Shield } from 'lucide-react';
+import { formatDateDDMMYYYY } from '../../utils/formatters';
 
 export const AuditLogViewer: React.FC = () => {
   const auditLogs = store.getAuditLogs();
@@ -81,14 +82,11 @@ export const AuditLogViewer: React.FC = () => {
                 return (
                   <tr key={log.id} className="hover:bg-surface-container-low/50 transition-colors">
                     <td className="p-3.5 font-mono text-on-surface-variant text-[11px]">
-                      {new Date(log.created_at).toLocaleDateString('en-IN', {
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        hour12: true
-                      })}
+                      {(() => {
+                        const d = new Date(log.created_at);
+                        const timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+                        return `${formatDateDDMMYYYY(log.created_at)}, ${timeStr}`;
+                      })()}
                     </td>
                     <td className="p-3.5">
                       <div className="font-headline font-bold text-on-surface flex items-center gap-1.5">

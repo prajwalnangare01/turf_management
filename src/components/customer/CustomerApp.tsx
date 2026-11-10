@@ -6,13 +6,16 @@ import { RedisLockService } from '../../services/redisLockService';
 import { CustomerAuthService } from '../../services/customerAuthService';
 import { CustomerAuthModal } from './CustomerAuthModal';
 import { CustomerProfilePage } from './CustomerProfilePage';
+import { TurfSelectionCard } from './TurfSelectionCard';
+import { HoldSummaryBar } from './HoldSummaryBar';
 import { SlotGrid } from './SlotGrid';
 import { CheckoutModal } from './CheckoutModal';
 import { BookingConfirmationModal } from './BookingConfirmationModal';
 import { BookingLookupModal } from './BookingLookupModal';
 import { ActiveCustomerHoldModal } from '../common/ActiveCustomerHoldModal';
-import { formatTimeRange12h, formatTime12hPlain } from '../../utils/formatters';
-import { ChevronRight, Search, UserCheck, User, LogOut, ShieldCheck } from 'lucide-react';
+import { formatTimeRange12h, formatTime12hPlain, formatTimeRange12hPlain, formatDateDDMMYYYY } from '../../utils/formatters';
+import { CustomerPortalSkeleton, PitchGridSkeleton, SportCardsSkeleton } from '../common/SkeletonLoaders';
+import { ChevronRight, Search, UserCheck, User, LogOut, ShieldCheck, Clock, Calendar, Lock, MapPin } from 'lucide-react';
 
 interface CustomerAppProps {
   onSwitchToAdmin: () => void;
@@ -22,6 +25,15 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
   const venue = store.getVenue();
   const allSports = store.getSports();
   const allCourts = store.getCourts();
+
+  // Skeleton loading states for perceived high speed & zero content flash
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isSlotsLoading, setIsSlotsLoading] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setIsInitialLoading(false), 200);
+    return () => clearTimeout(timer);
+  }, []);
 
   // View state: 'booking' vs 'profile'
   const [customerView, setCustomerView] = useState<'booking' | 'profile'>('booking');
@@ -99,6 +111,15 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
       clearInterval(interval);
     };
   }, [selectedCourt, selectedDate, effectiveSessionId]);
+
+  // When switching date, pitch or sport, trigger brief skeleton animation for instant responsive feedback
+  useEffect(() => {
+    setIsSlotsLoading(true);
+    const timer = setTimeout(() => {
+      setIsSlotsLoading(false);
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [selectedDate, selectedCourt?.id, selectedSport?.id]);
 
   // CC-S03: Recover from Mobile UPI external app intent switch on tab resume
   useEffect(() => {
@@ -295,7 +316,7 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
               {venue.name}
             </h1>
             <p className="text-[11px] sm:text-xs text-on-surface-variant font-medium mt-0.5 hidden sm:flex items-center gap-1">
-              <span className="material-symbols-outlined text-primary text-xs" style={{ fontSize: '14px' }}>location_on</span>
+              <MapPin className="w-3.5 h-3.5 text-primary" />
               Pune • 4.9 ★ Rating
             </p>
           </div>
@@ -319,10 +340,10 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
                 </div>
 
                 <div className="text-left flex flex-col justify-center pr-0.5">
-                  <span className="font-headline font-bold text-xs sm:text-sm text-on-surface group-hover:text-primary transition-colors leading-tight truncate max-w-[120px] sm:max-w-[150px]">
+                  <span className="font-headline font-bold text-xs sm:text-sm text-on-surface group-hover:text-primary transition-colors leading-tight truncate max-w-[90px] xs:max-w-[120px] sm:max-w-[150px]">
                     {currentCustomer.name}
                   </span>
-                  <span className="text-[10px] text-on-surface-variant font-medium leading-none mt-0.5 flex items-center gap-1">
+                  <span className="text-[10px] text-on-surface-variant font-medium leading-none mt-0.5 hidden xs:flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block" />
                     Profile & Bookings
                   </span>
@@ -351,8 +372,12 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
         </div>
       </header>
 
-      <main className="max-w-[1200px] mx-auto px-4 pt-6 space-y-8">
-        {/* Blacklisted Account Warning Banner */}
+      <main className={`max-w-[1200px] mx-auto px-3 sm:px-4 pt-4 sm:pt-6 space-y-6 sm:space-y-8 ${selectedSlots.length > 0 ? 'pb-32 sm:pb-36' : 'pb-12'}`}>
+        {isInitialLoading && allCourts.length === 0 ? (
+          <CustomerPortalSkeleton />
+        ) : (
+          <>
+            {/* Blacklisted Account Warning Banner */}
         {currentCustomer?.is_blacklisted && (
           <div className="bg-red-50 border-2 border-red-300 rounded-2xl p-4 md:p-5 flex items-start gap-3.5 shadow-sm text-red-950 animate-in fade-in">
             <div className="w-9 h-9 bg-red-100 text-red-700 rounded-xl flex items-center justify-center font-bold text-lg shrink-0">
@@ -470,121 +495,26 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-            {availableCourts.map(c => {
-              const isSelected = selectedCourt?.id === c.id;
-
-              return (
-                <div
-                  key={c.id}
-                  onClick={() => {
-                    setSelectedCourt(c);
-                    setSelectedSlots([]);
-                  }}
-                  className={`p-5 rounded-3xl cursor-pointer transition-all duration-300 border space-y-3.5 bg-white relative ${
-                    isSelected
-                      ? 'border-primary ring-2 ring-primary/20 shadow-md translate-y-[-2px]'
-                      : 'border-outline-variant/60 hover:border-primary/50 hover:shadow-sm'
-                  }`}
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-[10px] font-headline font-bold uppercase tracking-wider text-primary bg-primary/10 px-2.5 py-0.5 rounded-full border border-primary/20">
-                          {c.slot_duration_minutes} MIN SESSIONS
-                        </span>
-                        {((c.original_price_per_hour && c.original_price_per_hour > c.base_price_per_hour) ||
-                          (c.saturday_offer_price_per_hour && c.saturday_offer_price_per_hour !== (c.saturday_price_per_hour || c.base_price_per_hour)) ||
-                          (c.sunday_offer_price_per_hour && c.sunday_offer_price_per_hour !== (c.sunday_price_per_hour || c.base_price_per_hour)) ||
-                          (c.peak_offer_price_per_hour && c.peak_offer_price_per_hour !== (c.peak_price_per_hour || 1800))) && (
-                          <span className="text-[10px] font-headline font-black uppercase tracking-wider text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-300 inline-flex items-center gap-1 shadow-2xs">
-                            🎉 OFFER ACTIVE
-                          </span>
-                        )}
-                      </div>
-                      <h4 className="font-headline font-bold text-base text-on-surface mt-2 leading-tight">
-                        {c.name}
-                      </h4>
-                    </div>
-                    {isSelected && (
-                      <div className="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs">
-                        ✓
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between text-xs text-on-surface-variant pt-1 border-t border-outline-variant/30">
-                    <span className="flex items-center gap-1 font-medium">
-                      ⏰ {c.opening_time} - {c.closing_time}
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-headline font-extrabold text-primary text-sm">
-                        ₹{c.base_price_per_hour} <span className="text-[10px] font-normal text-on-surface-variant">/hr</span>
-                      </span>
-                      {c.original_price_per_hour && c.original_price_per_hour > c.base_price_per_hour && (
-                        <div className="flex items-center gap-1">
-                          <span className="line-through text-slate-400 text-xs font-semibold">
-                            ₹{c.original_price_per_hour}
-                          </span>
-                          <span className="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0.5 rounded-full font-extrabold">
-                            {Math.round(((c.original_price_per_hour - c.base_price_per_hour) / c.original_price_per_hour) * 100)}% OFF
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {(c.saturday_price_per_hour || c.sunday_price_per_hour || c.saturday_offer_price_per_hour || c.sunday_offer_price_per_hour) && (
-                    <div className="text-[11px] text-amber-950 bg-amber-50/70 px-2.5 py-1 rounded-xl border border-amber-200/60 flex items-center justify-between font-medium">
-                      <span>📅 Weekend Rates</span>
-                      <div className="flex items-center gap-2">
-                        {c.saturday_offer_price_per_hour && c.saturday_offer_price_per_hour !== (c.saturday_price_per_hour || c.base_price_per_hour) ? (
-                          <span className="flex items-center gap-1">
-                            <span className="text-[10px] text-on-surface-variant">Sat:</span>
-                            <span className="line-through text-slate-400 text-[10px]">₹{Math.max(c.saturday_price_per_hour || c.base_price_per_hour, c.saturday_offer_price_per_hour)}</span>
-                            <strong className="font-extrabold text-emerald-800">₹{Math.min(c.saturday_price_per_hour || c.base_price_per_hour, c.saturday_offer_price_per_hour)}</strong>
-                          </span>
-                        ) : (
-                          <span className="text-[10px]">Sat: <strong>₹{c.saturday_price_per_hour || c.base_price_per_hour}</strong></span>
-                        )}
-                        {c.sunday_offer_price_per_hour && c.sunday_offer_price_per_hour !== (c.sunday_price_per_hour || c.base_price_per_hour) ? (
-                          <span className="flex items-center gap-1">
-                            <span className="text-[10px] text-on-surface-variant">Sun:</span>
-                            <span className="line-through text-slate-400 text-[10px]">₹{Math.max(c.sunday_price_per_hour || c.base_price_per_hour, c.sunday_offer_price_per_hour)}</span>
-                            <strong className="font-extrabold text-emerald-800">₹{Math.min(c.sunday_price_per_hour || c.base_price_per_hour, c.sunday_offer_price_per_hour)}</strong>
-                          </span>
-                        ) : (
-                          <span className="text-[10px]">Sun: <strong>₹{c.sunday_price_per_hour || c.base_price_per_hour}</strong></span>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {c.peak_enabled && (
-                    <div className="text-[11px] text-amber-900 bg-amber-50 px-2.5 py-1 rounded-xl border border-amber-200/80 flex items-center justify-between font-medium">
-                      <span>🔥 Evening Peak ({formatTime12hPlain(c.peak_start_time || '18:00')} – {formatTime12hPlain(c.peak_end_time || '23:00')})</span>
-                      <div className="flex items-center gap-1.5">
-                        {c.peak_offer_price_per_hour && c.peak_offer_price_per_hour !== (c.peak_price_per_hour || 1800) ? (
-                          <>
-                            <span className="line-through text-amber-900/60 font-semibold text-xs">
-                              ₹{Math.max(c.peak_price_per_hour || 1800, c.peak_offer_price_per_hour)}
-                            </span>
-                            <span className="bg-emerald-100 text-emerald-800 text-[9px] px-1.5 py-0.2 rounded font-black">
-                              {Math.round((Math.abs((c.peak_price_per_hour || 1800) - c.peak_offer_price_per_hour) / Math.max(c.peak_price_per_hour || 1800, c.peak_offer_price_per_hour)) * 100)}% OFF
-                            </span>
-                            <strong className="font-extrabold text-amber-950">
-                              ₹{Math.min(c.peak_price_per_hour || 1800, c.peak_offer_price_per_hour)}/hr
-                            </strong>
-                          </>
-                        ) : (
-                          <strong className="font-extrabold">₹{c.peak_price_per_hour || 1800}/hr</strong>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-5">
+            {availableCourts.length === 0 ? (
+              <PitchGridSkeleton count={2} />
+            ) : (
+              availableCourts.map(c => {
+                const isSelected = selectedCourt?.id === c.id;
+                return (
+                  <TurfSelectionCard
+                    key={c.id}
+                    court={c}
+                    selectedDate={selectedDate}
+                    isSelected={isSelected}
+                    onSelect={() => {
+                      setSelectedCourt(c);
+                      setSelectedSlots([]);
+                    }}
+                  />
+                );
+              })
+            )}
           </div>
         </section>
 
@@ -615,7 +545,7 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
             </div>
 
             <div className="text-xs text-on-surface-variant font-semibold">
-              Selected Date: <span className="text-primary font-headline font-bold">{selectedDate}</span>
+              Selected Date: <span className="text-primary font-headline font-bold">{formatDateDDMMYYYY(selectedDate)}</span>
             </div>
           </div>
 
@@ -656,7 +586,7 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
 
         {/* Slot Grid Container */}
         {selectedCourt && (
-          <section className="bg-white rounded-3xl p-6 border border-outline-variant/50 shadow-sm space-y-4">
+          <section className="bg-white rounded-3xl p-4 sm:p-6 border border-outline-variant/50 shadow-sm space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-outline-variant/40 pb-4">
               <div>
                 <h3 className="font-headline font-bold text-xl text-primary flex items-center gap-2">
@@ -675,6 +605,7 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
               slots={computedSlots}
               selectedSlots={selectedSlots}
               onToggleSlot={handleToggleSlot}
+              isLoading={isSlotsLoading}
             />
           </section>
         )}
@@ -689,31 +620,26 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
             Staff / Manager Portal Access
           </button>
         </footer>
+          </>
+        )}
       </main>
 
-      {/* Stitch Sticky Bottom Bar */}
-      {selectedSlots.length > 0 && selectedCourt && (
-        <div className="fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-xl border-t border-outline-variant/60 p-4 z-50 shadow-2xl animate-modalScaleIn">
-          <div className="max-w-[1200px] mx-auto flex items-center justify-between">
-            <div>
-              <span className="bg-secondary-container text-on-secondary-container px-2.5 py-0.5 rounded-full font-headline font-bold text-xs inline-block mb-1">
-                {selectedSlots.length} Slot(s) Held
-              </span>
-              <p className="text-sm font-bold text-on-surface">
-                {formatTimeRange12h(selectedSlots[0]?.start_time, selectedSlots[selectedSlots.length - 1]?.end_time)} | {selectedDate}
-              </p>
-              <p className="text-2xl font-headline font-extrabold text-primary mt-0.5">₹{totalPrice}</p>
-            </div>
-
-            <button
-              onClick={handleProceedCheckout}
-              className="btn-cta text-sm px-8 py-3.5 font-headline font-bold uppercase tracking-wider flex items-center gap-2 shadow-lg"
-            >
-              Proceed to Checkout <ChevronRight className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Fixed-Bottom Summary Checkout Bar */}
+      {selectedSlots.length > 0 && selectedCourt && (() => {
+        const firstLock = RedisLockService.getLock(selectedCourt.id, selectedDate, selectedSlots[0]?.start_time);
+        return (
+          <HoldSummaryBar
+            heldCount={selectedSlots.length}
+            startTime={formatTime12hPlain(selectedSlots[0]?.start_time)}
+            endTime={formatTime12hPlain(selectedSlots[selectedSlots.length - 1]?.end_time)}
+            date={selectedDate}
+            totalPrice={totalPrice}
+            courtName={selectedCourt.name}
+            expiresAt={firstLock?.expires_at}
+            onProceed={handleProceedCheckout}
+          />
+        );
+      })()}
 
       {/* Customer Auth Modal (Login / Register) */}
       {showAuthModal && (

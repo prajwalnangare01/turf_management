@@ -5,8 +5,8 @@ import { RedisLockService } from '../../services/redisLockService';
 import { NotificationService } from '../../services/notificationService';
 import { AuditLogger } from '../../services/auditLogger';
 import { AdminUser, Court, Booking } from '../../types/schema';
-import { CloudRain, AlertTriangle, ShieldCheck, CheckCircle2, Users, X, Send } from 'lucide-react';
-import { formatTimeRange12h, formatTime12hPlain } from '../../utils/formatters';
+import { CloudRain, AlertTriangle, ShieldCheck, CheckCircle2, Users, X, Send, Sun, Moon } from 'lucide-react';
+import { formatTime12hPlain, formatDateDDMMYYYY } from '../../utils/formatters';
 
 interface EmergencyWeatherModalProps {
   isOpen: boolean;
@@ -68,7 +68,7 @@ export const EmergencyWeatherModal: React.FC<EmergencyWeatherModalProps> = ({
 
     const confirmed = confirm(
       `⚠️ CONFIRM EMERGENCY RAINOUT MASS CANCELLATION:\n\n` +
-      `Date: ${dateStr}\n` +
+      `Date: ${formatDateDDMMYYYY(dateStr)}\n` +
       `Court: ${selectedCourtId === 'all' ? 'All Courts' : courts.find(c => c.id === selectedCourtId)?.name}\n` +
       `Affected Bookings: ${affectedBookings.length}\n` +
       `Total 100% Refund: ₹${totalRefundAmount}\n\n` +
@@ -126,9 +126,9 @@ export const EmergencyWeatherModal: React.FC<EmergencyWeatherModalProps> = ({
 
   return (
     <div className="modal-overlay z-[9999]">
-      <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto no-scrollbar shadow-2xl animate-modalScaleIn text-on-surface">
+      <div className="bg-white border border-outline-variant/60 rounded-3xl sm:rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl animate-modalScaleIn text-on-surface overflow-hidden">
         {/* Header */}
-        <div className="p-4 bg-red-50 border-b border-red-200 flex items-center justify-between sticky top-0 z-10">
+        <div className="p-3.5 sm:p-4 bg-red-50 border-b border-red-200 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-red-600 text-white flex items-center justify-center shadow-xs">
               <CloudRain className="w-5 h-5 animate-bounce" />
@@ -166,7 +166,7 @@ export const EmergencyWeatherModal: React.FC<EmergencyWeatherModalProps> = ({
             </button>
           </div>
         ) : (
-          <div className="p-5 space-y-4 text-xs">
+          <div className="p-4 sm:p-5 space-y-4 text-xs overflow-y-auto overscroll-contain">
             {/* RBAC Warning if Staff */}
             {!canExecute && (
               <div className="p-3 bg-red-100 border border-red-300 rounded-xl text-red-800 flex items-center gap-2 font-bold text-xs">
@@ -176,9 +176,14 @@ export const EmergencyWeatherModal: React.FC<EmergencyWeatherModalProps> = ({
             )}
 
             {/* Controls */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-on-surface-variant mb-1">Target Date *</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-on-surface-variant">Target Date *</label>
+                  <span className="text-[10px] font-mono font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20">
+                    {formatDateDDMMYYYY(dateStr)}
+                  </span>
+                </div>
                 <input
                   type="date"
                   value={dateStr}
@@ -288,9 +293,22 @@ export const EmergencyWeatherModal: React.FC<EmergencyWeatherModalProps> = ({
                     const cust = store.getCustomers().find(c => c.id === b.customer_id);
                     return (
                       <div key={b.id} className="bg-white/80 p-2 rounded-lg text-[11px] flex justify-between items-center border border-amber-200/60">
-                        <div>
+                        <div className="flex items-center gap-1.5">
                           <span className="font-bold text-on-surface">{cust?.name || 'Customer'}</span>
-                          <span className="text-on-surface-variant text-[10px] ml-1.5 font-mono">{formatTime12hPlain(b.start_time)} – {formatTime12hPlain(b.end_time)}</span>
+                          <span className="text-on-surface-variant text-[10px] font-mono flex items-center gap-1">
+                            <span className={`p-0.5 rounded shrink-0 inline-flex items-center justify-center ${
+                              parseInt(b.start_time.split(':')[0], 10) >= 18 || parseInt(b.start_time.split(':')[0], 10) < 5
+                                ? 'bg-indigo-50 text-indigo-500'
+                                : 'bg-amber-50 text-amber-500'
+                            }`}>
+                              {parseInt(b.start_time.split(':')[0], 10) >= 18 || parseInt(b.start_time.split(':')[0], 10) < 5 ? (
+                                <Moon className="w-2.5 h-2.5" />
+                              ) : (
+                                <Sun className="w-2.5 h-2.5" />
+                              )}
+                            </span>
+                            <span>{formatTime12hPlain(b.start_time)} – {formatTime12hPlain(b.end_time)}</span>
+                          </span>
                         </div>
                         <div className="text-right">
                           <span className="font-bold text-primary">₹{b.total_amount}</span>

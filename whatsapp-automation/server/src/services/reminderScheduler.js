@@ -5,6 +5,7 @@ import { SmsService } from './smsService.js';
 import { NotificationService } from './notificationService.js';
 import { SlotEngine } from './slotEngine.js';
 import { WhatsAppFormatter } from '../utils/whatsappFormatter.js';
+import { SupabaseService } from './supabaseService.js';
 
 export class ReminderScheduler {
   static timerId = null;
@@ -21,6 +22,32 @@ export class ReminderScheduler {
     const bookings = store.getBookings();
     let count = 0;
 
+    // 1. Auto-complete confirmed bookings whose slot has elapsed
+    for (const booking of bookings) {
+      if (booking.status !== 'confirmed') continue;
+      const [bY, bM, bD] = (booking.booking_date || '').split('-').map(Number);
+      const [bH, bMin] = (booking.end_time || '00:00').split(':').map(Number);
+      if (!bY || !bM || !bD || isNaN(bH) || isNaN(bMin)) continue;
+
+      const slotEndTime = new Date(bY, bM - 1, bD, bH, bMin, 0);
+      if (bH === 0 && bMin === 0) {
+        slotEndTime.setDate(slotEndTime.getDate() + 1);
+      }
+
+      if (now.getTime() >= slotEndTime.getTime()) {
+        booking.status = 'completed';
+        booking.updated_at = new Date().toISOString();
+        console.log(`🏁 [BACKEND AUTO-COMPLETE] Booking ${booking.booking_ref} slot ended (${booking.end_time}). Automatically marked completed.`);
+        SupabaseService.updateBooking(booking.id, {
+          status: 'completed',
+          updated_at: booking.updated_at
+        }).catch(err => {
+          console.warn('[ReminderScheduler] Error updating auto-completed booking in Supabase:', err.message);
+        });
+      }
+    }
+
+    // 2. Dispatch 1-Hour matchday kickoff reminders
     for (const booking of bookings) {
       if (booking.status !== 'confirmed') continue;
       const [bY, bM, bD] = booking.booking_date.split('-').map(Number);
@@ -49,11 +76,12 @@ export class ReminderScheduler {
           // 3. Dispatch WhatsApp reminder
           const venue = store.getVenue();
           const court = store.getCourts().find(c => c.id === booking.court_id);
-          const otpCode = booking.booking_ref ? booking.booking_ref.slice(-4) : '0000';
+          const otpCode = WhatsAppFormatter.getBookingGatePassOtp(booking);
           const waMessage = `⏰ *MATCHDAY REMINDER (1 HOUR TO KICKOFF)* ⏰\n` +
             `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
             `Hi ${booking.customer_name || 'Player'}, your pitch reservation starts in 1 hour!\n\n` +
             `🏟️ *Court:* ${court?.name || 'Pitch'}\n` +
+            `📅 *Date:* ${WhatsAppFormatter.formatDate(booking.booking_date)}\n` +
             `⏰ *Time:* ${WhatsAppFormatter.formatTime(booking.start_time)} — ${WhatsAppFormatter.formatTime(booking.end_time)}\n` +
             `🔑 *Gate Pass OTP:* *${otpCode}*\n` +
             `📍 *Address:* ${venue.address}\n` +

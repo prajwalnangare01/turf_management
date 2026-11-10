@@ -85,6 +85,7 @@ ALTER TABLE courts ADD COLUMN IF NOT EXISTS peak_enabled BOOLEAN DEFAULT TRUE;
 ALTER TABLE courts ADD COLUMN IF NOT EXISTS peak_start_time TIME DEFAULT '18:00';
 ALTER TABLE courts ADD COLUMN IF NOT EXISTS peak_end_time TIME DEFAULT '23:00';
 ALTER TABLE courts ADD COLUMN IF NOT EXISTS peak_price_per_hour DECIMAL(10, 2) DEFAULT 1800;
+ALTER TABLE courts ADD COLUMN IF NOT EXISTS offer_end_date DATE;
 
 -- -----------------------------------------------------------------------------
 -- 4. COURT SPORTS (Junction for multi-purpose courts)

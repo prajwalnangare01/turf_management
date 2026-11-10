@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Court } from '../../types/schema';
 import { RedisLockService } from '../../services/redisLockService';
-import { Clock, X } from 'lucide-react';
-import { formatTime12h } from '../../utils/formatters';
+import { Clock, X, Sun, Moon } from 'lucide-react';
+import { formatTime12hPlain, formatDateDDMMYYYY } from '../../utils/formatters';
 
 interface ActiveCustomerHoldModalProps {
   court: Court;
@@ -47,52 +47,67 @@ export const ActiveCustomerHoldModal: React.FC<ActiveCustomerHoldModalProps> = (
 
   return (
     <div className="modal-overlay z-[9999]">
-      <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl animate-modalScaleIn text-on-surface max-h-[90vh] overflow-y-auto no-scrollbar">
-        <div className="flex items-center justify-between border-b border-outline-variant/40 pb-3">
-          <h3 className="font-headline font-bold text-lg text-sky-900 flex items-center gap-2">
-            <Clock className="w-5 h-5 text-sky-700 animate-spin" /> Active Customer Hold
+      <div className="bg-white border border-outline-variant/60 rounded-3xl sm:rounded-2xl w-full max-w-sm p-3.5 sm:p-5 space-y-2.5 shadow-2xl animate-modalScaleIn text-on-surface overflow-hidden">
+        <div className="flex items-center justify-between border-b border-outline-variant/40 pb-2">
+          <h3 className="font-headline font-bold text-sm sm:text-base text-sky-900 flex items-center gap-1.5">
+            <Clock className="w-4 h-4 text-sky-700 animate-spin" /> Active Customer Hold
           </h3>
-          <button onClick={onClose} className="text-on-surface-variant hover:text-on-surface p-1 rounded-full">
-            <X className="w-5 h-5" />
+          <button onClick={onClose} className="text-on-surface-variant hover:text-on-surface p-1 rounded-full cursor-pointer">
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="bg-sky-50 border border-sky-200 p-4 rounded-xl text-center space-y-1">
-          <span className="text-xs font-bold text-sky-800 uppercase tracking-wider">Remaining Hold Time</span>
-          <div className="font-mono font-extrabold text-3xl text-sky-900 tracking-wider">
+        <div className="bg-sky-50 border border-sky-200 p-2.5 rounded-xl text-center space-y-0.5">
+          <span className="text-[10px] font-bold text-sky-800 uppercase tracking-wider">Remaining Hold Time</span>
+          <div className="font-mono font-extrabold text-2xl sm:text-3xl text-sky-900 tracking-wider">
             {remainingSec > 0 ? timerDisplay : 'EXPIRED (00:00)'}
           </div>
-          <p className="text-[11px] text-sky-700 font-medium leading-relaxed mt-1">
-            Another customer is currently completing their booking. If they do not finish within the remaining hold time, this slot will automatically become free!
+          <p className="text-[10.5px] text-sky-700 font-medium leading-tight">
+            Another customer is currently completing checkout. If not finished in time, this slot releases automatically.
           </p>
         </div>
 
-        <div className="bg-surface-container-low p-4 rounded-xl text-xs space-y-2 border border-outline-variant/30 font-medium">
+        <div className="bg-surface-container-low p-2.5 rounded-xl text-xs space-y-1.5 border border-outline-variant/30 font-medium">
           <div className="flex justify-between">
-            <span className="text-on-surface-variant">Pitch Arena:</span>
-            <strong className="text-on-surface font-bold">{court.name}</strong>
+            <span className="text-on-surface-variant text-[11px]">Arena:</span>
+            <strong className="text-on-surface font-bold text-xs truncate max-w-[180px]">{court.name}</strong>
           </div>
           <div className="flex justify-between">
-            <span className="text-on-surface-variant">Date:</span>
-            <strong className="text-on-surface font-bold">{date}</strong>
+            <span className="text-on-surface-variant text-[11px]">Date:</span>
+            <strong className="text-on-surface font-bold text-xs">{formatDateDDMMYYYY(date)}</strong>
           </div>
-          <div className="flex justify-between">
-            <span className="text-on-surface-variant">Time Slot:</span>
-            <strong className="text-primary font-bold">{formatTime12h(time)}</strong>
+          <div className="flex justify-between items-center">
+            <span className="text-on-surface-variant text-[11px]">Time Slot:</span>
+            <div className="flex items-center gap-1 font-bold text-primary text-xs">
+              <div
+                className={`p-0.5 rounded shrink-0 flex items-center justify-center ${
+                  parseInt(time.split(':')[0], 10) >= 18 || parseInt(time.split(':')[0], 10) < 5
+                    ? 'bg-indigo-50 text-indigo-500'
+                    : 'bg-amber-50 text-amber-500'
+                }`}
+              >
+                {parseInt(time.split(':')[0], 10) >= 18 || parseInt(time.split(':')[0], 10) < 5 ? (
+                  <Moon className="w-3 h-3" />
+                ) : (
+                  <Sun className="w-3 h-3" />
+                )}
+              </div>
+              <span>{formatTime12hPlain(time)}</span>
+            </div>
           </div>
-          <div className="flex justify-between items-center pt-2 border-t border-outline-variant/30">
-            <span className="text-on-surface-variant">Hold Type:</span>
-            <span className="bg-sky-100 text-sky-900 font-extrabold px-2 py-0.5 rounded text-[10px]">
-              2-Min Temporary Redis Lock
+          <div className="flex justify-between items-center pt-1 border-t border-outline-variant/30">
+            <span className="text-on-surface-variant text-[10.5px]">Hold Type:</span>
+            <span className="bg-sky-100 text-sky-900 font-bold px-1.5 py-0.2 rounded text-[9.5px]">
+              Temporary Redis Lock
             </span>
           </div>
         </div>
 
-        <div className="pt-2">
+        <div className="pt-0.5">
           <button
             type="button"
             onClick={onClose}
-            className="btn-primary w-full py-2.5 text-xs font-headline font-bold"
+            className="btn-primary w-full py-2 text-xs font-headline font-bold cursor-pointer"
           >
             Got It
           </button>

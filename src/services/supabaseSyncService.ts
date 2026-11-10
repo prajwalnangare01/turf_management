@@ -2,6 +2,7 @@ import { store } from './store';
 import { getSupabase, isSupabaseConfigured } from './supabaseClient';
 import { Booking, Customer, Payment, BlockedSlot, Court, SlotLock } from '../types/schema';
 import { RealtimeChannel } from '@supabase/supabase-js';
+import { getBookingGatePassOtp, getBookingGroupRef } from '../utils/formatters';
 
 export class SupabaseSyncService {
   private static realtimeChannel: RealtimeChannel | null = null;
@@ -99,6 +100,7 @@ export class SupabaseSyncService {
             peak_end_time: typeof c.peak_end_time === 'string' ? c.peak_end_time.slice(0, 5) : '23:00',
             peak_price_per_hour: Number(c.peak_price_per_hour) || 1800,
             peak_offer_price_per_hour: c.peak_offer_price_per_hour ? Number(c.peak_offer_price_per_hour) : undefined,
+            offer_end_date: c.offer_end_date ? String(c.offer_end_date).slice(0, 10) : undefined,
             sport_ids: matchingSports.length > 0 ? matchingSports : ['sp-football']
           };
         });
@@ -150,6 +152,12 @@ export class SupabaseSyncService {
           cancelled_at: b.cancelled_at || undefined,
           cancellation_notice_hours: b.cancellation_notice_hours ? Number(b.cancellation_notice_hours) : undefined,
           cancellation_met_terms: b.cancellation_met_terms ?? undefined,
+          gate_pass_otp: b.gate_pass_otp || getBookingGatePassOtp(b),
+          group_ref: b.group_ref || getBookingGroupRef(b),
+          gateway_payment_id: b.gateway_payment_id || undefined,
+          total_order_amount: b.total_order_amount ? Number(b.total_order_amount) : undefined,
+          all_slots: Array.isArray(b.all_slots) ? b.all_slots : undefined,
+          formatted_slots: b.formatted_slots || undefined,
           created_at: b.created_at,
           updated_at: b.updated_at
         }));
@@ -163,8 +171,8 @@ export class SupabaseSyncService {
           const exists = mergedBookings.some(b => b.id === loc.id || b.booking_ref === loc.booking_ref);
           if (!exists) {
             const createdAtMs = loc.created_at ? new Date(loc.created_at).getTime() : 0;
-            // Retain recent bookings created in the last 90 seconds or in active states
-            if (nowMs - createdAtMs < 90000 || loc.status === 'confirmed' || loc.status === 'pending_payment') {
+            // Retain only brand-new in-flight uncommitted holds created in the last 60 seconds
+            if (nowMs - createdAtMs < 60000 && loc.status === 'pending_payment') {
               mergedBookings.push(loc);
               // Trigger background sync to Supabase so it gets persisted
               this.syncBookingToSupabase(loc).catch(err => {
@@ -327,6 +335,12 @@ export class SupabaseSyncService {
         refunded_at: raw.refunded_at || undefined,
         cancelled_by: raw.cancelled_by || undefined,
         cancelled_at: raw.cancelled_at || undefined,
+        gate_pass_otp: raw.gate_pass_otp || getBookingGatePassOtp(raw),
+        group_ref: raw.group_ref || getBookingGroupRef(raw),
+        gateway_payment_id: raw.gateway_payment_id || undefined,
+        total_order_amount: raw.total_order_amount ? Number(raw.total_order_amount) : undefined,
+        all_slots: Array.isArray(raw.all_slots) ? raw.all_slots : undefined,
+        formatted_slots: raw.formatted_slots || undefined,
         created_at: raw.created_at,
         updated_at: raw.updated_at
       };
@@ -742,7 +756,8 @@ export class SupabaseSyncService {
         peak_start_time: court.peak_start_time ? (court.peak_start_time.length === 5 ? `${court.peak_start_time}:00` : court.peak_start_time) : '18:00:00',
         peak_end_time: court.peak_end_time ? (court.peak_end_time.length === 5 ? `${court.peak_end_time}:00` : court.peak_end_time) : '23:00:00',
         peak_price_per_hour: court.peak_price_per_hour || 1800,
-        peak_offer_price_per_hour: court.peak_offer_price_per_hour || null
+        peak_offer_price_per_hour: court.peak_offer_price_per_hour || null,
+        offer_end_date: court.offer_end_date ? court.offer_end_date.slice(0, 10) : null
       };
 
       const { error } = await supabase.from('courts').upsert([payload], { onConflict: 'id' });

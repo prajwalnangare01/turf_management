@@ -3,7 +3,7 @@ import { store } from '../../services/store';
 import { PostgresEngine } from '../../services/postgresEngine';
 import { Booking, Customer } from '../../types/schema';
 import { CancelBookingConfirmModal } from './CancelBookingConfirmModal';
-import { Calendar, XCircle, AlertCircle, X, ShieldCheck, Tag, RotateCcw } from 'lucide-react';
+import { Calendar, XCircle, AlertCircle, X, ShieldCheck, Tag, RotateCcw, Ticket } from 'lucide-react';
 import { formatDateDDMMYYYY, formatTimeRange12h } from '../../utils/formatters';
 
 interface BookingLookupModalProps {
@@ -62,31 +62,34 @@ export const BookingLookupModal: React.FC<BookingLookupModalProps> = ({ currentC
 
   return (
     <div className="modal-overlay">
-      <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto no-scrollbar shadow-2xl animate-modalScaleIn text-on-surface">
+      <div className="bg-white border border-outline-variant/60 rounded-3xl sm:rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl animate-modalScaleIn text-on-surface overflow-hidden">
         {/* Header */}
-        <div className="p-4 bg-surface-container-low border-b border-outline-variant/40 flex items-center justify-between sticky top-0 bg-white/95 backdrop-blur-md z-10">
-          <div className="flex items-center gap-2">
-            <Calendar className="w-5 h-5 text-primary" />
-            <div>
-              <h3 className="font-headline font-bold text-lg text-primary leading-tight">My Verified Bookings</h3>
-              <p className="text-[11px] text-on-surface-variant flex items-center gap-1 font-medium">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> Account: {currentCustomer.name} ({currentCustomer.phone.startsWith('+91') ? currentCustomer.phone : `+91 ${currentCustomer.phone}`})
+        <div className="p-3.5 sm:p-4 bg-surface-container-low border-b border-outline-variant/40 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary border border-primary/20 flex items-center justify-center shrink-0">
+              <Calendar className="w-4 h-4 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="font-headline font-bold text-base sm:text-lg text-primary leading-tight truncate">My Verified Bookings</h3>
+              <p className="text-[11px] text-on-surface-variant flex items-center gap-1 font-medium truncate">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" /> Account: {currentCustomer.name} ({currentCustomer.phone.startsWith('+91') ? currentCustomer.phone : `+91 ${currentCustomer.phone}`})
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-full text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition"
+            className="p-1.5 rounded-full text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition shrink-0 cursor-pointer"
+            title="Close"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="p-3.5 sm:p-5 space-y-3.5 overflow-y-auto overscroll-contain">
           {userBookings.length === 0 ? (
             <div className="text-center py-10 space-y-3">
-              <div className="w-14 h-14 bg-surface-container-low text-on-surface-variant/40 rounded-full flex items-center justify-center mx-auto text-2xl">
-                🎟️
+              <div className="w-14 h-14 bg-surface-container-low text-primary/60 border border-outline-variant/60 rounded-2xl flex items-center justify-center mx-auto shadow-xs">
+                <Ticket className="w-7 h-7 text-primary/70" />
               </div>
               <h4 className="font-headline font-bold text-base text-on-surface">No Bookings Found</h4>
               <p className="text-xs text-on-surface-variant max-w-xs mx-auto">

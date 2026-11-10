@@ -1,5 +1,6 @@
 // Resend Email Service for TurfFlow Backend Server
 import { store } from '../data/store.js';
+import { WhatsAppFormatter } from '../utils/whatsappFormatter.js';
 
 export class EmailService {
   static DEFAULT_SENDER = 'TurfFlow Arena <onboarding@resend.dev>';
@@ -97,7 +98,7 @@ export class EmailService {
     const court = store.getCourts().find(c => c.id === booking.court_id);
     const sports = store.getSports();
     const sport = sports.find(s => s.id === booking.sport_id);
-    const otpCode = booking.booking_ref ? booking.booking_ref.slice(-4) : '0000';
+    const otpCode = WhatsAppFormatter.getBookingGatePassOtp(booking);
 
     let customerEmail = booking.customer_email;
     if (!customerEmail && booking.customer_id) {
@@ -208,7 +209,7 @@ export class EmailService {
   static async sendBookingReminder(booking) {
     const venue = store.getVenue();
     const court = store.getCourts().find(c => c.id === booking.court_id);
-    const otpCode = booking.booking_ref ? booking.booking_ref.slice(-4) : '0000';
+    const otpCode = WhatsAppFormatter.getBookingGatePassOtp(booking);
 
     let customerEmail = booking.customer_email;
     let customerName = booking.customer_name || 'Player';
@@ -223,7 +224,7 @@ export class EmailService {
     }
 
     const timeRangeStr = `${this.formatTime12h(booking.start_time)} - ${this.formatTime12h(booking.end_time)}`;
-    const subject = `⏰ Kickoff in 1 Hour: ${court?.name || 'Pitch'} at ${this.formatTime12h(booking.start_time)} (${venue.name})`;
+    const subject = `⏰ Kickoff in 1 Hour: ${court?.name || 'Pitch'} on ${this.formatDate(booking.booking_date)} at ${this.formatTime12h(booking.start_time)} (${venue.name})`;
 
     const text = [
       `TURFFLOW - MATCHDAY REMINDER (1 HOUR TO KICKOFF)`,

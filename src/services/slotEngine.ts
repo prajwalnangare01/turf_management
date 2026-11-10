@@ -88,14 +88,26 @@ export class SlotEngine {
     const slotDate = new Date(slotYear, slotMonth - 1, dayNum);
     const dayOfWeek = slotDate.getDay(); // 0 = Sunday, 6 = Saturday
 
+    // Check if promotional offer is active for dateStr (optional end date)
+    const isOfferActiveForDate = !court.offer_end_date || dateStr <= court.offer_end_date;
+
     let baseRate = court.base_price_per_hour;
-    let baseOriginalRate: number | undefined = (court.original_price_per_hour && court.original_price_per_hour > court.base_price_per_hour)
-      ? court.original_price_per_hour
-      : undefined;
+    let baseOriginalRate: number | undefined = undefined;
+
+    if (isOfferActiveForDate) {
+      if (court.original_price_per_hour && court.original_price_per_hour > court.base_price_per_hour) {
+        baseOriginalRate = court.original_price_per_hour;
+      }
+    } else {
+      // Offer expired for this date: revert baseRate to the standard un-discounted MRP
+      if (court.original_price_per_hour && court.original_price_per_hour > court.base_price_per_hour) {
+        baseRate = court.original_price_per_hour;
+      }
+    }
 
     if (dayOfWeek === 6 && court.saturday_price_per_hour !== undefined) {
       const satRate = court.saturday_price_per_hour;
-      const satOffer = court.saturday_offer_price_per_hour;
+      const satOffer = isOfferActiveForDate ? court.saturday_offer_price_per_hour : undefined;
       if (satOffer !== undefined && satOffer > 0 && satOffer !== satRate) {
         baseRate = Math.min(satRate, satOffer);
         baseOriginalRate = Math.max(satRate, satOffer);
@@ -105,7 +117,7 @@ export class SlotEngine {
       }
     } else if (dayOfWeek === 0 && court.sunday_price_per_hour !== undefined) {
       const sunRate = court.sunday_price_per_hour;
-      const sunOffer = court.sunday_offer_price_per_hour;
+      const sunOffer = isOfferActiveForDate ? court.sunday_offer_price_per_hour : undefined;
       if (sunOffer !== undefined && sunOffer > 0 && sunOffer !== sunRate) {
         baseRate = Math.min(sunRate, sunOffer);
         baseOriginalRate = Math.max(sunRate, sunOffer);
@@ -138,8 +150,9 @@ export class SlotEngine {
         if (pEnd <= pStart) pEnd += 1440;
         if (cursor >= pStart && cursor < pEnd) {
           const pkRate = court.peak_price_per_hour;
-          const pkOffer = court.peak_offer_price_per_hour;
-          if (pkOffer !== undefined && pkOffer > 0 && pkOffer !== pkRate) {
+          const pkOffer = isOfferActiveForDate ? court.peak_offer_price_per_hour : undefined;
+
+          if (isOfferActiveForDate && pkOffer !== undefined && pkOffer > 0 && pkOffer !== pkRate) {
             slotPrice = Math.min(pkRate, pkOffer);
             slotOriginalPrice = Math.max(pkRate, pkOffer);
           } else {
@@ -150,19 +163,21 @@ export class SlotEngine {
         }
       }
 
-      // 2. Check Custom Granular Pricing Rules
-      for (const rule of pricingRules) {
-        const rStart = this.timeToMinutes(rule.start_time);
-        let rEnd = this.timeToMinutes(rule.end_time);
-        if (rEnd <= rStart) rEnd += 1440;
-        // Ignore full-day legacy pricing rules so court's Saturday/Sunday rates take priority
-        if (rStart <= openMins && rEnd >= closeMins) {
-          continue;
-        }
-        if (cursor >= rStart && cursor < rEnd) {
-          slotPrice = rule.price;
-          isPeak = true;
-          break;
+      // 2. Check Custom Granular Pricing Rules (ONLY if slot was NOT already governed by Pitch Peak Configuration)
+      if (!isPeak) {
+        for (const rule of pricingRules) {
+          const rStart = this.timeToMinutes(rule.start_time);
+          let rEnd = this.timeToMinutes(rule.end_time);
+          if (rEnd <= rStart) rEnd += 1440;
+          // Ignore full-day legacy pricing rules so court's Saturday/Sunday rates take priority
+          if (rStart <= openMins && rEnd >= closeMins) {
+            continue;
+          }
+          if (cursor >= rStart && cursor < rEnd) {
+            slotPrice = rule.price;
+            isPeak = true;
+            break;
+          }
         }
       }
 

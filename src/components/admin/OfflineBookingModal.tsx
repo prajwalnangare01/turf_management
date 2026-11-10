@@ -7,8 +7,8 @@ import { NotificationService } from '../../services/notificationService';
 import { SlotEngine } from '../../services/slotEngine';
 import { AdminUser, BookingSource, PaymentMethod, Payment } from '../../types/schema';
 import { normalizeIndianPhone, getVenueDateString } from '../../utils/venueTime';
-import { AlertTriangle, ShieldAlert, PlusCircle, X, Split, KeyRound, Clock } from 'lucide-react';
-import { formatTime12hPlain } from '../../utils/formatters';
+import { AlertTriangle, ShieldAlert, PlusCircle, X, Split, KeyRound, Clock, MapPin, Calendar, User, Phone, Ticket, CreditCard, Sparkles } from 'lucide-react';
+import { formatTime12hPlain, formatDateDDMMYYYY } from '../../utils/formatters';
 
 interface OfflineBookingModalProps {
   initialCourtId?: string;
@@ -230,8 +230,8 @@ export const OfflineBookingModal: React.FC<OfflineBookingModalProps> = ({
 
   return (
     <div className="modal-overlay">
-      <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-md max-h-[85vh] overflow-y-auto no-scrollbar shadow-2xl animate-modalScaleIn text-on-surface">
-        <div className="p-4 bg-surface-container-low border-b border-outline-variant/40 flex items-center justify-between">
+      <div className="bg-white border border-outline-variant/60 rounded-3xl sm:rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl animate-modalScaleIn text-on-surface overflow-hidden">
+        <div className="p-3.5 sm:p-4 bg-surface-container-low border-b border-outline-variant/40 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             <PlusCircle className="w-5 h-5 text-secondary font-bold" />
             <h3 className="font-headline font-bold text-xl text-primary">New Walk-in Booking</h3>
@@ -241,7 +241,7 @@ export const OfflineBookingModal: React.FC<OfflineBookingModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 text-xs overflow-y-auto overscroll-contain">
           {/* Real-Time Redis Lock Warning (CC-D01) */}
           {conflictInfo.hasLock && (
             <div className="p-3.5 bg-amber-50 border-2 border-amber-300 rounded-2xl text-amber-900 space-y-2.5 shadow-xs">
@@ -308,7 +308,9 @@ export const OfflineBookingModal: React.FC<OfflineBookingModalProps> = ({
           )}
 
           <div>
-            <label className="block text-xs font-headline font-bold text-on-surface-variant mb-1">Select Pitch / Arena *</label>
+            <label className="text-xs font-headline font-bold text-on-surface-variant mb-1 flex items-center gap-1.5">
+              <MapPin className="w-3.5 h-3.5 text-primary" /> Select Pitch / Arena *
+            </label>
             <select
               value={courtId}
               onChange={e => {
@@ -327,12 +329,14 @@ export const OfflineBookingModal: React.FC<OfflineBookingModalProps> = ({
             </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-xs font-headline font-bold text-on-surface-variant">Date *</label>
+                <label className="text-xs font-headline font-bold text-on-surface-variant flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-primary" /> Date *
+                </label>
                 <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded border border-emerald-300">
-                  ✨ Admin Authority: Any Date
+                  <Sparkles className="w-2.5 h-2.5 text-emerald-700 inline mr-1" /> Any Date ({formatDateDDMMYYYY(dateStr)})
                 </span>
               </div>
               <input
@@ -385,7 +389,9 @@ export const OfflineBookingModal: React.FC<OfflineBookingModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-headline font-bold text-on-surface-variant mb-1">Select Time Slot *</label>
+              <label className="text-xs font-headline font-bold text-on-surface-variant mb-1 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-primary" /> Select Time Slot *
+              </label>
               <select
                 value={startTime}
                 onChange={e => setStartTime(e.target.value)}
@@ -403,9 +409,11 @@ export const OfflineBookingModal: React.FC<OfflineBookingModalProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-headline font-bold text-on-surface-variant mb-1">Customer Name *</label>
+              <label className="text-xs font-headline font-bold text-on-surface-variant mb-1 flex items-center gap-1.5">
+                <User className="w-3.5 h-3.5 text-primary" /> Customer Name *
+              </label>
               <input
                 type="text"
                 required
@@ -416,7 +424,9 @@ export const OfflineBookingModal: React.FC<OfflineBookingModalProps> = ({
               />
             </div>
             <div>
-              <label className="block text-xs font-headline font-bold text-on-surface-variant mb-1">Mobile Phone *</label>
+              <label className="text-xs font-headline font-bold text-on-surface-variant mb-1 flex items-center gap-1.5">
+                <Phone className="w-3.5 h-3.5 text-primary" /> Mobile Phone *
+              </label>
               <input
                 type="tel"
                 required
@@ -429,9 +439,11 @@ export const OfflineBookingModal: React.FC<OfflineBookingModalProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-headline font-bold text-on-surface-variant mb-1">Booking Source</label>
+              <label className="text-xs font-headline font-bold text-on-surface-variant mb-1 flex items-center gap-1.5">
+                <Ticket className="w-3.5 h-3.5 text-primary" /> Booking Source
+              </label>
               <select
                 value={source}
                 onChange={e => setSource(e.target.value as BookingSource)}
@@ -443,7 +455,9 @@ export const OfflineBookingModal: React.FC<OfflineBookingModalProps> = ({
               </select>
             </div>
             <div>
-              <label className="block text-xs font-headline font-bold text-on-surface-variant mb-1">Payment Method</label>
+              <label className="text-xs font-headline font-bold text-on-surface-variant mb-1 flex items-center gap-1.5">
+                <CreditCard className="w-3.5 h-3.5 text-primary" /> Payment Method
+              </label>
               <select
                 value={paymentMethod}
                 onChange={e => {

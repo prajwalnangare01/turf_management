@@ -68,6 +68,7 @@ export interface Court {
   peak_end_time?: string; // "23:00" (11:00 PM)
   peak_price_per_hour?: number; // e.g. 1800
   peak_offer_price_per_hour?: number; // Optional Peak Offer/Discounted Rate
+  offer_end_date?: string; // Optional Offer Expiration End Date (YYYY-MM-DD); if set, offer only applies on or before this date
 }
 
 export interface PricingRule {
@@ -130,6 +131,10 @@ export interface Booking {
   reminder_sent?: boolean;
   gate_pass_otp?: string;
   gateway_payment_id?: string;
+  group_ref?: string;
+  total_order_amount?: number;
+  all_slots?: Array<{ start_time: string; end_time: string; price?: number }>;
+  formatted_slots?: string;
   created_at: string;
   updated_at: string;
 }

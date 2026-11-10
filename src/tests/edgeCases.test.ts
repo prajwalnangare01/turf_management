@@ -12,6 +12,8 @@ import { EmailVerificationService } from '../services/emailVerificationService';
 import { SmsService } from '../services/smsService';
 import { SmsVerificationService } from '../services/smsVerificationService';
 import { ReminderScheduler } from '../services/reminderScheduler';
+import { NotificationService } from '../services/notificationService';
+import { formatTimeRange12h, formatDateDDMMYYYY, getBookingGatePassOtp, getBookingGroupRef } from '../utils/formatters';
 import { Court, DynamicSlot, BlockedSlot, Booking } from '../types/schema';
 
 declare const process: { exit: (code: number) => void };
@@ -949,6 +951,7 @@ async function runResendTests() {
   });
   assert(smsReminder.success, '1-Hour kickoff reminder SMS dispatched');
   assert(smsReminder.message.includes('1 hour'), 'Reminder SMS includes 1-hour warning');
+  assert(smsReminder.message.includes('Date:'), 'Reminder SMS includes match date');
 
   // --- TEST 19: Time-Windowed & Multi-Day Pitch Maintenance Blocking ---
   console.log('\n--- TEST 19: Time-Windowed & Multi-Day Pitch Maintenance Blocking ---');
@@ -1031,7 +1034,209 @@ async function runResendTests() {
   assert(!blockedInsertAttempt.success, 'PostgresEngine cleanly rejects booking creation during active pitch maintenance');
   assert(blockedInsertAttempt.message.includes('[Court Blocked Guard]'), 'Error message informs user the pitch is closed for maintenance');
 
-  console.log('\n🎉 ALL CORNER & EDGE CASE TESTS (INCLUDING RESEND EMAIL & SMS INTEGRATIONS) PASSED PERFECTLY!\n');
+  // --- TEST 20: Automated Booking Completion & Owner Early Completion ---
+  console.log('\n--- TEST 20: Automated Booking Completion & Owner Early Completion ---');
+  
+  // 20.1: Confirmed booking with past end_time is automatically transitioned to 'completed'
+  const pastDate = '2026-01-01';
+  const pastBookingInsert = PostgresEngine.createBooking({
+    booking_ref: `TRF-PAST-${Date.now()}`,
+    customer_id: 'cust-001',
+    court_id: targetCourt.id,
+    sport_id: 'sp-football',
+    booking_date: pastDate,
+    start_time: '10:00',
+    end_time: '11:00',
+    total_amount: 1000,
+    discount_amount: 0,
+    status: 'confirmed',
+    source: 'online'
+  });
+  assert(Boolean(pastBookingInsert.success && pastBookingInsert.booking), 'Past test booking created as confirmed');
+  const pastBkId = pastBookingInsert.booking!.id;
+
+  // Run autoCompleteExpiredBookings
+  const autoResult = PostgresEngine.autoCompleteExpiredBookings();
+  assert(autoResult.completedCount >= 1, 'autoCompleteExpiredBookings transitioned past booking(s)');
+  
+  const pastBkAfter = store.getBookings().find(b => b.id === pastBkId);
+  assert(Boolean(pastBkAfter?.status === 'completed'), 'Past confirmed booking is now automatically completed');
+
+  // 20.2: Future confirmed booking remains 'confirmed'
+  const futureDate = new Date(Date.now() + 86400000 * 5).toISOString().split('T')[0];
+  const futureBookingInsert = PostgresEngine.createBooking({
+    booking_ref: `TRF-FUT-${Date.now()}`,
+    customer_id: 'cust-001',
+    court_id: targetCourt.id,
+    sport_id: 'sp-football',
+    booking_date: futureDate,
+    start_time: '18:00',
+    end_time: '19:00',
+    total_amount: 1500,
+    discount_amount: 0,
+    status: 'confirmed',
+    source: 'online'
+  });
+  assert(Boolean(futureBookingInsert.success && futureBookingInsert.booking), 'Future test booking created as confirmed');
+  const futBkId = futureBookingInsert.booking!.id;
+
+  PostgresEngine.autoCompleteExpiredBookings();
+  const futBkAfter = store.getBookings().find(b => b.id === futBkId);
+  assert(Boolean(futBkAfter?.status === 'confirmed'), 'Future booking remains confirmed until slot end time');
+
+  // 20.3: Owner early completion before time slot
+  const ownerCompleteResult = PostgresEngine.updateBookingStatus(futBkId, 'completed');
+  assert(ownerCompleteResult.success, 'Owner successfully marks future booking completed before slot time');
+  const futBkOwnerCompleted = store.getBookings().find(b => b.id === futBkId);
+  assert(Boolean(futBkOwnerCompleted?.status === 'completed'), 'Owner-completed booking is status completed');
+
+  // 20.4: Past cancelled/refunded booking is NOT modified by auto-complete
+  const pastCancelledInsert = PostgresEngine.createBooking({
+    booking_ref: `TRF-CANC-${Date.now()}`,
+    customer_id: 'cust-001',
+    court_id: targetCourt.id,
+    sport_id: 'sp-football',
+    booking_date: pastDate,
+    start_time: '12:00',
+    end_time: '13:00',
+    total_amount: 1200,
+    discount_amount: 0,
+    status: 'cancelled',
+    source: 'online'
+  });
+  assert(Boolean(pastCancelledInsert.success && pastCancelledInsert.booking), 'Past cancelled booking created');
+  const cancId = pastCancelledInsert.booking!.id;
+
+  PostgresEngine.autoCompleteExpiredBookings();
+  const cancAfter = store.getBookings().find(b => b.id === cancId);
+  assert(Boolean(cancAfter?.status === 'cancelled'), 'Cancelled past booking is never overridden by auto-complete');
+
+  // --- TEST 21: Multi-Slot Booking (Continuous & Non-Continuous) Common Gate Pass OTP ---
+  console.log('\n--- TEST 21: Multi-Slot Booking (Continuous & Non-Continuous) Common Gate Pass OTP ---');
+  const commonOtp = '7429';
+  const primaryMultiRef = `TRF-MULTI-${Date.now()}`;
+  const testCustId = 'cust-multi-001';
+  const testDate = new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0];
+  const commonPaymentId = `pay_multi_live_${Date.now()}`;
+
+  // Two non-continuous slots: 17:00-18:00 and 19:00-20:00
+  const selectedSlots = [
+    { start_time: '17:00', end_time: '18:00', price: 1200 },
+    { start_time: '19:00', end_time: '20:00', price: 1500 }
+  ];
+  const grandTotal = 2700;
+  const formattedSummary = '05:00 PM – 06:00 PM, 07:00 PM – 08:00 PM';
+
+  // 21.1: Create Block 1 (Primary Booking)
+  const block1Result = PostgresEngine.createBooking({
+    booking_ref: primaryMultiRef,
+    group_ref: primaryMultiRef,
+    gate_pass_otp: commonOtp,
+    gateway_payment_id: commonPaymentId,
+    total_order_amount: grandTotal,
+    all_slots: selectedSlots,
+    formatted_slots: formattedSummary,
+    customer_id: testCustId,
+    court_id: targetCourt.id,
+    sport_id: 'sp-football',
+    booking_date: testDate,
+    start_time: '17:00',
+    end_time: '18:00',
+    total_amount: 1200,
+    discount_amount: 0,
+    status: 'confirmed',
+    source: 'online'
+  });
+  assert(block1Result.success, 'Block 1 created with common group_ref and OTP');
+
+  // 21.2: Create Block 2 (Sibling Booking in same checkout)
+  const block2Ref = `${primaryMultiRef}-2`;
+  const block2Result = PostgresEngine.createBooking({
+    booking_ref: block2Ref,
+    group_ref: primaryMultiRef,
+    gate_pass_otp: commonOtp,
+    gateway_payment_id: commonPaymentId,
+    total_order_amount: grandTotal,
+    all_slots: selectedSlots,
+    formatted_slots: formattedSummary,
+    customer_id: testCustId,
+    court_id: targetCourt.id,
+    sport_id: 'sp-football',
+    booking_date: testDate,
+    start_time: '19:00',
+    end_time: '20:00',
+    total_amount: 1500,
+    discount_amount: 0,
+    status: 'confirmed',
+    source: 'online'
+  });
+  assert(block2Result.success, 'Block 2 created with common group_ref and OTP');
+
+  // 21.3: Verify both share identical Gate Pass OTP and Group Ref
+  const allStored = store.getBookings();
+  const b1 = allStored.find(b => b.booking_ref === primaryMultiRef);
+  const b2 = allStored.find(b => b.booking_ref === block2Ref);
+  assert(Boolean(b1 && b2), 'Both multi-slot bookings stored in DB');
+  assert(b1?.gate_pass_otp === commonOtp && b2?.gate_pass_otp === commonOtp, 'Both bookings share identical common 4-digit OTP');
+  assert(b1?.group_ref === primaryMultiRef && b2?.group_ref === primaryMultiRef, 'Both bookings linked by group_ref');
+  assert(b1?.total_order_amount === 2700 && b2?.total_order_amount === 2700, 'Both bookings record complete grand total order amount');
+
+  // 21.4: Resolve sibling bookings from secondary ref
+  const siblingsFromB2 = allStored.filter(b => b.group_ref === b2?.group_ref || b.booking_ref === b2?.group_ref);
+  assert(siblingsFromB2.length === 2, 'Sibling resolution by group_ref returns all sessions');
+
+  // 21.5: Outbound WhatsApp notification format test
+  NotificationService.enqueueNotification(b1!, 'confirmation', 'whatsapp');
+  const loggedNotif = store.getNotificationLogs().find(n => n.booking_id === b1!.id && n.channel === 'whatsapp');
+  assert(Boolean(loggedNotif), 'Notification logged for booking');
+  assert(loggedNotif!.message_preview.includes(commonOtp), 'WhatsApp notification includes common 4-digit Gate Pass OTP');
+  assert(loggedNotif!.message_preview.includes('05:00 PM') && loggedNotif!.message_preview.includes('07:00 PM'), 'WhatsApp notification lists all booked session timings');
+  assert(loggedNotif!.message_preview.includes('2700'), 'WhatsApp notification reflects grand total order amount');
+
+  // 21.6: Outbound SMS format test
+  const multiSms = await SmsService.sendBookingConfirmation({
+    booking: b1!,
+    customer: { id: testCustId, name: 'Rahul Sharma', phone: '9876543210', total_bookings: 2, total_spent: 2700, is_blacklisted: false, no_show_count: 0, created_at: '' },
+    courtName: targetCourt.name,
+    venue: store.getVenue()
+  });
+  assert(multiSms.success, 'Multi-slot confirmation SMS sent');
+  assert(multiSms.message.includes(commonOtp), 'SMS contains common 4-digit gate pass OTP');
+  assert(multiSms.message.includes('₹2700'), 'SMS includes grand total order amount');
+
+  // 21.7: Missing character / hyphen guard test for sibling refs (TRF-20261110-2221-2)
+  const testSiblingBookingA = {
+    booking_ref: 'TRF-20261110-2221',
+    status: 'confirmed' as const
+  };
+  const testSiblingBookingB = {
+    booking_ref: 'TRF-20261110-2221-2',
+    status: 'confirmed' as const
+  };
+  const testSiblingBookingC = {
+    booking_ref: 'TRF-20261110-2221-3',
+    status: 'confirmed' as const
+  };
+
+  const otpA = getBookingGatePassOtp(testSiblingBookingA);
+  const otpB = getBookingGatePassOtp(testSiblingBookingB);
+  const otpC = getBookingGatePassOtp(testSiblingBookingC);
+
+  assert(otpA === '2221', 'Primary ref TRF-20261110-2221 yields OTP 2221');
+  assert(otpB === '2221', 'Secondary sibling ref TRF-20261110-2221-2 yields OTP 2221 (NEVER "21-2")');
+  assert(otpC === '2221', 'Tertiary sibling ref TRF-20261110-2221-3 yields OTP 2221 (NEVER "21-3")');
+  assert(!otpB.includes('-'), 'OTP for sibling booking B contains NO hyphens');
+  assert(!otpC.includes('-'), 'OTP for sibling booking C contains NO hyphens');
+
+  const groupA = getBookingGroupRef(testSiblingBookingA);
+  const groupB = getBookingGroupRef(testSiblingBookingB);
+  const groupC = getBookingGroupRef(testSiblingBookingC);
+
+  assert(groupA === 'TRF-20261110-2221', 'Group ref for primary is TRF-20261110-2221');
+  assert(groupB === 'TRF-20261110-2221', 'Group ref for secondary sibling resolves to parent TRF-20261110-2221');
+  assert(groupC === 'TRF-20261110-2221', 'Group ref for tertiary sibling resolves to parent TRF-20261110-2221');
+
+  console.log('\n🎉 ALL CORNER & EDGE CASE TESTS (INCLUDING AUTO-COMPLETE & OWNER REDUCED WORKFLOW) PASSED PERFECTLY!\n');
 }
 
 runResendTests().catch(err => {

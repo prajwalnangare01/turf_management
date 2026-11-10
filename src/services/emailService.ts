@@ -1,5 +1,5 @@
 import { Booking, Customer, Court, Venue } from '../types/schema';
-import { formatTimeRange12h, formatTime12hPlain, formatDateDDMMYYYY } from '../utils/formatters';
+import { formatTimeRange12h, formatTime12hPlain, formatDateDDMMYYYY, getBookingGatePassOtp } from '../utils/formatters';
 
 export interface EmailDispatchResult {
   success: boolean;
@@ -159,8 +159,9 @@ export class EmailService {
   }): Promise<EmailDispatchResult> {
     const { booking, customer, courtName, venue } = params;
     const recipient = customer.email || 'customer@example.com';
-    const otpCode = (booking.booking_ref || booking.id || '').slice(-4) || '----';
-    const timeRangeStr = formatTimeRange12h(booking.start_time, booking.end_time);
+    const otpCode = getBookingGatePassOtp(booking);
+    const timeRangeStr = booking.formatted_slots || formatTimeRange12h(booking.start_time, booking.end_time);
+    const totalPaidAmount = booking.total_order_amount || booking.total_amount;
 
     const subject = `Booking Confirmed: ${booking.booking_ref} - ${venue.name}`;
 
@@ -173,8 +174,8 @@ export class EmailService {
       `Gate Check-in OTP: ${otpCode}`,
       `Pitch / Court: ${courtName}`,
       `Date: ${formatDateDDMMYYYY(booking.booking_date)}`,
-      `Slot Time: ${timeRangeStr}`,
-      `Total Paid: INR ${booking.total_amount}`,
+      `Slot Time(s): ${timeRangeStr}`,
+      `Total Paid: INR ${totalPaidAmount}`,
       `Venue Address: ${venue.address}`,
       ``,
       `Important Guidelines:`,
@@ -245,7 +246,7 @@ export class EmailService {
           </tr>
           <tr>
             <td style="padding: 12px 16px; font-size: 13px; color: #64748b; border-bottom: 1px solid #f1f5f9;">Total Paid</td>
-            <td style="padding: 12px 16px; font-size: 15px; font-weight: 800; color: #006b30; border-bottom: 1px solid #f1f5f9;">₹${booking.total_amount} <span style="font-size: 11px; background: #dcfce7; color: #166534; padding: 2px 6px; border-radius: 4px; font-weight: 700;">PAID (Razorpay)</span></td>
+            <td style="padding: 12px 16px; font-size: 15px; font-weight: 800; color: #006b30; border-bottom: 1px solid #f1f5f9;">₹${totalPaidAmount} <span style="font-size: 11px; background: #dcfce7; color: #166534; padding: 2px 6px; border-radius: 4px; font-weight: 700;">PAID (Razorpay)</span></td>
           </tr>
           <tr>
             <td style="padding: 12px 16px; font-size: 13px; color: #64748b;">Venue Location</td>
@@ -714,10 +715,10 @@ export class EmailService {
   }): Promise<EmailDispatchResult> {
     const { booking, customer, courtName, venue } = params;
     const recipient = customer.email || 'customer@example.com';
-    const otpCode = (booking.booking_ref || booking.id || '').slice(-4) || '----';
+    const otpCode = getBookingGatePassOtp(booking);
     const timeRangeStr = formatTimeRange12h(booking.start_time, booking.end_time);
 
-    const subject = `⏰ Kickoff in 1 Hour: ${courtName} at ${formatTime12hPlain(booking.start_time)} (${venue.name})`;
+    const subject = `⏰ Kickoff in 1 Hour: ${courtName} on ${formatDateDDMMYYYY(booking.booking_date)} at ${formatTime12hPlain(booking.start_time)} (${venue.name})`;
 
     const text = [
       `TURFFLOW - MATCHDAY REMINDER (1 HOUR TO KICKOFF)`,
@@ -725,7 +726,7 @@ export class EmailService {
       `Your game at ${venue.name} starts in approximately 1 hour!`,
       ``,
       `Court / Pitch: ${courtName}`,
-      `Date: ${booking.booking_date}`,
+      `Date: ${formatDateDDMMYYYY(booking.booking_date)}`,
       `Slot Time: ${timeRangeStr}`,
       `Booking Reference: ${booking.booking_ref}`,
       `Gate Check-in OTP: ${otpCode}`,
@@ -794,7 +795,7 @@ export class EmailService {
           </tr>
           <tr>
             <td style="padding: 12px 16px; font-size: 13px; color: #64748b; border-bottom: 1px solid #f1f5f9;">Date & Time</td>
-            <td style="padding: 12px 16px; font-size: 13px; font-weight: 700; color: #1e40af; border-bottom: 1px solid #f1f5f9;">${booking.booking_date} &bull; ${timeRangeStr}</td>
+            <td style="padding: 12px 16px; font-size: 13px; font-weight: 700; color: #1e40af; border-bottom: 1px solid #f1f5f9;">${formatDateDDMMYYYY(booking.booking_date)} &bull; ${timeRangeStr}</td>
           </tr>
           <tr>
             <td style="padding: 12px 16px; font-size: 13px; color: #64748b;">Venue Location</td>

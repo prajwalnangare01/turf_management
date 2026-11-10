@@ -27,9 +27,31 @@ async function findOrResolveBooking(ref, fallbackData = {}) {
   // 1. Look in in-memory store
   let booking = store.getBookings().find(b => 
     (b.booking_ref && b.booking_ref.toUpperCase() === cleanRef) || 
+    (b.group_ref && b.group_ref.toUpperCase() === cleanRef) ||
     (b.id && b.id.toUpperCase() === cleanRef)
   );
-  if (booking) return booking;
+  if (booking) {
+    if (fallbackData && Object.keys(fallbackData).length > 0) {
+      Object.assign(booking, fallbackData);
+    }
+    // Aggregate siblings if this is part of a multi-slot order
+    const parentRef = WhatsAppFormatter.getBookingGroupRef(booking);
+    if (parentRef) {
+      const siblings = store.getBookings().filter(b => 
+        WhatsAppFormatter.getBookingGroupRef(b) === parentRef ||
+        (b.gateway_payment_id && booking.gateway_payment_id && b.gateway_payment_id === booking.gateway_payment_id)
+      );
+      if (siblings.length > 1 && (!booking.all_slots || booking.all_slots.length <= 1)) {
+        booking.all_slots = Array.from(new Map(siblings.map(s => [`${s.start_time}-${s.end_time}`, {
+          start_time: s.start_time,
+          end_time: s.end_time,
+          price: s.total_amount
+        }])).values()).sort((a, b) => a.start_time.localeCompare(b.start_time));
+        booking.total_order_amount = siblings.reduce((sum, s) => sum + (Number(s.total_amount) || 0), 0);
+      }
+    }
+    return booking;
+  }
 
   // 2. Query Supabase
   try {
@@ -38,13 +60,14 @@ async function findOrResolveBooking(ref, fallbackData = {}) {
       const { data, error } = await supabase
         .from('bookings')
         .select('*')
-        .or(`booking_ref.ilike.${cleanRef},id.ilike.${cleanRef}`)
+        .or(`booking_ref.ilike.${cleanRef},group_ref.ilike.${cleanRef},id.ilike.${cleanRef}`)
         .maybeSingle();
       if (!error && data) {
         if (!store.getBookings().some(b => b.id === data.id)) {
           store.getBookings().push(data);
         }
-        return data;
+        const finalBooking = { ...data, ...(fallbackData || {}) };
+        return finalBooking;
       }
     }
   } catch (err) {
@@ -578,18 +601,26 @@ apiRouter.get('/pay/:ref', async (req, res) => {
       <html><head><title>Booking Confirmed - ${booking.booking_ref}</title><meta name="viewport" content="width=device-width, initial-scale=1.0"><script src="https://cdn.tailwindcss.com"></script></head>
       <body class="bg-slate-50 min-h-screen flex items-center justify-center p-4 font-sans text-slate-800">
         <div class="bg-white p-6 sm:p-8 rounded-3xl max-w-md w-full text-center shadow-xl border border-slate-200 space-y-4">
-          <div class="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center text-3xl mx-auto font-bold">✓</div>
+          <div class="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto">
+            <svg class="w-8 h-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+          </div>
           <h2 class="text-xl font-black text-slate-900">Payment Already Completed!</h2>
           <p class="text-xs text-slate-600">Booking <span class="font-mono font-bold text-emerald-700">${booking.booking_ref}</span> is confirmed and secured.</p>
-          <div class="bg-slate-50 p-4 rounded-2xl text-left text-xs space-y-1.5 border border-slate-200">
-            <p><strong>🏟️ Court:</strong> ${courtName}</p>
-            <p><strong>📅 Date:</strong> ${WhatsAppFormatter.formatDate(booking.booking_date)}</p>
-            <p><strong>⏰ Time:</strong> ${WhatsAppFormatter.formatTime(booking.start_time)} — ${WhatsAppFormatter.formatTime(booking.end_time)}</p>
-            <p><strong>💰 Paid:</strong> ₹${booking.total_amount} (Razorpay UPI)</p>
+          <div class="bg-slate-50 p-4 rounded-2xl text-left text-xs space-y-2 border border-slate-200">
+            <p class="flex items-center gap-1.5"><svg class="w-3.5 h-3.5 text-emerald-700 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 9H4.5a2.5 2.5 0 010-5H6m12 5h1.5a2.5 2.5 0 000-5H18m-14 13h16m-10-7.34V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22m7-7.34V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22m1-20H6v7a6 6 0 0012 0V2z"/></svg><strong>Court:</strong> ${courtName}</p>
+            <p class="flex items-center gap-1.5"><svg class="w-3.5 h-3.5 text-emerald-700 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" stroke-width="2"/><line x1="16" y1="2" x2="16" y2="6" stroke-width="2"/><line x1="8" y1="2" x2="8" y2="6" stroke-width="2"/><line x1="3" y1="10" x2="21" y2="10" stroke-width="2"/></svg><strong>Date:</strong> ${WhatsAppFormatter.formatDate(booking.booking_date)}</p>
+            <p class="flex items-center gap-1.5"><svg class="w-3.5 h-3.5 text-emerald-700 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><polyline points="12 6 12 12 16 14" stroke-width="2"/></svg><strong>Time:</strong> ${WhatsAppFormatter.formatTime(booking.start_time)} — ${WhatsAppFormatter.formatTime(booking.end_time)}</p>
+            <p class="flex items-center gap-1.5"><svg class="w-3.5 h-3.5 text-emerald-700 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2" stroke-width="2"/><line x1="2" y1="10" x2="22" y2="10" stroke-width="2"/></svg><strong>Paid:</strong> ₹${booking.total_amount} (Razorpay UPI)</p>
           </div>
           <div class="pt-2 flex flex-col gap-2">
-            <a href="/api/bookings/${booking.booking_ref}/pass.pdf" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-3 px-4 rounded-xl text-xs shadow transition">⬇️ Download PDF Gate Pass</a>
-            <a href="/api/bookings/${booking.booking_ref}/pass" target="_blank" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 px-4 rounded-xl text-xs transition">🖨️ View / Print Pass</a>
+            <a href="/api/bookings/${booking.booking_ref}/pass.pdf" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-3 px-4 rounded-xl text-xs shadow transition flex items-center justify-center gap-2">
+              <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+              Download PDF Gate Pass
+            </a>
+            <a href="/api/bookings/${booking.booking_ref}/pass" target="_blank" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 px-4 rounded-xl text-xs transition flex items-center justify-center gap-2">
+              <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 9V3a1 1 0 011-1h10a1 1 0 011 1v6"/><rect x="6" y="14" width="12" height="8" rx="1" stroke-width="2"/></svg>
+              View / Print Pass
+            </a>
           </div>
         </div>
       </body></html>
@@ -603,7 +634,9 @@ apiRouter.get('/pay/:ref', async (req, res) => {
       <html><head><title>Hold Expired - ${booking.booking_ref}</title><meta name="viewport" content="width=device-width, initial-scale=1.0"><script src="https://cdn.tailwindcss.com"></script></head>
       <body class="bg-slate-50 min-h-screen flex items-center justify-center p-4 font-sans text-slate-800">
         <div class="bg-white p-6 sm:p-8 rounded-3xl max-w-md w-full text-center shadow-xl border border-slate-200 space-y-4">
-          <div class="w-16 h-16 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center text-3xl mx-auto font-bold">⏰</div>
+          <div class="w-16 h-16 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center mx-auto">
+            <svg class="w-8 h-8 text-amber-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><polyline points="12 6 12 12 16 14" stroke-width="2"/></svg>
+          </div>
           <h2 class="text-xl font-black text-slate-900">Payment Window Expired</h2>
           <p class="text-xs text-slate-600 leading-relaxed">
             The 5-minute temporary hold on this slot has expired. The slot has been released back to available slots for other players.
@@ -683,31 +716,43 @@ apiRouter.get('/pay/:ref', async (req, res) => {
 
           <!-- Pay Button -->
           <button id="pay-btn" onclick="executePayment()" class="w-full bg-[#006b30] hover:bg-[#005224] text-white font-black py-3.5 px-4 rounded-2xl text-sm shadow-lg transition flex items-center justify-center gap-2 cursor-pointer">
-            <span>💳 Pay ₹${booking.total_amount} with Razorpay UPI</span>
+            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2" stroke-width="2"/><line x1="2" y1="10" x2="22" y2="10" stroke-width="2"/></svg>
+            <span>Pay ₹${booking.total_amount} with Razorpay UPI</span>
           </button>
 
           <!-- Success Area (Hidden by default) -->
           <div id="success-box" class="hidden text-center space-y-3 pt-2">
-            <div class="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center text-2xl mx-auto font-bold">✓</div>
+            <div class="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto">
+              <svg class="w-6 h-6 text-emerald-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+            </div>
             <h3 class="text-lg font-black text-emerald-800">Payment Confirmed!</h3>
             <p class="text-xs text-slate-600">Your slot is now permanently booked. The official gate pass has been dispatched to your WhatsApp.</p>
             <div class="flex flex-col gap-2 pt-2">
-              <a href="/api/bookings/${booking.booking_ref}/pass.pdf" class="bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs shadow">⬇️ Download PDF Pass</a>
-              <a href="/api/bookings/${booking.booking_ref}/pass" target="_blank" class="bg-slate-100 text-slate-700 font-bold py-2 px-4 rounded-xl text-xs">🖨️ View Pass</a>
+              <a href="/api/bookings/${booking.booking_ref}/pass.pdf" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 px-4 rounded-xl text-xs shadow flex items-center justify-center gap-1.5">
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                Download PDF Pass
+              </a>
+              <a href="/api/bookings/${booking.booking_ref}/pass" target="_blank" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5">
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 9V3a1 1 0 011-1h10a1 1 0 011 1v6"/><rect x="6" y="14" width="12" height="8" rx="1" stroke-width="2"/></svg>
+                View Pass
+              </a>
             </div>
           </div>
 
           <!-- Expired Area (Hidden by default) -->
           <div id="expired-box" class="hidden text-center space-y-2 pt-2">
-            <div class="w-12 h-12 bg-amber-100 text-amber-700 rounded-full flex items-center justify-center text-2xl mx-auto font-bold">⏰</div>
+            <div class="w-12 h-12 bg-amber-100 text-amber-700 rounded-full flex items-center justify-center mx-auto">
+              <svg class="w-6 h-6 text-amber-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><polyline points="12 6 12 12 16 14" stroke-width="2"/></svg>
+            </div>
             <h3 class="text-base font-black text-amber-800">5-Minute Window Expired</h3>
             <p class="text-xs text-slate-600">This slot has been released back to available. Please book a fresh slot.</p>
           </div>
 
         </div>
 
-        <div class="bg-slate-50 p-3 border-t border-slate-200 text-center text-[10px] text-slate-500 font-medium">
-          🔒 256-Bit SSL Encrypted Razorpay Payments | TurfFlow Arena
+        <div class="bg-slate-50 p-3 border-t border-slate-200 text-center text-[10px] text-slate-500 font-medium flex items-center justify-center gap-1.5">
+          <svg class="w-3.5 h-3.5 text-slate-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke-width="2"/><path d="M7 11V7a5 5 0 0110 0v4" stroke-width="2"/></svg>
+          <span>256-Bit SSL Encrypted Razorpay Payments | TurfFlow Arena</span>
         </div>
       </div>
 

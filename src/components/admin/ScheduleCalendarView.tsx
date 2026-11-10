@@ -6,13 +6,14 @@ import { SlotEngine } from '../../services/slotEngine';
 import { RedisLockService } from '../../services/redisLockService';
 import { SupabaseSyncService } from '../../services/supabaseSyncService';
 import { Booking, AdminUser, Court, BlockedSlot } from '../../types/schema';
-import { formatTime12h, formatTimeRange12h, formatTime12hPlain, formatTimeRange12hPlain, formatDateDDMMYYYY } from '../../utils/formatters';
+import { formatTime12h, formatTimeRange12h, formatTime12hPlain, formatTimeRange12hPlain, formatDateDDMMYYYY, getBookingGatePassOtp } from '../../utils/formatters';
 import { getVenueDateString, getVenueNow } from '../../utils/venueTime';
 import { OfflineBookingModal } from './OfflineBookingModal';
 import { AdminRefundModal } from './AdminRefundModal';
 import { EmergencyWeatherModal } from './EmergencyWeatherModal';
 import { ActiveCustomerHoldModal } from '../common/ActiveCustomerHoldModal';
-import { Calendar, ChevronLeft, ChevronRight, Plus, UserCheck, XCircle, CheckCircle, Lock, KeyRound, RotateCcw, CloudRain, ShieldAlert, Unlock, Wrench, Clock, AlertTriangle } from 'lucide-react';
+import { CalendarTableSkeleton } from '../common/SkeletonLoaders';
+import { Calendar, ChevronLeft, ChevronRight, Plus, XCircle, CheckCircle, Lock, KeyRound, RotateCcw, CloudRain, ShieldAlert, Unlock, Wrench, Clock, AlertTriangle, Sun, Moon } from 'lucide-react';
 
 interface ScheduleCalendarViewProps {
   currentAdmin: AdminUser;
@@ -23,6 +24,13 @@ interface ScheduleCalendarViewProps {
 export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ currentAdmin }) => {
   const courts = store.getCourts();
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [isCalendarLoading, setIsCalendarLoading] = useState(false);
+
+  useEffect(() => {
+    setIsCalendarLoading(true);
+    const timer = setTimeout(() => setIsCalendarLoading(false), 140);
+    return () => clearTimeout(timer);
+  }, [selectedDate]);
 
   // Selected cell for offline booking modal
   const [offlineModalSlot, setOfflineModalSlot] = useState<{ courtId: string; date: string; time: string } | null>(null);
@@ -34,9 +42,19 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
   // Re-render when store updates via Supabase Realtime (e.g. WhatsApp hold/booking)
   const [, setStoreVersion] = useState(0);
   useEffect(() => {
-    return store.subscribe(() => {
+    PostgresEngine.autoCompleteExpiredBookings();
+    const autoInterval = setInterval(() => {
+      PostgresEngine.autoCompleteExpiredBookings();
+    }, 30000);
+
+    const unsubscribe = store.subscribe(() => {
       setStoreVersion(v => v + 1);
     });
+
+    return () => {
+      clearInterval(autoInterval);
+      unsubscribe();
+    };
   }, []);
 
   // 1-second live ticker for real-time hold countdowns in the grid
@@ -125,8 +143,8 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
     );
 
     const scheduleDesc = startDate === endDate
-      ? `${startDate} from ${startTime} to ${endTime}`
-      : `${startDate} (${startTime}) to ${endDate} (${endTime})`;
+      ? `${formatDateDDMMYYYY(startDate)} from ${formatTime12hPlain(startTime)} to ${formatTime12hPlain(endTime)}`
+      : `${formatDateDDMMYYYY(startDate)} (${formatTime12hPlain(startTime)}) to ${formatDateDDMMYYYY(endDate)} (${formatTime12hPlain(endTime)})`;
 
     alert(`Court blocked successfully for ${reason.replace('_', ' ')} (${scheduleDesc})`);
     setBlockModalState(prev => ({ ...prev, isOpen: false }));
@@ -180,7 +198,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
     ? allSlotStartTimes
     : Array.from({ length: 17 }, (_, i) => `${(6 + i).toString().padStart(2, '0')}:00`);
 
-  const handleUpdateStatus = (bookingId: string, status: 'completed' | 'no_show' | 'cancelled') => {
+  const handleUpdateStatus = (bookingId: string, status: 'completed' | 'cancelled') => {
     const res = PostgresEngine.updateBookingStatus(bookingId, status);
     if (res.success) {
       AuditLogger.log(currentAdmin.id, `UPDATE_BOOKING_STATUS_${status.toUpperCase()}`, 'Booking', bookingId);
@@ -211,6 +229,10 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
               onChange={e => setSelectedDate(e.target.value)}
               className="form-input text-xs font-bold py-1.5 px-3 w-36"
             />
+
+            <span className="text-xs font-mono font-bold text-primary bg-primary/10 px-2 py-1 rounded-md border border-primary/20 shrink-0">
+              {formatDateDDMMYYYY(selectedDate)}
+            </span>
 
             <button onClick={() => changeDate(1)} className="btn-secondary p-1.5 rounded-lg" title="Next Day">
               <ChevronRight className="w-4 h-4 text-on-surface" />
@@ -287,17 +309,20 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
         <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-medium px-4 py-2.5 rounded-xl shadow-xs">
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
           <span>
-            <strong>Admin Authority Override Mode:</strong> This date ({selectedDate}) is beyond the public customer window ({venue.max_advance_days || 14} days). All slots are dynamically open for administrative booking.
+            <strong>Admin Authority Override Mode:</strong> This date ({formatDateDDMMYYYY(selectedDate)}) is beyond the public customer window ({venue.max_advance_days || 14} days). All slots are dynamically open for administrative booking.
           </span>
         </div>
       )}
 
       {/* Grid Table */}
-      <div className="bg-white border border-outline-variant/40 rounded-xl overflow-x-auto shadow-sm">
-        <table className="w-full text-left border-collapse min-w-[700px]">
+      {isCalendarLoading || courts.length === 0 ? (
+        <CalendarTableSkeleton rows={10} columns={courts.length || 2} />
+      ) : (
+        <div className="bg-white border border-outline-variant/40 rounded-xl overflow-x-auto shadow-sm">
+          <table className="w-full text-left border-collapse min-w-[700px]">
           <thead>
             <tr className="bg-surface-container-low border-b border-outline-variant/40 text-xs font-headline font-bold text-on-surface-variant">
-              <th className="p-3 w-24 text-center border-r border-outline-variant/40">Time</th>
+              <th className="p-3 w-32 text-center border-r border-outline-variant/40">Time</th>
               {courts.map(court => (
                 <th key={court.id} className="p-3 border-r border-outline-variant/40 last:border-r-0">
                   <div className="font-headline font-bold text-on-surface text-sm">{court.name}</div>
@@ -307,11 +332,32 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
             </tr>
           </thead>
           <tbody>
-            {timeRows.map(timeStr => (
+            {timeRows.map(timeStr => {
+              const hour = parseInt(timeStr.split(':')[0], 10);
+              const isNight = hour >= 18 || hour < 5;
+
+              return (
               <tr key={timeStr} className="border-b border-outline-variant/30 hover:bg-surface-container-low/50">
                 {/* Time Column */}
-                <td className="p-3 font-mono text-xs text-center border-r border-outline-variant/40 font-bold bg-surface-container-low/30">
-                  {formatTime12h(timeStr)}
+                <td className="p-2.5 border-r border-outline-variant/40 bg-surface-container-low/30">
+                  <div className="flex items-center justify-center gap-2">
+                    <div
+                      className={`p-1.5 rounded-lg shrink-0 flex items-center justify-center ${
+                        isNight
+                          ? 'bg-indigo-50 text-indigo-500'
+                          : 'bg-amber-50 text-amber-500'
+                      }`}
+                    >
+                      {isNight ? (
+                        <Moon className="w-3.5 h-3.5" />
+                      ) : (
+                        <Sun className="w-3.5 h-3.5" />
+                      )}
+                    </div>
+                    <span className="font-mono text-xs font-bold text-gray-900 whitespace-nowrap">
+                      {formatTime12hPlain(timeStr)}
+                    </span>
+                  </div>
                 </td>
 
                 {/* Court Columns */}
@@ -369,7 +415,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
                           </div>
                           <div className="flex items-center justify-between text-[10px]">
                             <span className="font-mono font-bold bg-white/90 px-1 py-0.5 rounded border border-black/10 text-on-surface">
-                              OTP: {(booking.booking_ref || booking.id || '').slice(-4) || '----'}
+                              OTP: {getBookingGatePassOtp(booking)}
                             </span>
                             <span className="font-headline font-bold">₹{booking.total_amount || 0}</span>
                           </div>
@@ -422,10 +468,12 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
                   );
                 })}
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
+      )}
 
       {/* Booking Detail Drawer Modal */}
       {selectedBooking && (
@@ -443,7 +491,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
                 <span>Gate Verification OTP:</span>
               </div>
               <span className="font-mono font-black text-2xl tracking-[0.2em] bg-white text-on-secondary-container px-3 py-1 rounded shadow-sm border border-secondary-container/40">
-                {(selectedBooking.booking_ref || selectedBooking.id || '').slice(-4) || '----'}
+                {getBookingGatePassOtp(selectedBooking)}
               </span>
             </div>
 
@@ -451,7 +499,24 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
               <p className="text-on-surface-variant">Customer: <strong className="text-on-surface font-semibold">{store.getCustomers().find(c => c.id === selectedBooking.customer_id)?.name || selectedBooking.customer_name || 'Customer'}</strong></p>
               <p className="text-on-surface-variant">Phone: <strong className="text-on-surface font-semibold">{selectedBooking.customer_phone || store.getCustomers().find(c => c.id === selectedBooking.customer_id)?.phone || 'N/A'}</strong></p>
               <p className="text-on-surface-variant">Court: <strong className="text-on-surface font-semibold">{store.getCourts().find(c => c.id === selectedBooking.court_id)?.name || selectedBooking.court_id}</strong></p>
-              <p className="text-on-surface-variant">Date & Time: <strong className="text-primary font-bold">{formatDateDDMMYYYY(selectedBooking.booking_date)} | {formatTimeRange12hPlain(selectedBooking.start_time, selectedBooking.end_time)}</strong></p>
+              <p className="text-on-surface-variant flex items-center gap-1.5 flex-wrap">
+                <span>Date & Time:</span>
+                <span className="text-primary font-bold inline-flex items-center gap-1.5">
+                  <span>{formatDateDDMMYYYY(selectedBooking.booking_date)} |</span>
+                  <span className={`p-1 rounded-md shrink-0 inline-flex items-center justify-center ${
+                    parseInt(selectedBooking.start_time.split(':')[0], 10) >= 18 || parseInt(selectedBooking.start_time.split(':')[0], 10) < 5
+                      ? 'bg-indigo-50 text-indigo-500'
+                      : 'bg-amber-50 text-amber-500'
+                  }`}>
+                    {parseInt(selectedBooking.start_time.split(':')[0], 10) >= 18 || parseInt(selectedBooking.start_time.split(':')[0], 10) < 5 ? (
+                      <Moon className="w-3 h-3" />
+                    ) : (
+                      <Sun className="w-3 h-3" />
+                    )}
+                  </span>
+                  <span>{formatTimeRange12hPlain(selectedBooking.start_time, selectedBooking.end_time)}</span>
+                </span>
+              </p>
               <div className="flex items-center gap-1.5 text-on-surface-variant">
                 <span>Source:</span>
                 <span className={`px-2 py-0.5 rounded-full font-headline font-bold text-[10px] uppercase ${
@@ -487,25 +552,19 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
 
             <div className="space-y-2">
               <p className="text-xs font-headline font-bold text-on-surface-variant">Update Status & Actions:</p>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <button
                   onClick={() => handleUpdateStatus(selectedBooking.id, 'completed')}
-                  className="btn-primary text-xs py-2 flex items-center justify-center gap-1"
+                  className="btn-primary text-xs py-2 flex items-center justify-center gap-1 font-bold"
+                  title="Mark as Checked-in & Completed"
                 >
-                  <CheckCircle className="w-3.5 h-3.5" /> Completed
+                  <CheckCircle className="w-3.5 h-3.5" /> Complete
                 </button>
-                <button
-                  onClick={() => handleUpdateStatus(selectedBooking.id, 'no_show')}
-                  className="btn-secondary text-xs py-2 text-amber-700 flex items-center justify-center gap-1 font-bold"
-                >
-                  <UserCheck className="w-3.5 h-3.5 text-amber-700" /> No-Show
-                </button>
-              </div>
 
-              <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={() => handleUpdateStatus(selectedBooking.id, 'cancelled')}
                   className="py-2 text-xs bg-red-50 text-red-700 border border-red-200 rounded-lg font-bold hover:bg-red-100 flex items-center justify-center gap-1"
+                  title="Cancel Reservation"
                 >
                   <XCircle className="w-3.5 h-3.5" /> Cancel
                 </button>
@@ -516,8 +575,9 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
                     setSelectedBooking(null);
                   }}
                   className="py-2 text-xs bg-purple-50 text-purple-900 border border-purple-300 rounded-lg font-bold hover:bg-purple-100 flex items-center justify-center gap-1"
+                  title="Issue Refund"
                 >
-                  <RotateCcw className="w-3.5 h-3.5 text-purple-700" /> Issue Refund
+                  <RotateCcw className="w-3.5 h-3.5 text-purple-700" /> Refund
                 </button>
               </div>
             </div>

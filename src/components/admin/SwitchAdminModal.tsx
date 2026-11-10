@@ -39,78 +39,76 @@ export const SwitchAdminModal: React.FC<SwitchAdminModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-outline-variant/60 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto no-scrollbar">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4">
+      <div className="bg-white rounded-3xl p-3.5 sm:p-5 max-w-sm sm:max-w-md w-full border border-outline-variant/60 shadow-2xl space-y-2.5 animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
         {/* Header */}
-        <div className="flex justify-between items-start">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center font-bold text-xl shadow-xs">
+        <div className="flex justify-between items-center pb-1 border-b border-outline-variant/30">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-amber-100 text-amber-700 rounded-xl flex items-center justify-center font-bold text-base shadow-xs">
               🔐
             </div>
             <div>
-              <h3 className="font-headline font-bold text-base text-on-surface">Re-authenticate Account Switch</h3>
-              <p className="text-xs text-on-surface-variant">Security verification required for role change</p>
+              <h3 className="font-headline font-bold text-sm sm:text-base text-on-surface">Switch Account</h3>
+              <p className="text-[10px] text-on-surface-variant">Security verification required</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-on-surface-variant hover:text-on-surface p-1 rounded-full hover:bg-surface-container-high transition"
+            className="text-on-surface-variant hover:text-on-surface p-1 rounded-full hover:bg-surface-container-high transition cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Security Warning Notice */}
-        <div className="bg-amber-50 border border-amber-200 text-amber-800 p-3 rounded-2xl text-xs space-y-1">
-          <div className="font-headline font-bold flex items-center gap-1.5 text-amber-900">
-            <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0" /> Authorization Guard Active
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 p-2.5 rounded-xl text-[11px] space-y-0.5">
+          <div className="font-headline font-bold flex items-center gap-1 text-amber-900">
+            <ShieldAlert className="w-3.5 h-3.5 text-amber-600 shrink-0" /> Switching to {targetAdmin.name} ({targetAdmin.role.toUpperCase()})
           </div>
-          <p>
-            You are switching from <strong>{currentAdmin.name} ({currentAdmin.role.toUpperCase()})</strong> to{' '}
-            <strong>{targetAdmin.name} ({targetAdmin.role.toUpperCase()})</strong>. Please enter the password for{' '}
-            <span className="font-mono text-amber-900 font-bold">{targetAdmin.email}</span> to verify authorization.
+          <p className="leading-tight">
+            Enter password for <span className="font-mono text-amber-900 font-bold">{targetAdmin.email}</span>:
           </p>
         </div>
 
         {error && (
-          <div className="bg-error/10 border border-error/30 text-error p-3 rounded-2xl text-xs font-medium">
+          <div className="bg-error/10 border border-error/30 text-error p-2 rounded-xl text-xs font-medium">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleVerify} className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-xs font-headline font-bold text-on-surface-variant flex items-center gap-1.5">
-              <KeyRound className="w-3.5 h-3.5 text-primary" /> Password for {targetAdmin.name}
+        <form onSubmit={handleVerify} className="space-y-2.5">
+          <div className="space-y-0.5">
+            <label className="text-[11px] font-headline font-bold text-on-surface-variant flex items-center gap-1">
+              <KeyRound className="w-3 h-3 text-primary" /> Password
             </label>
             <input
               type="password"
               required
               value={password}
               onChange={e => setPassword(e.target.value)}
-              placeholder="Enter password (default: admin123 / manager123 / staff123)"
-              className="w-full px-4 py-2.5 rounded-2xl border border-outline-variant text-xs focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 bg-surface-container-lowest font-medium"
+              placeholder="Enter password (default: admin123 / manager123)"
+              className="w-full px-3 py-1.5 rounded-xl border border-outline-variant text-xs focus:outline-none focus:border-primary bg-surface-container-lowest font-medium"
             />
           </div>
 
-          <div className="flex gap-2 justify-end pt-2">
+          <div className="grid grid-cols-2 gap-2 pt-1 border-t border-outline-variant/30">
             <button
               type="button"
               onClick={onClose}
-              className="btn-secondary text-xs px-4 py-2.5 font-bold"
+              className="btn-secondary py-2 text-xs font-bold"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isLoading}
-              className="btn-cta text-xs px-5 py-2.5 font-headline font-bold flex items-center gap-1.5 shadow-md"
+              className="btn-cta py-2 text-xs font-headline font-bold uppercase tracking-wider flex items-center justify-center gap-1 shadow-sm cursor-pointer"
             >
               {isLoading ? (
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
               ) : (
                 <>
-                  <Check className="w-4 h-4" /> Confirm & Switch Role
+                  <Check className="w-3.5 h-3.5" /> Confirm
                 </>
               )}
             </button>

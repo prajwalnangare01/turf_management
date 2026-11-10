@@ -39,14 +39,25 @@ export class SlotEngine {
     const dayOfWeek = slotDate.getDay(); // 0 = Sun, 6 = Sat
 
     // Base pricing based on day of week
+    // Check if promotional offer is active for dateStr (optional end date)
+    const isOfferActiveForDate = !court.offer_end_date || dateStr <= court.offer_end_date;
+
     let baseRate = court.base_price_per_hour;
-    let baseOriginalRate = (court.original_price_per_hour && court.original_price_per_hour > court.base_price_per_hour)
-      ? court.original_price_per_hour
-      : undefined;
+    let baseOriginalRate = undefined;
+
+    if (isOfferActiveForDate) {
+      if (court.original_price_per_hour && court.original_price_per_hour > court.base_price_per_hour) {
+        baseOriginalRate = court.original_price_per_hour;
+      }
+    } else {
+      if (court.original_price_per_hour && court.original_price_per_hour > court.base_price_per_hour) {
+        baseRate = court.original_price_per_hour;
+      }
+    }
 
     if (dayOfWeek === 6 && court.saturday_price_per_hour !== undefined) {
       const satRate = court.saturday_price_per_hour;
-      const satOffer = court.saturday_offer_price_per_hour;
+      const satOffer = isOfferActiveForDate ? court.saturday_offer_price_per_hour : undefined;
       if (satOffer !== undefined && satOffer > 0 && satOffer !== satRate) {
         baseRate = Math.min(satRate, satOffer);
         baseOriginalRate = Math.max(satRate, satOffer);
@@ -56,7 +67,7 @@ export class SlotEngine {
       }
     } else if (dayOfWeek === 0 && court.sunday_price_per_hour !== undefined) {
       const sunRate = court.sunday_price_per_hour;
-      const sunOffer = court.sunday_offer_price_per_hour;
+      const sunOffer = isOfferActiveForDate ? court.sunday_offer_price_per_hour : undefined;
       if (sunOffer !== undefined && sunOffer > 0 && sunOffer !== sunRate) {
         baseRate = Math.min(sunRate, sunOffer);
         baseOriginalRate = Math.max(sunRate, sunOffer);
@@ -93,8 +104,9 @@ export class SlotEngine {
         const pEnd = this.timeToMinutes(court.peak_end_time);
         if (cursor >= pStart && cursor < pEnd) {
           const pkRate = court.peak_price_per_hour;
-          const pkOffer = court.peak_offer_price_per_hour;
-          if (pkOffer !== undefined && pkOffer > 0 && pkOffer !== pkRate) {
+          const pkOffer = isOfferActiveForDate ? court.peak_offer_price_per_hour : undefined;
+
+          if (isOfferActiveForDate && pkOffer !== undefined && pkOffer > 0 && pkOffer !== pkRate) {
             slotPrice = Math.min(pkRate, pkOffer);
             slotOriginalPrice = Math.max(pkRate, pkOffer);
           } else {

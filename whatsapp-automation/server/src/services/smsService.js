@@ -159,7 +159,7 @@ export class SmsService {
     const venue = store.getVenue();
     const court = store.getCourts().find(c => c.id === booking.court_id);
     const courtName = court?.name || 'Pitch';
-    const otpCode = booking.booking_ref ? booking.booking_ref.slice(-4) : '0000';
+    const otpCode = WhatsAppFormatter.getBookingGatePassOtp(booking);
     const recipientPhone = booking.customer_phone || booking?.phone || '9876543210';
 
     const message =
@@ -184,11 +184,12 @@ export class SmsService {
     const venue = store.getVenue();
     const court = store.getCourts().find(c => c.id === booking.court_id);
     const courtName = court?.name || 'Pitch';
-    const otpCode = booking.booking_ref ? booking.booking_ref.slice(-4) : '0000';
+    const otpCode = WhatsAppFormatter.getBookingGatePassOtp(booking);
     const recipientPhone = booking.customer_phone || booking?.phone || '9876543210';
 
     const message =
       `⏰ Kickoff Reminder: Your game at ${venue.name} starts in 1 hour (${WhatsAppFormatter.formatTime(booking.start_time)})!\n` +
+      `Date: ${WhatsAppFormatter.formatDate(booking.booking_date)}\n` +
       `Court: ${courtName}\n` +
       `Gate Pass OTP: ${otpCode}\n` +
       `Address: ${venue.address}\n` +

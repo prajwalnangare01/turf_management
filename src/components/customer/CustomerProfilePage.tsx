@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import { store } from '../../services/store';
 import { PostgresEngine } from '../../services/postgresEngine';
 import { Customer, Booking } from '../../types/schema';
-import { formatTimeRange12h, formatDateDDMMYYYY } from '../../utils/formatters';
+import { formatTimeRange12h, formatTime12hPlain, formatDateDDMMYYYY, formatPhoneNumber, getBookingGatePassOtp, getBookingGroupRef } from '../../utils/formatters';
+import { TimeOfDayIcon } from '../common/TimeOfDayIcon';
 import { CancelBookingConfirmModal } from './CancelBookingConfirmModal';
 import { 
   User, Phone, Mail, Calendar, ArrowLeft, ShieldCheck, Ticket, 
   XCircle, CheckCircle2, Clock, Award, LogOut, Edit2, Save, X, KeyRound, RotateCcw,
-  Download, Printer, AlertCircle, Sparkles
+  Download, Printer, AlertCircle, Sparkles, Trophy, CreditCard, Tag, AlertTriangle, FileDown,
+  Sun, Moon, MapPin
 } from 'lucide-react';
 import { EmailVerificationService } from '../../services/emailVerificationService';
 import { CustomerAuthService } from '../../services/customerAuthService';
@@ -273,15 +275,57 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
   const handleDownloadPdf = async (booking: Booking) => {
     setIsDownloadingPdf(true);
     try {
-      // 1. Try GET /api/bookings/:ref/pass.pdf
-      let res = await fetch(`/api/bookings/${booking.booking_ref}/pass.pdf`);
-      // 2. If not found in server cache, fallback to POST with client booking payload
+      const allBookings = store.getBookings();
+      const groupRef = getBookingGroupRef(booking);
+      const siblingBookings = allBookings.filter(b => 
+        getBookingGroupRef(b) === groupRef ||
+        (b.group_ref && b.group_ref === groupRef) || 
+        b.booking_ref === groupRef || 
+        (booking.gateway_payment_id && booking.gateway_payment_id !== '' && b.gateway_payment_id === booking.gateway_payment_id)
+      );
+      const allSlots = (booking.all_slots && booking.all_slots.length > 0)
+        ? booking.all_slots
+        : Array.from(new Map(siblingBookings.map(b => [`${b.start_time}-${b.end_time}`, {
+            start_time: b.start_time,
+            end_time: b.end_time,
+            price: b.total_amount
+          }])).values()).sort((a, b) => a.start_time.localeCompare(b.start_time));
+
+      const grandTotal = booking.total_order_amount ?? (
+        siblingBookings.length > 0 
+          ? siblingBookings.reduce((sum, b) => sum + (b.total_amount || 0), 0)
+          : booking.total_amount
+      );
+      const formattedSlots = booking.formatted_slots || 
+        allSlots.map(s => formatTimeRange12h(s.start_time, s.end_time)).join(', ');
+      const otpCode = getBookingGatePassOtp(booking);
+      const court = courts.find(c => c.id === booking.court_id);
+
+      const fullPayload = {
+        ...booking,
+        booking_ref: groupRef,
+        group_ref: groupRef,
+        court_name: court?.name || 'Turf Pitch',
+        sport_name: court?.sport_ids?.join(' / ') || 'Football',
+        customer_name: currentCustomer.name,
+        customer_phone: currentCustomer.phone,
+        gate_pass_otp: otpCode,
+        total_amount: grandTotal,
+        total_order_amount: grandTotal,
+        all_slots: allSlots,
+        formatted_slots: formattedSlots
+      };
+
+      // 1. Try POST /api/bookings/generate-pass-pdf with complete multi-slot payload
+      let res = await fetch('/api/bookings/generate-pass-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ booking: fullPayload })
+      });
+
+      // 2. Fallback to GET endpoint
       if (!res.ok) {
-        res = await fetch('/api/bookings/generate-pass-pdf', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ booking })
-        });
+        res = await fetch(`/api/bookings/${groupRef}/pass.pdf`);
       }
 
       if (res.ok) {
@@ -289,7 +333,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `GatePass-${booking.booking_ref}.pdf`;
+        a.download = `GatePass-${groupRef}.pdf`;
         document.body.appendChild(a);
         a.click();
         setTimeout(() => {
@@ -301,7 +345,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
       throw new Error(`PDF generation response status ${res.status}`);
     } catch (err) {
       console.warn('PDF download failed, opening printable pass fallback:', err);
-      window.open(`/api/bookings/${booking.booking_ref}/pass`, '_blank');
+      window.open(`/api/bookings/${booking.group_ref || booking.booking_ref}/pass`, '_blank');
     } finally {
       setIsDownloadingPdf(false);
     }
@@ -515,8 +559,8 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
                     {/* Header bar of booking card */}
                     <div className="flex justify-between items-start">
                       <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-extrabold text-xs text-primary">{b.booking_ref}</span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono font-extrabold text-xs text-primary">{b.group_ref || b.booking_ref}</span>
                           <span
                             className={`badge ${
                               b.status === 'confirmed'
@@ -530,13 +574,18 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
                           >
                             {b.status.replace('_', ' ').toUpperCase()}
                           </span>
+                          {b.all_slots && b.all_slots.length > 1 && (
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                              {b.all_slots.length} Slots Pass
+                            </span>
+                          )}
                         </div>
                         <h4 className="font-headline font-bold text-base text-on-surface mt-1 flex items-center gap-1.5">
                           <span>{sport?.icon || '⚽'}</span> {court?.name || 'Turf Court'}
                         </h4>
                       </div>
                       <div className="text-right">
-                        <p className="font-headline font-extrabold text-lg text-primary">₹{b.total_amount}</p>
+                        <p className="font-headline font-extrabold text-lg text-primary">₹{b.total_order_amount ?? b.total_amount}</p>
                         {b.status === 'refunded' && b.refund_amount !== undefined && (
                           <span className="block text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 mt-0.5">
                             Refund: ₹{b.refund_amount}
@@ -561,8 +610,22 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
                       <div className="flex items-center gap-2">
                         <Clock className="w-4 h-4 text-primary shrink-0" />
                         <div>
-                          <span className="text-[10px] font-headline font-bold text-on-surface-variant uppercase block">Slot Session</span>
-                          <span className="font-bold text-on-surface">{formatTimeRange12h(b.start_time, b.end_time)}</span>
+                          <span className="text-[10px] font-headline font-bold text-on-surface-variant uppercase block">
+                            {b.all_slots && b.all_slots.length > 1 ? `Slot Sessions (${b.all_slots.length})` : 'Slot Session'}
+                          </span>
+                          <div className="font-bold text-on-surface flex items-center gap-1">
+                            {b.formatted_slots ? (
+                              <span>{b.formatted_slots}</span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1">
+                                <TimeOfDayIcon time24={b.start_time} className="w-3.5 h-3.5" />
+                                <span>{formatTime12hPlain(b.start_time)}</span>
+                                <span>–</span>
+                                <TimeOfDayIcon time24={b.end_time} className="w-3.5 h-3.5" />
+                                <span>{formatTime12hPlain(b.end_time)}</span>
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -597,246 +660,272 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
       </main>
 
       {/* Entry Pass & Receipt Modal */}
-      {passModalBooking && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto no-scrollbar">
-          <div className="bg-white rounded-3xl max-w-xl w-full border border-outline-variant/60 shadow-2xl overflow-hidden animate-in zoom-in-95 my-auto">
-            
-            {/* Header with Title & Close Button (No PDF View switch) */}
-            <div className="bg-[#006b30] text-white p-4 sm:p-5 flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center text-white">
-                  <Ticket className="w-5 h-5 text-white" />
+      {passModalBooking && (() => {
+        const allBookings = store.getBookings();
+        const passGroupRef = getBookingGroupRef(passModalBooking);
+        const passSiblingBookings = allBookings.filter(b => 
+          getBookingGroupRef(b) === passGroupRef ||
+          (b.group_ref && b.group_ref === passGroupRef) || 
+          b.booking_ref === passGroupRef || 
+          (passModalBooking.gateway_payment_id && passModalBooking.gateway_payment_id !== '' && b.gateway_payment_id === passModalBooking.gateway_payment_id)
+        );
+
+        const passSlots: Array<{ start_time: string; end_time: string; price?: number }> = 
+          (passModalBooking.all_slots && passModalBooking.all_slots.length > 0)
+            ? passModalBooking.all_slots
+            : Array.from(new Map(passSiblingBookings.map(b => [`${b.start_time}-${b.end_time}`, {
+                start_time: b.start_time,
+                end_time: b.end_time,
+                price: b.total_amount
+              }])).values()).sort((a, b) => a.start_time.localeCompare(b.start_time));
+
+        const passGrandTotal = passModalBooking.total_order_amount ?? (
+          passSiblingBookings.length > 0 
+            ? passSiblingBookings.reduce((sum, b) => sum + (b.total_amount || 0), 0)
+            : passModalBooking.total_amount
+        );
+
+        const passOtpCode = getBookingGatePassOtp(passModalBooking);
+
+        const court = courts.find(c => c.id === passModalBooking.court_id);
+
+        return (
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4">
+            <div className="bg-white rounded-3xl max-w-md w-full border border-outline-variant/60 shadow-2xl overflow-hidden animate-in zoom-in-95 my-auto">
+              
+              {/* Header with Title & Close Button */}
+              <div className="bg-[#006b30] text-white px-3.5 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-white/15 flex items-center justify-center text-white">
+                    <Ticket className="w-4 h-4 text-white" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <h3 className="font-headline font-bold text-sm sm:text-base text-white leading-tight">
+                        Entry Pass & Receipt
+                      </h3>
+                      {passSlots.length > 1 && (
+                        <span className="bg-white/20 text-white text-[9.5px] font-bold px-1.5 py-0.2 rounded-full">
+                          {passSlots.length} Slots
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-white/80 font-mono">
+                      Ref: {passGroupRef}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-headline font-bold text-base text-white leading-tight">
-                    Official Venue Entry Pass & Receipt
-                  </h3>
-                  <p className="text-[11px] text-white/80 font-mono mt-0.5">
-                    Ref: {passModalBooking.booking_ref}
+
+                <button 
+                  onClick={() => setPassModalBooking(null)} 
+                  className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition cursor-pointer"
+                  title="Close"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Modal Body: Clean Structured Ticket Card */}
+              <div className="p-3 sm:p-4 space-y-2.5 text-xs overflow-hidden">
+                
+                {/* 4-Digit Gate Check-in OTP Box */}
+                <div className="bg-[#fffbeb] border-2 border-dashed border-[#f59e0b] rounded-xl p-2.5 text-center">
+                  <span className="text-[9.5px] font-headline font-extrabold text-[#92400e] uppercase tracking-wider flex items-center justify-center gap-1">
+                    <KeyRound className="w-3 h-3 text-[#b45309]" />
+                    <span>4-Digit Common Gate Pass</span>
+                    <Ticket className="w-3 h-3 text-[#b45309]" />
+                  </span>
+                  <div className="text-2xl sm:text-3xl font-mono font-black tracking-[6px] text-[#b45309] my-0.5">
+                    {passOtpCode}
+                  </div>
+                  <p className="text-[10px] text-[#92400e] font-medium leading-tight">
+                    {passSlots.length > 1
+                      ? `Single pass valid for all ${passSlots.length} reserved sessions`
+                      : 'Show this 4-digit code or your PDF pass at the gate.'}
                   </p>
                 </div>
+
+                {/* Details Grid */}
+                <div className="bg-surface-container-low rounded-xl p-2.5 border border-outline-variant/40 grid grid-cols-2 gap-2 text-left text-xs">
+                  <div>
+                    <span className="text-[9.5px] font-bold text-on-surface-variant uppercase tracking-wider flex items-center gap-1">
+                      <Trophy className="w-3 h-3 text-primary" /> Pitch
+                    </span>
+                    <span className="font-headline font-bold text-on-surface text-xs truncate block mt-0.5">
+                      {court?.name || 'Pitch'}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-[9.5px] font-bold text-on-surface-variant uppercase tracking-wider flex items-center gap-1">
+                      <Calendar className="w-3 h-3 text-primary" /> Date & Time
+                    </span>
+                    <span className="font-medium text-on-surface text-xs block mt-0.5 truncate">
+                      {formatDateDDMMYYYY(passModalBooking.booking_date)}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-[9.5px] font-bold text-on-surface-variant uppercase tracking-wider flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-primary" /> Timing
+                    </span>
+                    <span className="font-medium text-primary text-xs block mt-0.5 truncate">
+                      {passSlots.length > 1 ? `${passSlots.length} Sessions` : formatTime12hPlain(passModalBooking.start_time)}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-[9.5px] font-bold text-on-surface-variant uppercase tracking-wider flex items-center gap-1">
+                      <CreditCard className="w-3 h-3 text-primary" /> Total Paid
+                    </span>
+                    <span className="font-headline font-extrabold text-[#006b30] text-xs sm:text-sm block mt-0.5">
+                      ₹{passGrandTotal} (PAID)
+                    </span>
+                  </div>
+                </div>
+
+                {/* Multi-slot sessions breakdown if more than 1 slot */}
+                {passSlots.length > 1 && (
+                  <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/80 space-y-1.5 text-left">
+                    <div className="flex items-center justify-between text-[10px] font-headline font-bold text-slate-600 uppercase tracking-wider">
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-[#006b30]" /> All Reserved Sessions ({passSlots.length})
+                      </span>
+                      <span className="text-[#006b30] font-black">Valid with Single OTP</span>
+                    </div>
+                    <div className="space-y-1">
+                      {passSlots.map((s, idx) => (
+                        <div key={idx} className="flex items-center justify-between px-2 py-1 rounded-lg bg-white border border-slate-200/60 text-xs">
+                          <span className="font-semibold text-slate-800 flex items-center gap-1.5">
+                            <TimeOfDayIcon time24={s.start_time} className="w-3.5 h-3.5" />
+                            <span>{formatTime12hPlain(s.start_time)} – {formatTime12hPlain(s.end_time)}</span>
+                          </span>
+                          {s.price != null && (
+                            <span className="font-headline font-bold text-[#006b30] text-xs">₹{s.price}</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Venue Location Line */}
+                <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-200 text-left text-[10.5px] text-slate-600">
+                  <MapPin className="w-3 h-3 text-primary shrink-0" />
+                  <span className="truncate">{venue.name} • {venue.address}</span>
+                </div>
+
+                {/* Actions: Download PDF, Print & Close Buttons */}
+                <div className="pt-0.5 space-y-1.5">
+                  <button
+                    onClick={() => handleDownloadPdf(passModalBooking)}
+                    disabled={isDownloadingPdf}
+                    className="btn-cta w-full py-2 text-xs font-headline font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-60 cursor-pointer"
+                  >
+                    <Download className={`w-3.5 h-3.5 ${isDownloadingPdf ? 'animate-bounce' : ''}`} /> 
+                    {isDownloadingPdf ? 'Generating PDF...' : 'Download PDF Gate Pass'}
+                  </button>
+
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      onClick={() => {
+                        const printWin = window.open(`/api/bookings/${passGroupRef}/pass`, '_blank');
+                        if (printWin) {
+                          printWin.focus();
+                        }
+                      }}
+                      className="btn-secondary py-1.5 text-xs font-headline font-bold flex items-center justify-center gap-1 border-slate-300 cursor-pointer"
+                    >
+                      <Printer className="w-3 h-3 text-slate-700" /> Print
+                    </button>
+
+                    <button
+                      onClick={() => setPassModalBooking(null)}
+                      className="py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-200 rounded-xl transition cursor-pointer text-center"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+
               </div>
 
-              <button 
-                onClick={() => setPassModalBooking(null)} 
-                className="text-white/80 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition"
-                title="Close"
-              >
-                <X className="w-5 h-5" />
-              </button>
             </div>
-
-            {/* Modal Body: Clean Structured Ticket Card */}
-            <div 
-              className="p-5 sm:p-6 space-y-4 max-h-[75vh] overflow-y-auto no-scrollbar"
-              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-            >
-              
-              {/* 4-Digit Gate Check-in OTP Box */}
-              <div className="bg-[#fffbeb] border-2 border-dashed border-[#f59e0b] rounded-2xl p-4 text-center">
-                <span className="text-[10px] font-headline font-extrabold text-[#92400e] uppercase tracking-wider block">
-                  4-Digit Gate Check-in OTP Pass
-                </span>
-                <div className="text-3xl sm:text-4xl font-mono font-black tracking-[8px] text-[#b45309] my-1.5">
-                  {passModalBooking.booking_ref.slice(-4)}
-                </div>
-                <p className="text-[11px] text-[#92400e] font-medium">
-                  Show this 4-digit code or your PDF pass to the gate manager for pitch entry.
-                </p>
-              </div>
-
-              {/* Details Grid */}
-              <div className="bg-surface-container-low rounded-2xl p-4 border border-outline-variant/40 grid grid-cols-2 gap-3.5 text-left text-xs">
-                <div>
-                  <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider block mb-0.5">
-                    Booking Reference
-                  </span>
-                  <span className="font-mono font-bold text-primary text-sm">
-                    {passModalBooking.booking_ref}
-                  </span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider block mb-0.5">
-                    Reserved Pitch
-                  </span>
-                  <span className="font-headline font-bold text-on-surface text-xs">
-                    {courts.find(c => c.id === passModalBooking.court_id)?.name || 'Main Pitch'}
-                  </span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider block mb-0.5">
-                    Match Date
-                  </span>
-                  <span className="font-medium text-on-surface">
-                    {formatDateDDMMYYYY(passModalBooking.booking_date)}
-                  </span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider block mb-0.5">
-                    Slot Timing
-                  </span>
-                  <span className="font-medium text-on-surface">
-                    {formatTimeRange12h(passModalBooking.start_time, passModalBooking.end_time)}
-                  </span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider block mb-0.5">
-                    Customer Details
-                  </span>
-                  <span className="font-medium text-on-surface block">
-                    {currentCustomer.name}
-                  </span>
-                  <span className="text-[11px] text-on-surface-variant font-mono">
-                    +91 {currentCustomer.phone}
-                  </span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider block mb-0.5">
-                    Total Paid
-                  </span>
-                  <span className="font-headline font-extrabold text-[#006b30] text-sm">
-                    ₹{passModalBooking.total_amount} (PAID)
-                  </span>
-                  <span className="text-[10px] text-emerald-700 font-bold block">
-                    ✓ Verified (Razorpay UPI)
-                  </span>
-                </div>
-              </div>
-
-              {/* Venue Location & Guidelines */}
-              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-left text-[11px] text-slate-600 space-y-1">
-                <p><strong className="text-slate-800">Venue Location:</strong> {venue.address}</p>
-                <p><strong className="text-slate-800">Helpdesk:</strong> {venue.contact_phone} | <strong className="text-slate-800">GSTIN:</strong> {venue.gst_number || '27AABCT1234F1Z0'}</p>
-                <p className="text-[#006b30] font-medium">⚠️ Turf shoes / flat rubber soles only. Please arrive 10 minutes early.</p>
-              </div>
-
-            </div>
-
-            {/* Footer with Download PDF, Print & Close Buttons */}
-            <div className="p-4 sm:p-5 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2.5">
-              <div className="flex items-center gap-2">
-                {/* Download PDF Pass Option */}
-                <button
-                  onClick={() => handleDownloadPdf(passModalBooking)}
-                  disabled={isDownloadingPdf}
-                  className="btn-cta text-xs px-4 py-2.5 font-headline font-bold flex items-center gap-1.5 shadow-sm disabled:opacity-60 cursor-pointer"
-                >
-                  <Download className={`w-4 h-4 ${isDownloadingPdf ? 'animate-bounce' : ''}`} /> 
-                  {isDownloadingPdf ? 'Downloading PDF...' : 'Download PDF Pass'}
-                </button>
-
-                {/* Print / View Pass Option */}
-                <button
-                  onClick={() => {
-                    const printWin = window.open(`/api/bookings/${passModalBooking.booking_ref}/pass`, '_blank');
-                    if (printWin) {
-                      printWin.focus();
-                    }
-                  }}
-                  className="btn-secondary text-xs px-3.5 py-2.5 font-headline font-bold flex items-center gap-1.5 border-slate-300 cursor-pointer"
-                >
-                  <Printer className="w-4 h-4 text-slate-700" /> Print Pass
-                </button>
-
-              </div>
-
-              <button
-                onClick={() => setPassModalBooking(null)}
-                className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-200 transition cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
-
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Resend Email OTP Verification Modal for Profile Update */}
       {isVerifyingEmail && (
         <div className="modal-overlay">
-          <div className="bg-white border border-outline-variant rounded-3xl w-full max-w-md p-6 shadow-2xl animate-modalScaleIn text-on-surface space-y-4 max-h-[90vh] overflow-y-auto no-scrollbar">
-            <div className="flex justify-between items-center pb-2 border-b border-outline-variant/40">
+          <div className="bg-white border border-outline-variant rounded-3xl w-full max-w-sm p-3.5 sm:p-5 shadow-2xl animate-modalScaleIn text-on-surface space-y-2.5 overflow-hidden">
+            <div className="flex justify-between items-center pb-1.5 border-b border-outline-variant/40">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold">
+                <div className="w-7 h-7 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">
                   🛡️
                 </div>
                 <div>
-                  <h3 className="font-headline font-bold text-base text-primary">Verify New Email</h3>
-                  <p className="text-[11px] text-on-surface-variant font-medium">Confirmation code sent via Resend</p>
+                  <h3 className="font-headline font-bold text-sm sm:text-base text-primary">Verify New Email</h3>
+                  <p className="text-[10px] text-on-surface-variant font-medium">Confirmation code sent via Resend</p>
                 </div>
               </div>
               <button
                 onClick={() => setIsVerifyingEmail(false)}
-                className="text-on-surface-variant hover:text-on-surface p-1 rounded-full hover:bg-surface-container"
+                className="text-on-surface-variant hover:text-on-surface p-1 rounded-full hover:bg-surface-container cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <p className="text-xs text-on-surface-variant leading-relaxed">
-              We've dispatched a 6-digit verification code to <strong>{emailInput}</strong> via Resend. Enter it below to verify and complete your profile email update:
+            <p className="text-[11px] text-on-surface-variant leading-tight">
+              We dispatched a 6-digit code to <strong>{emailInput}</strong> via Resend.
             </p>
 
             {emailOtpNotice && (
-              <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3 rounded-2xl text-xs font-medium flex items-start gap-2">
-                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                <span className="leading-relaxed">{emailOtpNotice}</span>
+              <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-2 rounded-xl text-[10px] font-medium flex items-center gap-1.5">
+                <ShieldCheck className="w-3 h-3 text-emerald-600 shrink-0" />
+                <span className="truncate">{emailOtpNotice}</span>
               </div>
             )}
 
             {emailOtpError && (
-              <div className="bg-error/10 border border-error/30 text-error p-3 rounded-2xl text-xs font-medium flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{emailOtpError}</span>
+              <div className="bg-error/10 border border-error/30 text-error p-2 rounded-xl text-[10px] font-medium flex items-center gap-1.5">
+                <AlertCircle className="w-3 h-3 shrink-0" />
+                <span className="truncate">{emailOtpError}</span>
               </div>
             )}
 
-            <div className="space-y-1 bg-surface-container-low p-3.5 rounded-2xl border border-outline-variant/40">
-              <label className="font-headline font-bold text-xs text-on-surface-variant flex items-center justify-between">
+            <div className="space-y-0.5 bg-surface-container-low p-2.5 rounded-xl border border-outline-variant/40">
+              <div className="flex items-center justify-between text-[10px] font-headline font-bold text-on-surface-variant">
                 <span className="flex items-center gap-1">
-                  <KeyRound className="w-3.5 h-3.5 text-secondary" /> 6-Digit Code *
+                  <KeyRound className="w-3 h-3 text-secondary" /> 6-Digit Code *
                 </span>
-                <span className="text-[10px] text-primary font-mono font-bold">Demo: 123456</span>
-              </label>
+                <span className="text-primary font-mono">Demo: 123456</span>
+              </div>
               <input
                 type="text"
                 maxLength={6}
                 value={emailOtpCode}
                 onChange={e => setEmailOtpCode(e.target.value)}
-                placeholder="Enter 6-digit OTP"
-                className="w-full px-4 py-2.5 rounded-xl border border-outline-variant focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 bg-white font-mono font-extrabold tracking-[0.3em] text-center text-sm"
+                placeholder="123456"
+                className="w-full px-3 py-1.5 rounded-xl border border-outline-variant focus:outline-none focus:border-primary bg-white font-mono font-extrabold tracking-[0.3em] text-center text-sm"
               />
             </div>
 
-            <div className="flex gap-2 pt-2">
+            <div className="flex gap-2 pt-1">
               <button
                 type="button"
                 onClick={handleConfirmEmailOtp}
                 disabled={isConfirmingEmailOtp}
-                className="btn-cta flex-1 py-2.5 text-xs font-headline font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md"
+                className="btn-cta flex-1 py-2 text-xs font-headline font-bold uppercase tracking-wider flex items-center justify-center gap-1 shadow-sm cursor-pointer"
               >
                 {isConfirmingEmailOtp ? (
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 ) : (
                   <>
-                    <CheckCircle2 className="w-4 h-4" /> Verify & Save Email
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Verify & Save
                   </>
                 )}
-              </button>
-
-              <button
-                type="button"
-                onClick={handleResendEmailOtp}
-                disabled={isSendingEmailOtp}
-                className="btn-secondary px-3.5 py-2.5 text-xs font-bold whitespace-nowrap"
-              >
-                {isSendingEmailOtp ? 'Sending...' : 'Resend'}
               </button>
             </div>
           </div>

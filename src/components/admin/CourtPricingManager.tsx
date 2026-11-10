@@ -5,6 +5,7 @@ import { PostgresEngine } from '../../services/postgresEngine';
 import { SupabaseSyncService } from '../../services/supabaseSyncService';
 import { AdminUser, Court, BlockedSlot, Sport } from '../../types/schema';
 import { ConfirmModal } from '../common/ConfirmModal';
+import { PitchGridSkeleton } from '../common/SkeletonLoaders';
 import { Settings, ShieldAlert, Trash2, PlusCircle, Edit3, X, Check, Calendar, Zap, Clock, AlertTriangle, Tag, Sparkles, Percent, RotateCcw } from 'lucide-react';
 import { formatTime12hPlain, formatDateDDMMYYYY } from '../../utils/formatters';
 
@@ -161,6 +162,7 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
   const [newPeakEnd, setNewPeakEnd] = useState('23:00');
   const [newPeakPrice, setNewPeakPrice] = useState(1800);
   const [newPeakOfferPrice, setNewPeakOfferPrice] = useState<number | ''>('');
+  const [newOfferEndDate, setNewOfferEndDate] = useState<string>('');
   const [newDuration, setNewDuration] = useState(60);
   const [newOpening, setNewOpening] = useState('06:00');
   const [newClosing, setNewClosing] = useState('23:00');
@@ -182,6 +184,7 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
   const [editPeakEnd, setEditPeakEnd] = useState('23:00');
   const [editPeakPrice, setEditPeakPrice] = useState(1800);
   const [editPeakOfferPrice, setEditPeakOfferPrice] = useState<number | ''>('');
+  const [editOfferEndDate, setEditOfferEndDate] = useState<string>('');
   const [editDuration, setEditDuration] = useState(60);
   const [editOpening, setEditOpening] = useState('06:00');
   const [editClosing, setEditClosing] = useState('23:00');
@@ -201,6 +204,7 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
   const [showOccasionOfferModal, setShowOccasionOfferModal] = useState(false);
   const [offerPercentage, setOfferPercentage] = useState<number>(10);
   const [offerOccasionName, setOfferOccasionName] = useState<string>('');
+  const [offerEndDate, setOfferEndDate] = useState<string>('');
   const [selectedCourtIdsForOffer, setSelectedCourtIdsForOffer] = useState<string[]>([]);
   const [offerRateTypes, setOfferRateTypes] = useState({
     weekday: true,
@@ -210,16 +214,32 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
   });
   const [isApplyingOffer, setIsApplyingOffer] = useState(false);
 
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  const getUpcomingSundayDate = () => {
+    const d = new Date();
+    const day = d.getDay();
+    const diff = (7 - day) % 7;
+    d.setDate(d.getDate() + (diff === 0 ? 7 : diff));
+    return d.toISOString().split('T')[0];
+  };
+
+  const getFutureDateString = (daysAhead: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + daysAhead);
+    return d.toISOString().split('T')[0];
+  };
+
   // Helper: check if a court currently has any promotional offer active
   const isCourtOfferActive = (c: Court) => {
-    const hasWeekdayOffer = Boolean(c.original_price_per_hour && c.original_price_per_hour > c.base_price_per_hour);
-    const satBase = c.saturday_price_per_hour ?? c.base_price_per_hour;
-    const hasSatOffer = Boolean(c.saturday_offer_price_per_hour && c.saturday_offer_price_per_hour > 0 && c.saturday_offer_price_per_hour !== satBase);
-    const sunBase = c.sunday_price_per_hour ?? c.base_price_per_hour;
-    const hasSunOffer = Boolean(c.sunday_offer_price_per_hour && c.sunday_offer_price_per_hour > 0 && c.sunday_offer_price_per_hour !== sunBase);
-    const peakBase = c.peak_price_per_hour ?? 1800;
-    const hasPeakOffer = Boolean(c.peak_enabled && c.peak_offer_price_per_hour && c.peak_offer_price_per_hour > 0 && c.peak_offer_price_per_hour !== peakBase);
-    return hasWeekdayOffer || hasSatOffer || hasSunOffer || hasPeakOffer;
+    const hasOfferRates = Boolean(
+      (c.original_price_per_hour && c.original_price_per_hour > c.base_price_per_hour) ||
+      (c.saturday_offer_price_per_hour && c.saturday_offer_price_per_hour > 0 && c.saturday_offer_price_per_hour !== (c.saturday_price_per_hour ?? c.base_price_per_hour)) ||
+      (c.sunday_offer_price_per_hour && c.sunday_offer_price_per_hour > 0 && c.sunday_offer_price_per_hour !== (c.sunday_price_per_hour ?? c.base_price_per_hour)) ||
+      (c.peak_enabled && c.peak_offer_price_per_hour && c.peak_offer_price_per_hour > 0 && c.peak_offer_price_per_hour !== (c.peak_price_per_hour ?? 1800))
+    );
+    const isNotExpired = !c.offer_end_date || c.offer_end_date >= todayStr;
+    return hasOfferRates && isNotExpired;
   };
 
   const activeOfferCourts = courts.filter(isCourtOfferActive);
@@ -250,7 +270,7 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
 
     // Peak hours calculation
     const basePeak = court.peak_price_per_hour ?? 1800;
-    const newPeakOfferPrice = (types.peak && court.peak_enabled)
+    const newPeakOfferPrice = types.peak
       ? Math.round(basePeak * discountRatio)
       : court.peak_offer_price_per_hour;
 
@@ -295,7 +315,9 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
           original_price_per_hour: calc.newOriginalPrice,
           saturday_offer_price_per_hour: calc.newSatOfferPrice,
           sunday_offer_price_per_hour: calc.newSunOfferPrice,
-          peak_offer_price_per_hour: calc.newPeakOfferPrice
+          peak_enabled: offerRateTypes.peak ? true : court.peak_enabled,
+          peak_offer_price_per_hour: calc.newPeakOfferPrice,
+          offer_end_date: offerEndDate.trim() ? offerEndDate.trim() : undefined
         };
 
         SupabaseSyncService.syncCourtToSupabase(updated).catch(err => {
@@ -342,7 +364,8 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
       original_price_per_hour: undefined,
       saturday_offer_price_per_hour: undefined,
       sunday_offer_price_per_hour: undefined,
-      peak_offer_price_per_hour: undefined
+      peak_offer_price_per_hour: undefined,
+      offer_end_date: undefined
     };
 
     const updatedCourts = courts.map(c => c.id === courtId ? updatedCourt : c);
@@ -382,7 +405,8 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
         original_price_per_hour: undefined,
         saturday_offer_price_per_hour: undefined,
         sunday_offer_price_per_hour: undefined,
-        peak_offer_price_per_hour: undefined
+        peak_offer_price_per_hour: undefined,
+        offer_end_date: undefined
       };
 
       SupabaseSyncService.syncCourtToSupabase(updatedCourt).catch(err => {
@@ -432,6 +456,7 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
       peak_end_time: newPeakEnd,
       peak_price_per_hour: Number(newPeakPrice) || 1800,
       peak_offer_price_per_hour: peakOfferNum && peakOfferNum > 0 ? peakOfferNum : undefined,
+      offer_end_date: newOfferEndDate.trim() ? newOfferEndDate.trim() : undefined,
       slot_duration_minutes: Number(newDuration) || 60,
       opening_time: newOpening || '06:00',
       closing_time: newClosing || '23:00',
@@ -457,6 +482,7 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
     setNewSunOfferPrice('');
     setNewPeakPrice(1800);
     setNewPeakOfferPrice('');
+    setNewOfferEndDate('');
     setShowAddCourtModal(false);
     closeConfirm();
   };
@@ -523,6 +549,7 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
     setEditPeakEnd(court.peak_end_time || '23:00');
     setEditPeakPrice(court.peak_price_per_hour || 1800);
     setEditPeakOfferPrice(court.peak_offer_price_per_hour ?? '');
+    setEditOfferEndDate(court.offer_end_date || '');
     setEditDuration(court.slot_duration_minutes);
     setEditOpening(court.opening_time);
     setEditClosing(court.closing_time);
@@ -551,6 +578,7 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
       peak_end_time: editPeakEnd,
       peak_price_per_hour: Number(editPeakPrice),
       peak_offer_price_per_hour: peakOfferNum && peakOfferNum > 0 ? peakOfferNum : undefined,
+      offer_end_date: editOfferEndDate.trim() ? editOfferEndDate.trim() : undefined,
       slot_duration_minutes: Number(editDuration),
       opening_time: editOpening,
       closing_time: editClosing,
@@ -829,8 +857,11 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
           </h3>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {courts.map(court => {
+        {courts.length === 0 ? (
+          <PitchGridSkeleton count={3} />
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {courts.map(court => {
             const courtSports = sports.filter(s => court.sport_ids.includes(s.id));
             const satPrice = court.saturday_price_per_hour ?? court.base_price_per_hour;
             const sunPrice = court.sunday_price_per_hour ?? court.base_price_per_hour;
@@ -845,6 +876,16 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
                       {hasCourtOffer && (
                         <span className="bg-emerald-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-md flex items-center gap-1 shadow-xs tracking-wider uppercase">
                           <Sparkles className="w-2.5 h-2.5 text-emerald-200" /> Offer Active
+                        </span>
+                      )}
+                      {court.offer_end_date && (
+                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-1 border ${
+                          court.offer_end_date >= todayStr
+                            ? 'bg-amber-100 text-amber-900 border-amber-300'
+                            : 'bg-gray-100 text-gray-600 border-gray-300'
+                        }`}>
+                          <Clock className="w-2.5 h-2.5" />
+                          {court.offer_end_date >= todayStr ? `Ends: ${formatDateDDMMYYYY(court.offer_end_date)}` : 'Offer Expired'}
                         </span>
                       )}
                     </div>
@@ -908,20 +949,28 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
                     <span className="text-[11px] font-bold text-amber-900 flex items-center gap-1">
                       <Zap className="w-3.5 h-3.5 text-amber-600 fill-amber-500" /> Peak Window:
                     </span>
-                    {court.peak_enabled ? (
-                      <span className="bg-amber-600 text-white font-extrabold px-2 py-0.5 rounded text-[10px] tracking-wide uppercase">
-                        {formatTime12hPlain(court.peak_start_time || '18:00')} – {formatTime12hPlain(court.peak_end_time || '23:00')} ({
-                          court.peak_offer_price_per_hour && court.peak_offer_price_per_hour !== court.peak_price_per_hour ? (
-                            <>
-                              <span className="line-through opacity-75 mr-1 font-semibold">₹{Math.max(court.peak_price_per_hour || 0, court.peak_offer_price_per_hour || 0)}</span>
-                              ₹{Math.min(court.peak_price_per_hour || 0, court.peak_offer_price_per_hour || 0)}/hr
-                            </>
-                          ) : (
-                            `₹${court.peak_price_per_hour}/hr`
-                          )
-                        })
-                      </span>
-                    ) : (
+                    {court.peak_enabled ? (() => {
+                      const pkRate = court.peak_price_per_hour || 1800;
+                      let pkOffer = court.peak_offer_price_per_hour;
+                      if (pkOffer === undefined && court.original_price_per_hour && court.original_price_per_hour > court.base_price_per_hour) {
+                        const discountRatio = (court.original_price_per_hour - court.base_price_per_hour) / court.original_price_per_hour;
+                        pkOffer = Math.round(pkRate * (1 - discountRatio));
+                      }
+                      return (
+                        <span className="bg-amber-600 text-white font-extrabold px-2 py-0.5 rounded text-[10px] tracking-wide uppercase">
+                          {formatTime12hPlain(court.peak_start_time || '18:00')} – {formatTime12hPlain(court.peak_end_time || '23:00')} ({
+                            pkOffer && pkOffer !== pkRate ? (
+                              <>
+                                <span className="line-through opacity-75 mr-1 font-semibold">₹{Math.max(pkRate, pkOffer)}</span>
+                                ₹{Math.min(pkRate, pkOffer)}/hr
+                              </>
+                            ) : (
+                              `₹${pkRate}/hr`
+                            )
+                          })
+                        </span>
+                      );
+                    })() : (
                       <span className="text-on-surface-variant/70 italic text-[11px]">Standard Rates</span>
                     )}
                   </div>
@@ -981,6 +1030,7 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
             );
           })}
         </div>
+        )}
       </div>
 
       {/* Active Blocked Slots */}
@@ -1419,6 +1469,60 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
                     )}
                   </div>
                 )}
+              </div>
+
+              {/* Offer End Date (Optional) */}
+              <div className="bg-emerald-50/70 p-3 rounded-xl border border-emerald-300/80 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-emerald-950 font-headline font-bold text-xs flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>Offer End Date (Optional)</span>
+                  </label>
+                  {newOfferEndDate && (
+                    <button
+                      type="button"
+                      onClick={() => setNewOfferEndDate('')}
+                      className="text-[10px] text-red-600 hover:underline font-bold"
+                    >
+                      Clear End Date
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    min={todayStr}
+                    value={newOfferEndDate}
+                    onChange={e => setNewOfferEndDate(e.target.value)}
+                    className="form-input text-xs font-bold py-1.5 px-3 bg-white border-emerald-400 flex-1"
+                  />
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setNewOfferEndDate('')}
+                      className={`text-[11px] px-2 py-1 rounded-lg font-bold border transition-all ${!newOfferEndDate ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs' : 'bg-white text-emerald-900 border-emerald-200 hover:bg-emerald-100'}`}
+                    >
+                      Indefinite
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewOfferEndDate(getUpcomingSundayDate())}
+                      className={`text-[11px] px-2 py-1 rounded-lg font-bold border transition-all ${newOfferEndDate === getUpcomingSundayDate() ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs' : 'bg-white text-emerald-900 border-emerald-200 hover:bg-emerald-100'}`}
+                    >
+                      Till Sun
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewOfferEndDate(getFutureDateString(7))}
+                      className={`text-[11px] px-2 py-1 rounded-lg font-bold border transition-all ${newOfferEndDate === getFutureDateString(7) ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs' : 'bg-white text-emerald-900 border-emerald-200 hover:bg-emerald-100'}`}
+                    >
+                      +7 Days
+                    </button>
+                  </div>
+                </div>
+                <p className="text-[10px] text-emerald-800">
+                  Optional. If set, promotional rates apply for booking dates up to this day, then automatically revert to regular rates.
+                </p>
               </div>
 
               <div>
@@ -1883,6 +1987,60 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
                 )}
               </div>
 
+              {/* Offer End Date (Optional) */}
+              <div className="bg-emerald-50/70 p-3 rounded-xl border border-emerald-300/80 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-emerald-950 font-headline font-bold text-xs flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>Offer End Date (Optional)</span>
+                  </label>
+                  {editOfferEndDate && (
+                    <button
+                      type="button"
+                      onClick={() => setEditOfferEndDate('')}
+                      className="text-[10px] text-red-600 hover:underline font-bold"
+                    >
+                      Clear End Date
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    min={todayStr}
+                    value={editOfferEndDate}
+                    onChange={e => setEditOfferEndDate(e.target.value)}
+                    className="form-input text-xs font-bold py-1.5 px-3 bg-white border-emerald-400 flex-1"
+                  />
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setEditOfferEndDate('')}
+                      className={`text-[11px] px-2 py-1 rounded-lg font-bold border transition-all ${!editOfferEndDate ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs' : 'bg-white text-emerald-900 border-emerald-200 hover:bg-emerald-100'}`}
+                    >
+                      Indefinite
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditOfferEndDate(getUpcomingSundayDate())}
+                      className={`text-[11px] px-2 py-1 rounded-lg font-bold border transition-all ${editOfferEndDate === getUpcomingSundayDate() ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs' : 'bg-white text-emerald-900 border-emerald-200 hover:bg-emerald-100'}`}
+                    >
+                      Till Sun
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditOfferEndDate(getFutureDateString(7))}
+                      className={`text-[11px] px-2 py-1 rounded-lg font-bold border transition-all ${editOfferEndDate === getFutureDateString(7) ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs' : 'bg-white text-emerald-900 border-emerald-200 hover:bg-emerald-100'}`}
+                    >
+                      +7 Days
+                    </button>
+                  </div>
+                </div>
+                <p className="text-[10px] text-emerald-800">
+                  Optional. If set, promotional rates apply for booking dates up to this day, then automatically revert to regular rates.
+                </p>
+              </div>
+
               <div>
                 <label className="block text-on-surface-variant font-headline font-bold mb-1">Slot Duration *</label>
                 <select
@@ -2169,8 +2327,8 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
 
       {/* Occasion / Flash Sale Offer Modal */}
       {showOccasionOfferModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
-          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-5 max-h-[92vh] overflow-y-auto border border-outline-variant/30">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50 animate-fadeIn">
+          <div className="bg-white rounded-3xl sm:rounded-2xl max-w-2xl w-full p-4 sm:p-6 shadow-2xl space-y-4 sm:space-y-5 max-h-[92vh] overflow-y-auto border border-outline-variant/30">
             {/* Modal Header */}
             <div className="flex justify-between items-start border-b border-outline-variant/40 pb-4">
               <div>
@@ -2256,7 +2414,104 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
                 </div>
               </div>
 
-              {/* 3. Target Pitches Selection */}
+              {/* 3. Offer End Date (Optional) */}
+              <div className="bg-emerald-50/60 p-3 rounded-xl border border-emerald-200/80 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-on-surface-variant font-headline font-bold text-xs flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>Offer End Date (Optional)</span>
+                  </label>
+                  {offerEndDate ? (
+                    <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      Valid till: {formatDateDDMMYYYY(offerEndDate)}
+                      <button
+                        type="button"
+                        onClick={() => setOfferEndDate('')}
+                        className="ml-1 text-emerald-900 hover:text-red-600 font-black"
+                        title="Remove end date"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-on-surface-variant/70 italic">
+                      Applies indefinitely until reset
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <input
+                    type="date"
+                    min={todayStr}
+                    value={offerEndDate}
+                    onChange={e => setOfferEndDate(e.target.value)}
+                    className="form-input text-xs font-bold py-1.5 px-3 bg-white border-emerald-300 flex-1"
+                  />
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setOfferEndDate('')}
+                      className={`text-[11px] px-2.5 py-1 rounded-lg font-bold border transition-all ${
+                        !offerEndDate
+                          ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs'
+                          : 'bg-white text-emerald-900 border-emerald-200 hover:bg-emerald-100'
+                      }`}
+                    >
+                      Indefinite
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOfferEndDate(todayStr)}
+                      className={`text-[11px] px-2.5 py-1 rounded-lg font-bold border transition-all ${
+                        offerEndDate === todayStr
+                          ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs'
+                          : 'bg-white text-emerald-900 border-emerald-200 hover:bg-emerald-100'
+                      }`}
+                    >
+                      Today Only
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOfferEndDate(getUpcomingSundayDate())}
+                      className={`text-[11px] px-2.5 py-1 rounded-lg font-bold border transition-all ${
+                        offerEndDate === getUpcomingSundayDate()
+                          ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs'
+                          : 'bg-white text-emerald-900 border-emerald-200 hover:bg-emerald-100'
+                      }`}
+                    >
+                      Till Sunday
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOfferEndDate(getFutureDateString(7))}
+                      className={`text-[11px] px-2.5 py-1 rounded-lg font-bold border transition-all ${
+                        offerEndDate === getFutureDateString(7)
+                          ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs'
+                          : 'bg-white text-emerald-900 border-emerald-200 hover:bg-emerald-100'
+                      }`}
+                    >
+                      +7 Days
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOfferEndDate(getFutureDateString(14))}
+                      className={`text-[11px] px-2.5 py-1 rounded-lg font-bold border transition-all ${
+                        offerEndDate === getFutureDateString(14)
+                          ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs'
+                          : 'bg-white text-emerald-900 border-emerald-200 hover:bg-emerald-100'
+                      }`}
+                    >
+                      +14 Days
+                    </button>
+                  </div>
+                </div>
+                <p className="text-[10px] text-on-surface-variant">
+                  Slots on or before this end date will receive the discount. After this date, slots automatically revert to standard regular rates.
+                </p>
+              </div>
+
+              {/* 4. Target Pitches Selection */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-on-surface-variant font-headline font-bold text-xs">
@@ -2312,7 +2567,7 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
                 </div>
               </div>
 
-              {/* 4. Rates to Discount */}
+              {/* 5. Rates to Discount */}
               <div>
                 <label className="block text-on-surface-variant font-headline font-bold text-xs mb-1.5">
                   Apply {offerPercentage}% Discount To Rates *
@@ -2365,7 +2620,7 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
                 </div>
               </div>
 
-              {/* 5. Live Real-Time Impact & Preview Table */}
+              {/* 6. Live Real-Time Impact & Preview Table */}
               <div className="bg-surface-container-low p-3.5 rounded-xl border border-outline-variant/40 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="font-headline font-bold text-xs text-on-surface flex items-center gap-1.5">

@@ -7,8 +7,9 @@ import { RedisLockService } from '../../services/redisLockService';
 import { CouponService } from '../../services/couponService';
 import { SupabaseSyncService } from '../../services/supabaseSyncService';
 import { normalizeIndianPhone } from '../../utils/venueTime';
-import { ShieldCheck, Tag, CreditCard, Smartphone, AlertTriangle, X, Timer, PersonStanding, Clock, RefreshCw } from 'lucide-react';
-import { formatTimeRange12h, formatTime12hPlain, formatTimeRange12hPlain, formatDateDDMMYYYY } from '../../utils/formatters';
+import { ShieldCheck, Tag, CreditCard, Smartphone, AlertTriangle, AlertCircle, X, Timer, PersonStanding, Clock, RefreshCw, CalendarCheck2, User, Phone, Mail, IndianRupee, Calendar, MapPin } from 'lucide-react';
+import { formatTimeRange12h, formatTime12hPlain, formatTimeRange12hPlain, formatDateDDMMYYYY, formatPhoneNumber } from '../../utils/formatters';
+import { TimeOfDayIcon } from '../common/TimeOfDayIcon';
 
 interface CheckoutModalProps {
   court: Court;
@@ -149,7 +150,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   const contiguousBlocks = groupContiguousSlots(selectedSlots);
   const formattedSlotsSummary = contiguousBlocks
-    .map(b => formatTimeRange12h(b.start_time, b.end_time))
+    .map(b => formatTimeRange12hPlain(b.start_time, b.end_time))
     .join(', ');
 
   const handleApplyCoupon = () => {
@@ -257,7 +258,17 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       const sports = store.getSports();
       const courtSportId = court.sport_ids[0] || sports[0].id;
 
-      // 2. Create pending DB Bookings for EACH contiguous block
+      // 2. Common Reference, 4-Digit Gate Pass OTP & Transaction ID for entire multi-slot checkout
+      const primaryRef = `TRF-${dateStr.replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const commonGatePassOtp = primaryRef.slice(-4);
+      const commonPaymentId = `pay_live_${Date.now()}`;
+      const allSlotsData = selectedSlots.map(s => ({
+        start_time: s.start_time,
+        end_time: s.end_time,
+        price: s.price
+      }));
+
+      // Create pending DB Bookings for EACH contiguous block linked by common group_ref and gate_pass_otp
       const createdBookings: Booking[] = [];
 
       for (let i = 0; i < contiguousBlocks.length; i++) {
@@ -266,10 +277,16 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         const blockDiscount = Math.round(discount * blockRawRatio);
         const blockTotal = Math.max(0, block.blockPrice - blockDiscount);
 
-        const bookingRef = `TRF-${dateStr.replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
+        const bookingRef = i === 0 ? primaryRef : `${primaryRef}-${i + 1}`;
 
         const dbResult = PostgresEngine.createBooking({
           booking_ref: bookingRef,
+          group_ref: primaryRef,
+          gate_pass_otp: commonGatePassOtp,
+          gateway_payment_id: commonPaymentId,
+          total_order_amount: finalTotal,
+          all_slots: allSlotsData,
+          formatted_slots: formattedSlotsSummary,
           customer_id: customer.id,
           court_id: court.id,
           sport_id: courtSportId,
@@ -341,9 +358,19 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           sessionStorage.removeItem('turfflow_pending_checkout');
         }
 
-        // Confirm ALL created contiguous block bookings
+        // Confirm ALL created contiguous block bookings in this multi-slot transaction
         for (let i = 1; i < createdBookings.length; i++) {
           PostgresEngine.updateBookingStatus(createdBookings[i].id, 'confirmed');
+          const sibling = store.getBookings().find(b => b.id === createdBookings[i].id);
+          if (sibling) {
+            sibling.gateway_payment_id = commonPaymentId;
+            sibling.group_ref = primaryRef;
+            sibling.gate_pass_otp = commonGatePassOtp;
+            sibling.total_order_amount = finalTotal;
+            sibling.all_slots = allSlotsData;
+            sibling.formatted_slots = formattedSlotsSummary;
+            SupabaseSyncService.syncBookingToSupabase(sibling).catch(() => {});
+          }
         }
 
         // Release Redis locks for all contiguous blocks
@@ -391,139 +418,148 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   return (
     <div className="modal-overlay">
-      <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto no-scrollbar shadow-2xl animate-modalScaleIn text-on-surface">
-        {/* Stitch Header */}
-        <div className="p-4 bg-surface-container-low border-b border-outline-variant/40 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-primary" style={{ fontSize: '24px' }}>sports_soccer</span>
-            <h3 className="font-headline font-bold text-xl text-primary">Confirm Pitch Reservation</h3>
+      <div className="bg-white border border-outline-variant/60 rounded-3xl sm:rounded-2xl w-full max-w-md shadow-2xl animate-modalScaleIn text-on-surface overflow-hidden">
+        {/* Compact Header */}
+        <div className="px-4 py-3 bg-surface-container-low border-b border-outline-variant/40 flex items-center justify-between">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary border border-primary/20 flex items-center justify-center shrink-0">
+              <CalendarCheck2 className="w-4 h-4 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="font-headline font-bold text-sm sm:text-base text-primary truncate leading-tight">
+                Confirm Reservation
+              </h3>
+              <p className="text-[10.5px] text-on-surface-variant font-medium truncate">
+                {court.name} • {formatDateDDMMYYYY(dateStr)}
+              </p>
+            </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 bg-amber-100 text-amber-900 border border-amber-300 px-3 py-1 rounded-full text-xs font-mono font-bold">
-              <Timer className="w-3.5 h-3.5 text-amber-700 animate-pulse" /> Hold Expires: {formatTimer(timeLeft)}
-            </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold flex items-center gap-1">
+              <Timer className="w-3 h-3 text-amber-700 animate-pulse" /> {formatTimer(timeLeft)}
+            </span>
 
             <button
+              type="button"
               onClick={() => {
                 selectedSlots.forEach(s => {
                   RedisLockService.releaseLock(court.id, dateStr, s.start_time, sessionId);
                 });
                 onClose();
               }}
-              className="text-on-surface-variant hover:text-on-surface p-1 rounded-full hover:bg-surface-container-high transition"
+              className="text-on-surface-variant hover:text-on-surface p-1 rounded-full hover:bg-surface-container-high transition cursor-pointer"
+              title="Close"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        <div className="p-6 space-y-6">
-          {/* Summary Box */}
-          <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/40 space-y-2">
-            <div className="flex justify-between text-xs text-on-surface-variant">
-              <span className="font-medium">Arena / Court:</span>
-              <span className="font-headline font-bold text-on-surface text-sm">{court.name}</span>
-            </div>
-            <div className="flex justify-between text-xs text-on-surface-variant">
-              <span className="font-medium">Date & Slot Time:</span>
-              <span className="font-headline font-bold text-primary text-xs text-right max-w-[280px]">
-                {formatDateDDMMYYYY(dateStr)} | {formattedSlotsSummary} ({selectedSlots.length} slot{selectedSlots.length > 1 ? 's' : ''})
-              </span>
-            </div>
-            <div className="border-t border-outline-variant/30 pt-2 flex justify-between items-center">
-              <div>
-                <span className="text-xs font-semibold text-on-surface-variant block">Total Payable:</span>
-                {originalRawTotal > finalTotal && (
-                  <span className="text-[10px] text-emerald-700 font-bold">
-                    You Save: ₹{originalRawTotal - finalTotal}
+        {/* Modal Content - Fitted, Zero Internal Scrolling */}
+        <div className="p-4 space-y-3">
+          {/* Compact 1-Row Summary Strip */}
+          <div className="bg-surface-container-low px-3 py-2 rounded-xl border border-outline-variant/30 flex items-center justify-between text-xs">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Clock className="w-3.5 h-3.5 text-primary shrink-0" />
+              <div className="font-bold text-on-surface truncate text-xs flex items-center gap-1">
+                {contiguousBlocks.map((b, idx) => (
+                  <span key={idx} className="inline-flex items-center gap-1">
+                    {idx > 0 && <span>, </span>}
+                    <TimeOfDayIcon time24={b.start_time} className="w-3.5 h-3.5" />
+                    <span>{formatTimeRange12hPlain(b.start_time, b.end_time)}</span>
                   </span>
-                )}
+                ))}
               </div>
-              <div className="text-right flex items-baseline justify-end gap-1.5">
-                {originalRawTotal > finalTotal && (
-                  <span className="line-through text-on-surface-variant/70 text-xs font-semibold">
-                    ₹{originalRawTotal}
-                  </span>
-                )}
-                <span className="font-headline text-2xl font-extrabold text-primary">₹{finalTotal}</span>
-              </div>
+              <span className="text-[10px] text-on-surface-variant shrink-0">({selectedSlots.length} slot{selectedSlots.length > 1 ? 's' : ''})</span>
+            </div>
+            <div className="flex items-baseline gap-1 shrink-0 pl-2">
+              <span className="text-[10px] text-on-surface-variant font-semibold">Total:</span>
+              {originalRawTotal > finalTotal && (
+                <span className="line-through text-on-surface-variant/70 text-[10px]">₹{originalRawTotal}</span>
+              )}
+              <span className="font-headline text-base sm:text-lg font-extrabold text-primary">₹{finalTotal}</span>
             </div>
           </div>
 
           {/* STEP 1: Contact Form */}
           {step === 'details' && (
-            <form onSubmit={handleSendOtp} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <form onSubmit={handleSendOtp} className="space-y-2.5">
+              <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-xs font-headline font-bold text-on-surface-variant mb-1">Full Name *</label>
+                  <label className="text-[11px] font-headline font-bold text-on-surface-variant mb-0.5 flex items-center gap-1">
+                    <User className="w-3 h-3 text-primary" /> Full Name *
+                  </label>
                   <input
                     type="text"
                     required
                     placeholder="e.g. Rahul Sharma"
                     value={name}
                     onChange={e => setName(e.target.value)}
-                    className="form-input text-xs"
+                    className="form-input text-xs py-1.5 px-2.5"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-headline font-bold text-on-surface-variant mb-1">Mobile Phone (+91) *</label>
+                  <label className="text-[11px] font-headline font-bold text-on-surface-variant mb-0.5 flex items-center gap-1">
+                    <Phone className="w-3 h-3 text-primary" /> Mobile (+91) *
+                  </label>
                   <input
                     type="tel"
                     required
                     maxLength={10}
-                    placeholder="10-digit mobile number"
+                    placeholder="10-digit number"
                     value={phone}
                     onChange={e => setPhone(e.target.value.replace(/\D/g, ''))}
-                    className="form-input text-xs"
+                    className="form-input text-xs py-1.5 px-2.5"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-headline font-bold text-on-surface-variant mb-1">Email (For booking confirmation & e-receipt)</label>
+                <label className="text-[11px] font-headline font-bold text-on-surface-variant mb-0.5 flex items-center gap-1">
+                  <Mail className="w-3 h-3 text-primary" /> Email (For e-receipt & match pass)
+                </label>
                 <input
                   type="email"
                   placeholder="rahul@example.com"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  className="form-input text-xs"
+                  className="form-input text-xs py-1.5 px-2.5"
                 />
               </div>
 
-              {/* Coupon Code Input */}
-              <div className="pt-2 border-t border-outline-variant/30">
-                <label className="block text-xs font-headline font-bold text-on-surface-variant mb-1">Have a Promo / Coupon Code?</label>
+              {/* Promo Code Input */}
+              <div className="pt-1 border-t border-outline-variant/30">
                 <div className="flex gap-2">
                   <input
                     type="text"
-                    placeholder="e.g. TURF100 or WEEKEND20"
+                    placeholder="Promo Code (Optional)"
                     value={couponCode}
                     onChange={e => setCouponCode(e.target.value.toUpperCase())}
-                    className="form-input text-xs uppercase font-mono tracking-wider flex-1"
+                    className="form-input text-xs uppercase font-mono tracking-wider flex-1 py-1.5 px-2.5"
                   />
                   <button
                     type="button"
                     onClick={handleApplyCoupon}
-                    className="btn-secondary text-xs px-4 py-2 font-bold"
+                    className="btn-secondary text-xs px-3.5 py-1.5 font-bold shrink-0"
                   >
                     Apply
                   </button>
                 </div>
                 {appliedCoupon && (
-                  <p className="text-xs text-primary font-bold mt-1.5 flex items-center gap-1">
-                    <Tag className="w-3.5 h-3.5" /> Coupon '{appliedCoupon.code}' applied! Saved ₹{discount}
+                  <p className="text-[11px] text-primary font-bold mt-1 flex items-center gap-1">
+                    <Tag className="w-3 h-3" /> Coupon '{appliedCoupon.code}' applied! Saved ₹{discount}
                   </p>
                 )}
                 {couponError && (
-                  <p className="text-xs text-error font-medium mt-1">{couponError}</p>
+                  <p className="text-[11px] text-error font-medium mt-1">{couponError}</p>
                 )}
               </div>
 
-              <div className="pt-4 flex justify-end">
+              <div className="pt-1">
                 <button
                   type="submit"
-                  className="btn-cta text-xs px-6 py-3 font-headline font-bold uppercase tracking-wider shadow-md"
+                  className="btn-cta w-full py-2.5 text-xs font-headline font-bold uppercase tracking-wider shadow-md"
                 >
                   Verify Mobile via OTP →
                 </button>
@@ -533,24 +569,26 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
           {/* STEP 2: Phone OTP Verification */}
           {step === 'otp' && (
-            <form onSubmit={handleVerifyOtp} className="space-y-4">
-              <div className="bg-primary/5 p-4 rounded-xl border border-primary/20 text-xs text-primary space-y-1">
+            <form onSubmit={handleVerifyOtp} className="space-y-3">
+              <div className="bg-primary/5 p-3 rounded-xl border border-primary/20 text-xs text-primary space-y-0.5">
                 <p className="font-bold flex items-center gap-1.5">
-                  <Smartphone className="w-4 h-4" /> SMS OTP Sent to +91 {phone}
+                  <Smartphone className="w-3.5 h-3.5" /> SMS OTP Sent to {formatPhoneNumber(phone)}
                 </p>
-                <p className="text-on-surface-variant">
-                  Enter the 4-digit verification code sent to your mobile. <strong className="text-primary font-bold">(Demo OTP: 1234)</strong>
+                <p className="text-on-surface-variant text-[11px]">
+                  Enter 4-digit code. <strong className="text-primary font-bold">(Demo OTP: 1234)</strong>
                 </p>
               </div>
 
               {otpError && (
-                <div className="text-xs text-error font-medium bg-error/10 p-2.5 rounded-lg">
+                <div className="text-xs text-error font-medium bg-error/10 p-2 rounded-lg">
                   {otpError}
                 </div>
               )}
 
               <div>
-                <label className="block text-xs font-headline font-bold text-on-surface-variant mb-1">Enter 4-Digit OTP Code</label>
+                <label className="block text-[11px] font-headline font-bold text-on-surface-variant mb-1 text-center">
+                  Enter 4-Digit OTP Code
+                </label>
                 <input
                   type="text"
                   required
@@ -558,23 +596,23 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   placeholder="1234"
                   value={otpInput}
                   onChange={e => setOtpInput(e.target.value)}
-                  className="form-input text-lg font-mono font-bold tracking-widest text-center"
+                  className="form-input text-2xl font-mono font-bold tracking-widest text-center py-2 max-w-[180px] mx-auto block"
                 />
               </div>
 
-              <div className="flex justify-between items-center pt-2">
+              <div className="flex gap-2 pt-1">
                 <button
                   type="button"
                   onClick={() => setStep('details')}
-                  className="btn-secondary text-xs px-4 py-2 font-bold"
+                  className="btn-secondary flex-1 text-xs py-2.5 font-bold"
                 >
-                  ← Back to Details
+                  ← Back
                 </button>
                 <button
                   type="submit"
-                  className="btn-cta text-xs px-6 py-2.5 font-headline font-bold uppercase tracking-wider shadow-md"
+                  className="btn-cta flex-2 text-xs py-2.5 font-headline font-bold uppercase tracking-wider shadow-md"
                 >
-                  Verify & Proceed to Payment
+                  Verify & Proceed
                 </button>
               </div>
             </form>
@@ -582,69 +620,70 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
           {/* STEP 3: Razorpay Payment Simulation */}
           {step === 'payment' && (
-            <div className="space-y-5">
-              <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 p-3.5 rounded-xl text-xs flex items-center justify-between">
+            <div className="space-y-3">
+              <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 p-2 sm:p-2.5 rounded-xl text-xs flex items-center justify-between">
                 <span className="font-bold flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4 text-emerald-600" /> Phone Verified (+91 {phone})
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> Phone Verified ({formatPhoneNumber(phone)})
                 </span>
-                <span className="bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded font-mono font-bold text-[10px]">VERIFIED</span>
+                <span className="bg-emerald-200 text-emerald-900 px-1.5 py-0.5 rounded font-mono font-bold text-[9.5px]">VERIFIED</span>
               </div>
 
               {paymentError && (
-                <div className="bg-error/10 border border-error/30 text-error p-3 rounded-xl text-xs font-medium flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                <div className="bg-error/10 border border-error/30 text-error p-2.5 rounded-xl text-xs font-medium flex items-center gap-2">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                   <span>{paymentError}</span>
                 </div>
               )}
 
-              <div className="space-y-3">
-                <h4 className="font-headline font-bold text-sm text-primary">Select Razorpay Payment Gateway Method:</h4>
+              <div className="space-y-2">
+                <h4 className="font-headline font-bold text-xs text-primary">Select Razorpay Payment Gateway Method:</h4>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-2">
                   <button
                     disabled={isProcessingPayment}
                     onClick={() => handleExecutePayment('upi')}
-                    className="p-4 rounded-xl border border-outline-variant hover:border-primary hover:bg-primary/5 transition text-left space-y-1 shadow-xs"
+                    className="p-2.5 rounded-xl border border-outline-variant hover:border-primary hover:bg-primary/5 transition text-left space-y-0.5 shadow-xs cursor-pointer"
                   >
                     <div className="flex items-center justify-between font-headline font-bold text-xs text-primary">
-                      <span className="flex items-center gap-1.5"><Smartphone className="w-4 h-4 text-primary" /> Instant UPI</span>
-                      <span className="text-[10px] bg-secondary-container text-on-secondary-container px-2 py-0.5 rounded font-bold">RECOMMENDED</span>
+                      <span className="flex items-center gap-1"><Smartphone className="w-3.5 h-3.5 text-primary" /> Instant UPI</span>
                     </div>
-                    <p className="text-[11px] text-on-surface-variant font-medium">GPay, PhonePe, Paytm, BHIM UPI</p>
+                    <span className="inline-block text-[9px] bg-secondary-container text-on-secondary-container px-1.5 py-0.2 rounded font-bold">FASTEST</span>
+                    <p className="text-[10px] text-on-surface-variant font-medium">GPay, PhonePe, Paytm</p>
                   </button>
 
                   <button
                     disabled={isProcessingPayment}
                     onClick={() => handleExecutePayment('card')}
-                    className="p-4 rounded-xl border border-outline-variant hover:border-primary hover:bg-primary/5 transition text-left space-y-1 shadow-xs"
+                    className="p-2.5 rounded-xl border border-outline-variant hover:border-primary hover:bg-primary/5 transition text-left space-y-0.5 shadow-xs cursor-pointer"
                   >
                     <div className="flex items-center justify-between font-headline font-bold text-xs text-primary">
-                      <span className="flex items-center gap-1.5"><CreditCard className="w-4 h-4 text-primary" /> Credit / Debit Card</span>
+                      <span className="flex items-center gap-1"><CreditCard className="w-3.5 h-3.5 text-primary" /> Card</span>
                     </div>
-                    <p className="text-[11px] text-on-surface-variant font-medium">Visa, Mastercard, RuPay, Amex</p>
+                    <span className="inline-block text-[9px] bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded font-bold">ALL CARDS</span>
+                    <p className="text-[10px] text-on-surface-variant font-medium">Visa, Mastercard, RuPay</p>
                   </button>
                 </div>
 
                 {/* Simulation controls for decline/failure */}
-                <div className="pt-4 border-t border-outline-variant/30 text-[11px] text-on-surface-variant space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-on-surface">Razorpay Sandbox Simulator Controls:</span>
-                    <button
-                      disabled={isProcessingPayment}
-                      onClick={() => handleExecutePayment('upi', true)}
-                      className="text-error underline hover:text-error/80 font-bold"
-                    >
-                      Simulate Payment Failure Path 🛑
-                    </button>
-                  </div>
+                <div className="pt-2 border-t border-outline-variant/30 flex items-center justify-between text-[10px] text-on-surface-variant">
+                  <span className="font-bold text-on-surface flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3 text-primary" /> Sandbox Simulator:
+                  </span>
+                  <button
+                    disabled={isProcessingPayment}
+                    onClick={() => handleExecutePayment('upi', true)}
+                    className="text-error hover:text-error/80 font-bold flex items-center gap-1 hover:underline cursor-pointer"
+                  >
+                    <AlertCircle className="w-3 h-3 text-error" /> Simulate Failure
+                  </button>
                 </div>
               </div>
 
               {isProcessingPayment && (
-                <div className="py-6 text-center space-y-2">
-                  <div className="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+                <div className="py-3 text-center space-y-1 bg-surface-container-low rounded-xl border border-outline-variant/30">
+                  <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
                   <p className="font-headline font-bold text-xs text-primary">Connecting to Razorpay Secure Gateway...</p>
-                  <p className="text-[11px] text-on-surface-variant">Processing webhook payload and updating PostgreSQL transaction log</p>
+                  <p className="text-[10px] text-on-surface-variant">Processing webhook payload and transaction log</p>
                 </div>
               )}
             </div>
@@ -655,43 +694,51 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
       {/* 5-Minute Hold Expired In-App Popup Modal */}
       {isHoldExpired && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-900/75 backdrop-blur-md p-4">
-          <div className="bg-white border border-outline-variant/60 rounded-3xl w-full max-w-md p-6 space-y-5 shadow-2xl text-center animate-modalScaleIn text-on-surface max-h-[90vh] overflow-y-auto no-scrollbar">
-            <div className="w-16 h-16 bg-amber-50 border-2 border-amber-300 text-amber-600 rounded-full flex items-center justify-center mx-auto shadow-sm">
-              <Clock className="w-8 h-8 text-amber-600 animate-pulse" />
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-900/75 backdrop-blur-md p-3 sm:p-4">
+          <div className="bg-white border border-outline-variant/60 rounded-2xl w-full max-w-sm p-4 space-y-3 shadow-2xl text-center animate-modalScaleIn text-on-surface overflow-hidden">
+            <div className="w-10 h-10 bg-amber-50 border border-amber-300 text-amber-600 rounded-full flex items-center justify-center mx-auto shadow-xs">
+              <Clock className="w-5 h-5 text-amber-600 animate-pulse" />
             </div>
 
-            <div className="space-y-2">
-              <h3 className="font-headline font-extrabold text-xl text-on-surface">
+            <div className="space-y-1">
+              <h3 className="font-headline font-extrabold text-base text-on-surface">
                 Reservation Hold Expired
               </h3>
-              <p className="text-xs text-on-surface-variant leading-relaxed">
-                Your <strong>5-minute exclusive pitch reservation hold</strong> has timed out. To maintain fair access for other players, these slots have been released.
+              <p className="text-[11px] text-on-surface-variant leading-tight">
+                Your <strong>5-minute hold</strong> timed out. These slots have been released for other players.
               </p>
             </div>
 
-            <div className="bg-surface-container-low p-4 rounded-xl text-xs space-y-2 border border-outline-variant/30 text-left font-medium">
+            <div className="bg-surface-container-low p-2.5 rounded-xl text-xs space-y-1 border border-outline-variant/30 text-left font-medium">
               <div className="flex justify-between">
-                <span className="text-on-surface-variant">Arena / Pitch:</span>
-                <strong className="text-on-surface font-bold">{court.name}</strong>
+                <span className="text-on-surface-variant">Arena:</span>
+                <strong className="text-on-surface font-bold truncate max-w-[180px]">{court.name}</strong>
               </div>
               <div className="flex justify-between">
                 <span className="text-on-surface-variant">Date:</span>
                 <strong className="text-on-surface font-bold">{formatDateDDMMYYYY(dateStr)}</strong>
               </div>
-              <div className="flex justify-between">
-                <span className="text-on-surface-variant">Selected Slots:</span>
-                <strong className="text-primary font-bold">{formattedSlotsSummary}</strong>
+              <div className="flex justify-between items-center">
+                <span className="text-on-surface-variant">Slots:</span>
+                <div className="text-primary font-bold flex items-center gap-1">
+                  {contiguousBlocks.map((b, idx) => (
+                    <span key={idx} className="inline-flex items-center gap-1">
+                      {idx > 0 && <span>, </span>}
+                      <TimeOfDayIcon time24={b.start_time} className="w-3.5 h-3.5" />
+                      <span>{formatTimeRange12hPlain(b.start_time, b.end_time)}</span>
+                    </span>
+                  ))}
+                </div>
               </div>
             </div>
 
-            <div className="pt-2">
+            <div className="pt-1">
               <button
                 type="button"
                 onClick={() => window.location.reload()}
-                className="btn-primary w-full py-3 text-xs font-headline font-bold flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition cursor-pointer"
+                className="btn-primary w-full py-2.5 text-xs font-headline font-bold flex items-center justify-center gap-1.5 shadow-md hover:shadow-lg transition cursor-pointer"
               >
-                <RefreshCw className="w-4 h-4" />
+                <RefreshCw className="w-3.5 h-3.5" />
                 Refresh & View Available Slots
               </button>
             </div>

@@ -39,14 +39,18 @@ const DEFAULT_COURTS: Court[] = [
     closing_time: '23:00',
     buffer_minutes: 0,
     status: 'active',
-    base_price_per_hour: 1200,
+    base_price_per_hour: 1350,
     original_price_per_hour: 1500,
     saturday_price_per_hour: 1600,
+    saturday_offer_price_per_hour: 1440,
     sunday_price_per_hour: 1600,
+    sunday_offer_price_per_hour: 1440,
     peak_enabled: true,
     peak_start_time: '18:00',
     peak_end_time: '23:00',
-    peak_price_per_hour: 1800
+    peak_price_per_hour: 1800,
+    peak_offer_price_per_hour: 1620,
+    offer_end_date: '2026-11-17'
   },
   {
     id: 'crt-002',
@@ -58,14 +62,18 @@ const DEFAULT_COURTS: Court[] = [
     closing_time: '23:00',
     buffer_minutes: 0,
     status: 'active',
-    base_price_per_hour: 1000,
-    original_price_per_hour: 1400,
-    saturday_price_per_hour: 1400,
-    sunday_price_per_hour: 1400,
+    base_price_per_hour: 1350,
+    original_price_per_hour: 1500,
+    saturday_price_per_hour: 1600,
+    saturday_offer_price_per_hour: 1440,
+    sunday_price_per_hour: 1600,
+    sunday_offer_price_per_hour: 1440,
     peak_enabled: true,
     peak_start_time: '18:00',
     peak_end_time: '23:00',
-    peak_price_per_hour: 1500
+    peak_price_per_hour: 1800,
+    peak_offer_price_per_hour: 1620,
+    offer_end_date: '2026-11-17'
   },
   {
     id: 'crt-003',
@@ -88,24 +96,7 @@ const DEFAULT_COURTS: Court[] = [
   }
 ];
 
-const DEFAULT_PRICING_RULES: PricingRule[] = [
-  {
-    id: 'pr-001',
-    court_id: 'crt-001',
-    day_type: 'weekday',
-    start_time: '18:00',
-    end_time: '23:00',
-    price: 1600 // Evening peak pricing
-  },
-  {
-    id: 'pr-003',
-    court_id: 'crt-002',
-    day_type: 'weekday',
-    start_time: '18:00',
-    end_time: '23:00',
-    price: 1400
-  }
-];
+const DEFAULT_PRICING_RULES: PricingRule[] = [];
 
 const DEFAULT_CUSTOMERS: Customer[] = [
   {
@@ -291,7 +282,8 @@ class AppStore {
         });
         const rawRules: PricingRule[] = parsed.pricingRules || DEFAULT_PRICING_RULES;
         this.pricingRules = rawRules.filter(
-          r => !(r.day_type === 'weekend' && r.start_time === '06:00' && r.end_time === '23:00')
+          r => !(r.start_time === '18:00' && r.end_time === '23:00') &&
+               !(r.day_type === 'weekend' && r.start_time === '06:00' && r.end_time === '23:00')
         );
         this.customers = parsed.customers || DEFAULT_CUSTOMERS;
         const rawAdmins: AdminUser[] = parsed.adminUsers || DEFAULT_ADMIN_USERS;

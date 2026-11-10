@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { 
   MessageSquare, Bot, CheckCircle2, ShieldCheck, Zap, 
   ExternalLink, Phone, Send, RotateCw, Sparkles, AlertCircle, 
-  Ticket, Copy, Check, Users, ArrowRight, QrCode, Key, LogOut
+  Ticket, Copy, Check, Users, ArrowRight, QrCode, Key, LogOut,
+  Sun, Moon
 } from 'lucide-react';
 import { store } from '../../services/store';
 import { AdminUser, Booking } from '../../types/schema';
-import { formatTime12h, formatTime12hPlain, formatDateDDMMYYYY } from '../../utils/formatters';
+import { formatTime12hPlain, formatDateDDMMYYYY } from '../../utils/formatters';
 
 const formatChatTimestamp = (d: Date = new Date()): string => {
   const datePart = formatDateDDMMYYYY(d);
@@ -584,8 +585,25 @@ export const WhatsAppManagerTab: React.FC<Props> = ({ currentAdmin }) => {
                       <tr key={b.id} className="hover:bg-surface-container-low/50 transition">
                         <td className="py-2.5 px-3 font-bold text-primary">{b.booking_ref}</td>
                         <td className="py-2.5 px-3 font-sans">
-                          <span className="font-semibold text-on-surface">{getCourtName(b.court_id)}</span><br />
-                          <span className="text-[10px] text-on-surface-variant">{formatDateDDMMYYYY(b.booking_date)} @ {formatTime12hPlain(b.start_time)}</span>
+                          <span className="font-semibold text-on-surface">{getCourtName(b.court_id)}</span>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <div
+                              className={`p-0.5 rounded shrink-0 flex items-center justify-center ${
+                                parseInt(b.start_time.split(':')[0], 10) >= 18 || parseInt(b.start_time.split(':')[0], 10) < 5
+                                  ? 'bg-indigo-50 text-indigo-500'
+                                  : 'bg-amber-50 text-amber-500'
+                              }`}
+                            >
+                              {parseInt(b.start_time.split(':')[0], 10) >= 18 || parseInt(b.start_time.split(':')[0], 10) < 5 ? (
+                                <Moon className="w-2.5 h-2.5" />
+                              ) : (
+                                <Sun className="w-2.5 h-2.5" />
+                              )}
+                            </div>
+                            <span className="text-[10px] text-on-surface-variant font-medium">
+                              {formatDateDDMMYYYY(b.booking_date)} @ {formatTime12hPlain(b.start_time)}
+                            </span>
+                          </div>
                         </td>
                         <td className="py-2.5 px-3 font-bold text-emerald-600">₹{b.total_amount}</td>
                         <td className="py-2.5 px-3">

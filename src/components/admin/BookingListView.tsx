@@ -5,9 +5,10 @@ import { AuditLogger } from '../../services/auditLogger';
 import { AdminUser, BookingStatus, Booking } from '../../types/schema';
 import { ConfirmModal } from '../common/ConfirmModal';
 import { AdminRefundModal } from './AdminRefundModal';
-import { formatTimeRange12h } from '../../utils/formatters';
+import { formatTimeRange12h, formatTimeRange12hPlain, formatDateDDMMYYYY, getBookingGatePassOtp, formatPhoneNumber } from '../../utils/formatters';
 import { ReminderScheduler } from '../../services/reminderScheduler';
-import { Search, Filter, CheckCircle, XCircle, UserX, Calendar, ArrowUpDown, X, Clock, MapPin, Tag, RotateCcw, Bell } from 'lucide-react';
+import { BookingTableSkeleton } from '../common/SkeletonLoaders';
+import { Search, Filter, CheckCircle, XCircle, Calendar, ArrowUpDown, X, Clock, MapPin, Tag, RotateCcw, Sun, Moon } from 'lucide-react';
 
 interface BookingListViewProps {
   currentAdmin: AdminUser;
@@ -19,6 +20,13 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
   const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>('');
   const [sortOrder, setSortOrder] = useState<'latest' | 'oldest'>('latest');
+  const [isFiltering, setIsFiltering] = useState(false);
+
+  useEffect(() => {
+    setIsFiltering(true);
+    const timer = setTimeout(() => setIsFiltering(false), 120);
+    return () => clearTimeout(timer);
+  }, [searchQuery, statusFilter, sourceFilter, dateFilter, sortOrder]);
 
   // Reusable Confirm Modal State
   const [confirmState, setConfirmState] = useState<{
@@ -40,9 +48,21 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
   const [bookings, setBookings] = useState<Booking[]>(() => store.getBookings());
 
   useEffect(() => {
-    return store.subscribe(() => {
+    // Automatically transition any expired slot bookings to 'completed'
+    PostgresEngine.autoCompleteExpiredBookings();
+
+    const interval = setInterval(() => {
+      PostgresEngine.autoCompleteExpiredBookings();
+    }, 30000); // Check every 30s
+
+    const unsubscribe = store.subscribe(() => {
       setBookings([...store.getBookings()]);
     });
+
+    return () => {
+      clearInterval(interval);
+      unsubscribe();
+    };
   }, []);
   const [refundModalBooking, setRefundModalBooking] = useState<Booking | null>(null);
   const customers = store.getCustomers();
@@ -52,7 +72,7 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
     .filter(b => {
       const cust = customers.find(c => c.id === b.customer_id);
       const bRef = b.booking_ref || '';
-      const otpCode = bRef ? bRef.slice(-4) : '----';
+      const otpCode = getBookingGatePassOtp(b);
       const q = searchQuery.toLowerCase();
       const matchesSearch =
         !q ||
@@ -81,15 +101,14 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
   const requestStatusUpdate = (b: Booking, targetStatus: BookingStatus) => {
     const cust = customers.find(c => c.id === b.customer_id);
     const actionLabel =
-      targetStatus === 'completed' ? 'Mark Completed (Checked-In)' :
-      targetStatus === 'no_show' ? 'Mark No-Show' : 'Cancel Reservation';
+      targetStatus === 'completed' ? 'Mark Completed (Checked-In)' : 'Cancel Reservation';
 
     setConfirmState({
       isOpen: true,
       title: `${actionLabel}: ${b.booking_ref || b.id || 'Booking'}`,
-      message: `Update reservation for "${cust?.name || 'Customer'}" (${b.booking_date} | ${formatTimeRange12h(b.start_time, b.end_time)}) to status "${targetStatus.toUpperCase()}"?`,
+      message: `Update reservation for "${cust?.name || 'Customer'}" (${formatDateDDMMYYYY(b.booking_date)} | ${formatTimeRange12hPlain(b.start_time, b.end_time)}) to status "${targetStatus.toUpperCase()}"?`,
       confirmText: actionLabel,
-      variant: targetStatus === 'cancelled' ? 'danger' : targetStatus === 'no_show' ? 'warning' : 'success',
+      variant: targetStatus === 'cancelled' ? 'danger' : 'success',
       onConfirm: () => {
         const res = PostgresEngine.updateBookingStatus(b.id, targetStatus);
         if (res.success) {
@@ -102,17 +121,6 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
         }
       }
     });
-  };
-
-  const handleSendReminderEmail = (b: Booking) => {
-    const cust = customers.find(c => c.id === b.customer_id);
-    const result = ReminderScheduler.triggerManualReminder(b.id);
-    if (result.success) {
-      alert(`1-Hour reminder successfully dispatched via Resend to ${cust?.email || cust?.phone || 'customer'}!`);
-      setBookings([...store.getBookings()]);
-    } else {
-      alert(result.message);
-    }
   };
 
   return (
@@ -174,7 +182,6 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
               <option value="confirmed">Confirmed</option>
               <option value="pending_payment">Pending Payment</option>
               <option value="completed">Completed</option>
-              <option value="no_show">No-Show</option>
               <option value="cancelled">Cancelled</option>
               <option value="refunded">Refunded</option>
             </select>
@@ -197,7 +204,9 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
 
       {/* MOBILE CARDS VIEW (Displayed on screens < 768px) */}
       <div className="grid grid-cols-1 gap-3 md:hidden">
-        {filteredBookings.length === 0 ? (
+        {isFiltering ? (
+          <BookingTableSkeleton rows={4} />
+        ) : filteredBookings.length === 0 ? (
           <div className="bg-white p-6 rounded-xl text-center text-on-surface-variant font-medium text-xs border border-outline-variant/40">
             No bookings found matching filters.
           </div>
@@ -206,7 +215,7 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
             const cust = customers.find(c => c.id === b.customer_id);
             const court = courts.find(c => c.id === b.court_id);
             const bRef = b.booking_ref || b.id || 'N/A';
-            const otpCode = bRef.length >= 4 ? bRef.slice(-4) : '----';
+            const otpCode = getBookingGatePassOtp(b);
 
             return (
               <div
@@ -223,7 +232,7 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
                       </span>
                     </div>
                     <h3 className="font-headline font-bold text-base text-on-surface mt-1">{cust?.name || 'Unknown'}</h3>
-                    <p className="text-xs text-on-surface-variant font-mono">+91 {cust?.phone || 'N/A'}</p>
+                    <p className="text-xs text-on-surface-variant font-mono">{formatPhoneNumber(cust?.phone) || 'N/A'}</p>
                   </div>
                   <div className="text-right">
                     <p className="font-headline font-extrabold text-lg text-primary">₹{b.total_amount || 0}</p>
@@ -258,9 +267,24 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
                     <span className="text-on-surface-variant font-medium">Court:</span>
                     <strong className="text-on-surface font-bold">{court?.name}</strong>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex justify-between items-center">
                     <span className="text-on-surface-variant font-medium">Date & Slot:</span>
-                    <strong className="text-primary font-bold">{b.booking_date} ({formatTimeRange12h(b.start_time, b.end_time)})</strong>
+                    <div className="flex items-center gap-1.5">
+                      <div
+                        className={`p-1 rounded-md shrink-0 flex items-center justify-center ${
+                          parseInt(b.start_time.split(':')[0], 10) >= 18 || parseInt(b.start_time.split(':')[0], 10) < 5
+                            ? 'bg-indigo-50 text-indigo-500'
+                            : 'bg-amber-50 text-amber-500'
+                        }`}
+                      >
+                        {parseInt(b.start_time.split(':')[0], 10) >= 18 || parseInt(b.start_time.split(':')[0], 10) < 5 ? (
+                          <Moon className="w-3 h-3" />
+                        ) : (
+                          <Sun className="w-3 h-3" />
+                        )}
+                      </div>
+                      <strong className="text-primary font-bold">{formatDateDDMMYYYY(b.booking_date)} ({formatTimeRange12hPlain(b.start_time, b.end_time)})</strong>
+                    </div>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-on-surface-variant font-medium">Channel Source:</span>
@@ -282,25 +306,21 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
                   )}
                 </div>
 
-                {/* Action Buttons */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-1">
+                {/* Action Buttons: Complete, Cancel, Refund */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 pt-1">
                   {b.status === 'confirmed' && (
                     <>
                       <button
                         onClick={() => requestStatusUpdate(b, 'completed')}
                         className="px-2 py-1.5 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-lg font-bold text-[10px] hover:bg-emerald-100 flex items-center justify-center gap-1"
+                        title="Mark as Checked-in & Completed"
                       >
                         <CheckCircle className="w-3.5 h-3.5" /> Complete
                       </button>
                       <button
-                        onClick={() => requestStatusUpdate(b, 'no_show')}
-                        className="px-2 py-1.5 bg-amber-50 text-amber-900 border border-amber-300 rounded-lg font-bold text-[10px] hover:bg-amber-100 flex items-center justify-center gap-1"
-                      >
-                        <UserX className="w-3.5 h-3.5" /> No-Show
-                      </button>
-                      <button
                         onClick={() => requestStatusUpdate(b, 'cancelled')}
                         className="px-2 py-1.5 bg-red-50 text-red-800 border border-red-200 rounded-lg font-bold text-[10px] hover:bg-red-100 flex items-center justify-center gap-1"
+                        title="Cancel Reservation"
                       >
                         <XCircle className="w-3.5 h-3.5" /> Cancel
                       </button>
@@ -310,6 +330,7 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
                     <button
                       onClick={() => setRefundModalBooking(b)}
                       className="px-2 py-1.5 bg-purple-50 text-purple-900 border border-purple-300 rounded-lg font-bold text-[10px] hover:bg-purple-100 flex items-center justify-center gap-1"
+                      title={b.status === 'refunded' ? 'Adjust Refund Amount' : 'Process Refund'}
                     >
                       <RotateCcw className="w-3.5 h-3.5 text-purple-700" />
                       {b.status === 'refunded' ? 'Adjust Refund' : 'Refund'}
@@ -323,8 +344,13 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
       </div>
 
       {/* DESKTOP DATA TABLE (Displayed on screens >= 768px) */}
-      <div className="hidden md:block bg-white border border-outline-variant/40 rounded-xl overflow-x-auto shadow-sm">
-        <table className="w-full text-left text-xs min-w-[750px]">
+      {isFiltering ? (
+        <div className="hidden md:block">
+          <BookingTableSkeleton rows={7} />
+        </div>
+      ) : (
+        <div className="hidden md:block bg-white border border-outline-variant/40 rounded-xl overflow-x-auto shadow-sm">
+          <table className="w-full text-left text-xs min-w-[750px]">
           <thead className="bg-surface-container-low border-b border-outline-variant/40 font-headline font-bold text-on-surface-variant uppercase tracking-wider">
             <tr>
               <th className="p-3">Ref & Gate OTP</th>
@@ -349,7 +375,7 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
                 const cust = customers.find(c => c.id === b.customer_id);
                 const court = courts.find(c => c.id === b.court_id);
                 const bRef = b.booking_ref || b.id || 'N/A';
-                const otpCode = bRef.length >= 4 ? bRef.slice(-4) : '----';
+                const otpCode = getBookingGatePassOtp(b);
 
                 return (
                   <tr key={b.id} className="hover:bg-surface-container-low/50">
@@ -361,12 +387,27 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
                     </td>
                     <td className="p-3">
                       <div className="font-headline font-bold text-on-surface">{cust?.name || 'Unknown'}</div>
-                      <div className="text-[10px] text-on-surface-variant">+91 {cust?.phone || 'N/A'}</div>
+                      <div className="text-[10px] text-on-surface-variant">{formatPhoneNumber(cust?.phone) || 'N/A'}</div>
                     </td>
                     <td className="p-3 font-semibold text-on-surface">{court?.name || 'Unknown Court'}</td>
                     <td className="p-3 font-mono">
-                      <div>{b.booking_date}</div>
-                      <div className="text-[11px] text-primary font-bold">{formatTimeRange12h(b.start_time, b.end_time)}</div>
+                      <div>{formatDateDDMMYYYY(b.booking_date)}</div>
+                      <div className="text-[11px] text-primary font-bold flex items-center gap-1.5 mt-0.5">
+                        <div
+                          className={`p-1 rounded-md shrink-0 flex items-center justify-center ${
+                            parseInt(b.start_time.split(':')[0], 10) >= 18 || parseInt(b.start_time.split(':')[0], 10) < 5
+                              ? 'bg-indigo-50 text-indigo-500'
+                              : 'bg-amber-50 text-amber-500'
+                          }`}
+                        >
+                          {parseInt(b.start_time.split(':')[0], 10) >= 18 || parseInt(b.start_time.split(':')[0], 10) < 5 ? (
+                            <Moon className="w-3 h-3" />
+                          ) : (
+                            <Sun className="w-3 h-3" />
+                          )}
+                        </div>
+                        <span>{formatTimeRange12hPlain(b.start_time, b.end_time)}</span>
+                      </div>
                     </td>
                     <td className="p-3">
                       <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-headline font-bold text-[10px] uppercase ${
@@ -412,27 +453,11 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
                         {b.status === 'confirmed' && (
                           <>
                             <button
-                              onClick={() => handleSendReminderEmail(b)}
-                              className="px-2 py-1 bg-sky-50 text-sky-800 border border-sky-300 rounded-lg font-bold text-[10px] hover:bg-sky-100 flex items-center gap-1 transition-colors shadow-2xs"
-                              title="Send 1-Hour Matchday Reminder Email via Resend"
-                            >
-                              <Bell className="w-3.5 h-3.5 text-sky-600" /> 1-Hr Reminder
-                            </button>
-
-                            <button
                               onClick={() => requestStatusUpdate(b, 'completed')}
                               className="px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-lg font-bold text-[10px] hover:bg-emerald-100 flex items-center gap-1 transition-colors shadow-2xs"
-                              title="Mark as Checked-in & Played"
+                              title="Mark as Checked-in & Completed"
                             >
                               <CheckCircle className="w-3.5 h-3.5 text-emerald-700" /> Complete
-                            </button>
-
-                            <button
-                              onClick={() => requestStatusUpdate(b, 'no_show')}
-                              className="px-2.5 py-1 bg-amber-50 text-amber-900 border border-amber-300 rounded-lg font-bold text-[10px] hover:bg-amber-100 flex items-center gap-1 transition-colors shadow-2xs"
-                              title="Mark Customer as No-Show"
-                            >
-                              <UserX className="w-3.5 h-3.5 text-amber-700" /> No-Show
                             </button>
 
                             <button
@@ -467,6 +492,7 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
           </tbody>
         </table>
       </div>
+      )}
 
       {/* Confirmation Modal */}
       <ConfirmModal

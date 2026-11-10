@@ -1,6 +1,7 @@
 import { store } from './store';
 import { NotificationService } from './notificationService';
 import { Booking } from '../types/schema';
+import { PostgresEngine } from './postgresEngine';
 
 export class ReminderScheduler {
   private static timerId: any = null;
@@ -19,6 +20,9 @@ export class ReminderScheduler {
    * Check all bookings for today and dispatch 1-hour reminders
    */
   public static checkAndDispatch(): { dispatchedCount: number; checkedBookings: string[] } {
+    // 1. Automatically complete any past/expired confirmed bookings
+    PostgresEngine.autoCompleteExpiredBookings();
+
     const now = new Date();
     const bookings = store.getBookings();
     const notificationLogs = store.getNotificationLogs();

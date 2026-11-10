@@ -3,7 +3,7 @@ import { Booking, AdminUser } from '../../types/schema';
 import { store } from '../../services/store';
 import { PostgresEngine } from '../../services/postgresEngine';
 import { AuditLogger } from '../../services/auditLogger';
-import { formatTimeRange12h } from '../../utils/formatters';
+import { formatTimeRange12h, formatTimeRange12hPlain, formatDateDDMMYYYY, formatPhoneNumber } from '../../utils/formatters';
 import { 
   X, 
   RotateCcw, 
@@ -15,7 +15,9 @@ import {
   FileText,
   User,
   Calendar,
-  Sparkles
+  Sparkles,
+  Sun,
+  Moon
 } from 'lucide-react';
 
 interface AdminRefundModalProps {
@@ -163,7 +165,7 @@ export const AdminRefundModal: React.FC<AdminRefundModalProps> = ({
 
   return (
     <div className="modal-overlay">
-      <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl animate-modalScaleIn text-on-surface max-h-[92vh] overflow-y-auto no-scrollbar">
+      <div className="bg-white border border-outline-variant/60 rounded-3xl sm:rounded-2xl w-full max-w-lg p-4 sm:p-6 space-y-4 shadow-2xl animate-modalScaleIn text-on-surface max-h-[92vh] overflow-y-auto no-scrollbar">
         {/* Header */}
         <div className="flex justify-between items-center border-b border-outline-variant/40 pb-3">
           <div className="flex items-center gap-2">
@@ -208,14 +210,27 @@ export const AdminRefundModal: React.FC<AdminRefundModalProps> = ({
             <div>
               <p className="text-[11px] text-on-surface-variant font-medium">Customer</p>
               <p className="font-headline font-bold text-on-surface">{customer?.name || 'Walk-in Guest'}</p>
-              <p className="font-mono text-[10px] text-on-surface-variant">+91 {customer?.phone || 'N/A'}</p>
+              <p className="font-mono text-[10px] text-on-surface-variant">{formatPhoneNumber(customer?.phone) || 'N/A'}</p>
             </div>
             <div>
               <p className="text-[11px] text-on-surface-variant font-medium">Slot & Pitch</p>
               <p className="font-headline font-bold text-on-surface">{court?.name || 'Court'}</p>
-              <p className="font-mono text-[10px] text-primary font-bold">
-                {booking.booking_date} ({formatTimeRange12h(booking.start_time, booking.end_time)})
-              </p>
+              <div className="font-mono text-[10px] text-primary font-bold flex items-center gap-1.5 mt-0.5">
+                <div
+                  className={`p-1 rounded-md shrink-0 flex items-center justify-center ${
+                    parseInt(booking.start_time.split(':')[0], 10) >= 18 || parseInt(booking.start_time.split(':')[0], 10) < 5
+                      ? 'bg-indigo-50 text-indigo-500'
+                      : 'bg-amber-50 text-amber-500'
+                  }`}
+                >
+                  {parseInt(booking.start_time.split(':')[0], 10) >= 18 || parseInt(booking.start_time.split(':')[0], 10) < 5 ? (
+                    <Moon className="w-3 h-3" />
+                  ) : (
+                    <Sun className="w-3 h-3" />
+                  )}
+                </div>
+                <span>{formatDateDDMMYYYY(booking.booking_date)} ({formatTimeRange12hPlain(booking.start_time, booking.end_time)})</span>
+              </div>
             </div>
           </div>
 
@@ -431,11 +446,11 @@ export const AdminRefundModal: React.FC<AdminRefundModalProps> = ({
           )}
 
           {/* Action Buttons */}
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-outline-variant/30">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2 border-t border-outline-variant/30">
             <button
               type="button"
               onClick={onClose}
-              className="btn-secondary py-2 px-4 text-xs font-bold"
+              className="btn-secondary w-full sm:w-auto py-2.5 px-4 text-xs font-bold"
               disabled={isSubmitting}
             >
               Cancel
@@ -443,7 +458,7 @@ export const AdminRefundModal: React.FC<AdminRefundModalProps> = ({
             <button
               type="submit"
               disabled={!canExecuteRefund || isSubmitting}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-headline font-bold text-xs flex items-center gap-1.5 shadow-sm disabled:opacity-50 transition-colors"
+              className="w-full sm:w-auto px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-headline font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50 transition-colors"
             >
               <RotateCcw className="w-4 h-4" />
               {isSubmitting ? 'Processing Refund...' : `Confirm Refund of ₹${refundAmount}`}

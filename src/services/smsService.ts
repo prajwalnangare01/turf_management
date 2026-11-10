@@ -1,6 +1,6 @@
 import { Booking, Customer, Venue } from '../types/schema';
 import { normalizeIndianPhone } from '../utils/venueTime';
-import { formatTime12hPlain, formatDateDDMMYYYY } from '../utils/formatters';
+import { formatTime12hPlain, formatDateDDMMYYYY, getBookingGatePassOtp } from '../utils/formatters';
 
 export interface SmsDispatchResult {
   success: boolean;
@@ -139,14 +139,16 @@ export class SmsService {
   }): Promise<SmsDispatchResult> {
     const { booking, customer, courtName, venue } = params;
     const recipientPhone = customer?.phone || (booking as any).customer_phone || '9876543210';
-    const otpCode = booking.booking_ref ? booking.booking_ref.slice(-4) : '0000';
+    const otpCode = getBookingGatePassOtp(booking);
+    const slotTimesStr = booking.formatted_slots || `${formatTime12hPlain(booking.start_time)} – ${formatTime12hPlain(booking.end_time)}`;
+    const totalAmount = booking.total_order_amount || booking.total_amount;
 
     const message = 
       `🎉 Booking Confirmed! Ref: ${booking.booking_ref}\n` +
       `Pitch: ${courtName} (${venue.name})\n` +
-      `Date: ${formatDateDDMMYYYY(booking.booking_date)} @ ${formatTime12hPlain(booking.start_time)} – ${formatTime12hPlain(booking.end_time)}\n` +
+      `Date: ${formatDateDDMMYYYY(booking.booking_date)} @ ${slotTimesStr}\n` +
       `Gate Entry OTP: ${otpCode}\n` +
-      `Amount Paid: ₹${booking.total_amount}\n` +
+      `Amount Paid: ₹${totalAmount}\n` +
       `Please arrive 10 mins early with turf shoes. See you on the turf!`;
 
     return this.sendSms({
@@ -167,10 +169,11 @@ export class SmsService {
   }): Promise<SmsDispatchResult> {
     const { booking, customer, courtName, venue } = params;
     const recipientPhone = customer?.phone || (booking as any).customer_phone || '9876543210';
-    const otpCode = booking.booking_ref ? booking.booking_ref.slice(-4) : '0000';
+    const otpCode = getBookingGatePassOtp(booking);
 
     const message = 
       `⏰ Kickoff Reminder: Your game at ${venue.name} starts in 1 hour (${formatTime12hPlain(booking.start_time)})!\n` +
+      `Date: ${formatDateDDMMYYYY(booking.booking_date)}\n` +
       `Court: ${courtName}\n` +
       `Gate Entry OTP: ${otpCode}\n` +
       `Address: ${venue.address}\n` +

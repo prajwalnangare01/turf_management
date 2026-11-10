@@ -58,6 +58,7 @@ export class SupabaseService {
             peak_end_time: typeof c.peak_end_time === 'string' ? c.peak_end_time.slice(0, 5) : '23:00',
             peak_price_per_hour: Number(c.peak_price_per_hour) || 1800,
             peak_offer_price_per_hour: c.peak_offer_price_per_hour ? Number(c.peak_offer_price_per_hour) : undefined,
+            offer_end_date: c.offer_end_date ? String(c.offer_end_date).slice(0, 10) : undefined,
             sport_ids: matchingSports.length > 0 ? matchingSports : ['sp-football']
           };
         });

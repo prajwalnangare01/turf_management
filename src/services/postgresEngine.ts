@@ -264,4 +264,49 @@ export class PostgresEngine {
       booking
     };
   }
+
+  /**
+   * Automatically transition confirmed bookings to 'completed' once their slot timing (end_time) has passed.
+   * If a slot has finished without manual intervention, this reduces owner workload by marking it completed.
+   */
+  public static autoCompleteExpiredBookings(): { completedCount: number; updatedBookings: Booking[] } {
+    const bookings = store.getBookings();
+    const now = new Date();
+    const updatedBookings: Booking[] = [];
+    let completedCount = 0;
+
+    for (const booking of bookings) {
+      if (booking.status !== 'confirmed') continue;
+
+      if (!booking.booking_date || !booking.end_time) continue;
+      const [bY, bM, bD] = booking.booking_date.split('-').map(Number);
+      const [bH, bMin] = booking.end_time.split(':').map(Number);
+      if (!bY || !bM || !bD || isNaN(bH) || isNaN(bMin)) continue;
+
+      const slotEndTime = new Date(bY, bM - 1, bD, bH, bMin, 0);
+      if (bH === 0 && bMin === 0) {
+        slotEndTime.setDate(slotEndTime.getDate() + 1);
+      }
+
+      // If slot end time has elapsed
+      if (now.getTime() >= slotEndTime.getTime()) {
+        booking.status = 'completed';
+        booking.updated_at = new Date().toISOString();
+        updatedBookings.push(booking);
+        completedCount++;
+
+        // Persist to Supabase PostgreSQL immediately
+        SupabaseSyncService.updateBookingInSupabase(booking.id, booking).catch(err => {
+          console.warn('❌ [PostgresEngine] Error syncing auto-completed booking to Supabase:', err);
+        });
+      }
+    }
+
+    if (completedCount > 0) {
+      store.setBookings([...bookings]);
+      console.info(`[PostgresEngine] 🏁 Automatically completed ${completedCount} expired slot booking(s).`);
+    }
+
+    return { completedCount, updatedBookings };
+  }
 }
