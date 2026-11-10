@@ -6,7 +6,7 @@ import { NotificationService } from '../../services/notificationService';
 import { AuditLogger } from '../../services/auditLogger';
 import { AdminUser, Court, Booking } from '../../types/schema';
 import { CloudRain, AlertTriangle, ShieldCheck, CheckCircle2, Users, X, Send } from 'lucide-react';
-import { formatTimeRange12h } from '../../utils/formatters';
+import { formatTimeRange12h, formatTime12hPlain } from '../../utils/formatters';
 
 interface EmergencyWeatherModalProps {
   isOpen: boolean;
@@ -290,7 +290,7 @@ export const EmergencyWeatherModal: React.FC<EmergencyWeatherModalProps> = ({
                       <div key={b.id} className="bg-white/80 p-2 rounded-lg text-[11px] flex justify-between items-center border border-amber-200/60">
                         <div>
                           <span className="font-bold text-on-surface">{cust?.name || 'Customer'}</span>
-                          <span className="text-on-surface-variant text-[10px] ml-1.5 font-mono">{b.start_time} - {b.end_time}</span>
+                          <span className="text-on-surface-variant text-[10px] ml-1.5 font-mono">{formatTime12hPlain(b.start_time)} – {formatTime12hPlain(b.end_time)}</span>
                         </div>
                         <div className="text-right">
                           <span className="font-bold text-primary">₹{b.total_amount}</span>
