@@ -489,9 +489,19 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
                 >
                   <div className="flex justify-between items-start">
                     <div>
-                      <span className="text-[10px] font-headline font-bold uppercase tracking-wider text-primary bg-primary/10 px-2.5 py-0.5 rounded-full border border-primary/20">
-                        {c.slot_duration_minutes} MIN SESSIONS
-                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[10px] font-headline font-bold uppercase tracking-wider text-primary bg-primary/10 px-2.5 py-0.5 rounded-full border border-primary/20">
+                          {c.slot_duration_minutes} MIN SESSIONS
+                        </span>
+                        {((c.original_price_per_hour && c.original_price_per_hour > c.base_price_per_hour) ||
+                          (c.saturday_offer_price_per_hour && c.saturday_offer_price_per_hour !== (c.saturday_price_per_hour || c.base_price_per_hour)) ||
+                          (c.sunday_offer_price_per_hour && c.sunday_offer_price_per_hour !== (c.sunday_price_per_hour || c.base_price_per_hour)) ||
+                          (c.peak_offer_price_per_hour && c.peak_offer_price_per_hour !== (c.peak_price_per_hour || 1800))) && (
+                          <span className="text-[10px] font-headline font-black uppercase tracking-wider text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-300 inline-flex items-center gap-1 shadow-2xs">
+                            🎉 OFFER ACTIVE
+                          </span>
+                        )}
+                      </div>
                       <h4 className="font-headline font-bold text-base text-on-surface mt-2 leading-tight">
                         {c.name}
                       </h4>
@@ -523,6 +533,32 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
                       )}
                     </div>
                   </div>
+
+                  {(c.saturday_price_per_hour || c.sunday_price_per_hour || c.saturday_offer_price_per_hour || c.sunday_offer_price_per_hour) && (
+                    <div className="text-[11px] text-amber-950 bg-amber-50/70 px-2.5 py-1 rounded-xl border border-amber-200/60 flex items-center justify-between font-medium">
+                      <span>📅 Weekend Rates</span>
+                      <div className="flex items-center gap-2">
+                        {c.saturday_offer_price_per_hour && c.saturday_offer_price_per_hour !== (c.saturday_price_per_hour || c.base_price_per_hour) ? (
+                          <span className="flex items-center gap-1">
+                            <span className="text-[10px] text-on-surface-variant">Sat:</span>
+                            <span className="line-through text-slate-400 text-[10px]">₹{Math.max(c.saturday_price_per_hour || c.base_price_per_hour, c.saturday_offer_price_per_hour)}</span>
+                            <strong className="font-extrabold text-emerald-800">₹{Math.min(c.saturday_price_per_hour || c.base_price_per_hour, c.saturday_offer_price_per_hour)}</strong>
+                          </span>
+                        ) : (
+                          <span className="text-[10px]">Sat: <strong>₹{c.saturday_price_per_hour || c.base_price_per_hour}</strong></span>
+                        )}
+                        {c.sunday_offer_price_per_hour && c.sunday_offer_price_per_hour !== (c.sunday_price_per_hour || c.base_price_per_hour) ? (
+                          <span className="flex items-center gap-1">
+                            <span className="text-[10px] text-on-surface-variant">Sun:</span>
+                            <span className="line-through text-slate-400 text-[10px]">₹{Math.max(c.sunday_price_per_hour || c.base_price_per_hour, c.sunday_offer_price_per_hour)}</span>
+                            <strong className="font-extrabold text-emerald-800">₹{Math.min(c.sunday_price_per_hour || c.base_price_per_hour, c.sunday_offer_price_per_hour)}</strong>
+                          </span>
+                        ) : (
+                          <span className="text-[10px]">Sun: <strong>₹{c.sunday_price_per_hour || c.base_price_per_hour}</strong></span>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {c.peak_enabled && (
                     <div className="text-[11px] text-amber-900 bg-amber-50 px-2.5 py-1 rounded-xl border border-amber-200/80 flex items-center justify-between font-medium">

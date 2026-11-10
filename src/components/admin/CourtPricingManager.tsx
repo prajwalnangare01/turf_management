@@ -2167,6 +2167,299 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
         </div>
       )}
 
+      {/* Occasion / Flash Sale Offer Modal */}
+      {showOccasionOfferModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-5 max-h-[92vh] overflow-y-auto border border-outline-variant/30">
+            {/* Modal Header */}
+            <div className="flex justify-between items-start border-b border-outline-variant/40 pb-4">
+              <div>
+                <h3 className="font-headline font-bold text-lg text-emerald-950 flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-emerald-600" /> Apply Occasion / Flash Sale Offer
+                </h3>
+                <p className="text-xs text-on-surface-variant mt-0.5 font-medium">
+                  Update prices by a discount percentage (e.g. 10% OFF) with 1 click. Automatically updates pitch rates and displays pre-discount MRP strikethroughs across the site.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowOccasionOfferModal(false)}
+                className="text-on-surface-variant hover:text-on-surface p-1 rounded-lg hover:bg-surface-container transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* 1. Quick 1-Click Discount Presets */}
+              <div>
+                <label className="block text-on-surface-variant font-headline font-bold text-xs mb-1.5">
+                  Select Discount Percentage (1-Click Presets) *
+                </label>
+                <div className="flex flex-wrap gap-2 items-center">
+                  {[5, 10, 15, 20, 25, 30, 50].map(pct => {
+                    const isSelected = offerPercentage === pct;
+                    return (
+                      <button
+                        key={pct}
+                        type="button"
+                        onClick={() => setOfferPercentage(pct)}
+                        className={`px-3 py-1.5 rounded-xl font-headline font-bold text-xs transition-all ${
+                          isSelected
+                            ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-500 ring-offset-1 scale-105'
+                            : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
+                        }`}
+                      >
+                        {pct}% OFF {pct === 10 && '⭐ (Popular)'}
+                      </button>
+                    );
+                  })}
+                  <div className="flex items-center gap-1.5 ml-auto">
+                    <span className="text-xs font-bold text-on-surface-variant">Custom:</span>
+                    <div className="relative w-24">
+                      <input
+                        type="number"
+                        min="1"
+                        max="99"
+                        value={offerPercentage}
+                        onChange={e => setOfferPercentage(Math.max(1, Math.min(99, Number(e.target.value) || 0)))}
+                        className="form-input text-xs font-extrabold pr-6 text-center"
+                      />
+                      <Percent className="w-3.5 h-3.5 text-on-surface-variant absolute right-2 top-2.5 pointer-events-none" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. Occasion Label / Name (Optional) */}
+              <div>
+                <label className="block text-on-surface-variant font-headline font-bold text-xs mb-1.5">
+                  Occasion / Offer Tag (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={offerOccasionName}
+                  onChange={e => setOfferOccasionName(e.target.value)}
+                  placeholder="e.g. Diwali Flash Sale, Weekend Blast, IPL Special"
+                  className="form-input text-xs font-medium"
+                />
+                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                  {['Diwali Dhamaka', 'Weekend Flash Deal', 'Tournament Special', 'Summer League', 'Monsoon Offer'].map(preset => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setOfferOccasionName(preset)}
+                      className="text-[10px] bg-surface-container-low hover:bg-surface-container text-on-surface-variant px-2 py-0.5 rounded-full border border-outline-variant/40 transition-colors"
+                    >
+                      + {preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 3. Target Pitches Selection */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-on-surface-variant font-headline font-bold text-xs">
+                    Target Pitches ({selectedCourtIdsForOffer.length} of {courts.length} Selected) *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (selectedCourtIdsForOffer.length === courts.length) {
+                        setSelectedCourtIdsForOffer([]);
+                      } else {
+                        setSelectedCourtIdsForOffer(courts.map(c => c.id));
+                      }
+                    }}
+                    className="text-[11px] font-bold text-primary hover:underline"
+                  >
+                    {selectedCourtIdsForOffer.length === courts.length ? 'Deselect All' : 'Select All Pitches'}
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {courts.map(court => {
+                    const isChecked = selectedCourtIdsForOffer.includes(court.id);
+                    return (
+                      <label
+                        key={court.id}
+                        className={`flex items-center gap-2.5 p-2 rounded-xl border text-xs cursor-pointer transition-colors ${
+                          isChecked
+                            ? 'bg-emerald-50/70 border-emerald-300 text-emerald-950 font-semibold'
+                            : 'bg-white border-outline-variant/50 text-on-surface-variant hover:bg-surface-container-low'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={e => {
+                            if (e.target.checked) {
+                              setSelectedCourtIdsForOffer(prev => [...prev, court.id]);
+                            } else {
+                              setSelectedCourtIdsForOffer(prev => prev.filter(id => id !== court.id));
+                            }
+                          }}
+                          className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="truncate font-bold text-on-surface">{court.name}</p>
+                          <p className="text-[10px] text-on-surface-variant truncate">
+                            Base: ₹{court.base_price_per_hour}/hr | Sat: ₹{court.saturday_price_per_hour ?? court.base_price_per_hour} | Sun: ₹{court.sunday_price_per_hour ?? court.base_price_per_hour}
+                          </p>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 4. Rates to Discount */}
+              <div>
+                <label className="block text-on-surface-variant font-headline font-bold text-xs mb-1.5">
+                  Apply {offerPercentage}% Discount To Rates *
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <label className={`flex items-center gap-2 p-2 rounded-xl border text-xs cursor-pointer ${
+                    offerRateTypes.weekday ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-bold' : 'bg-surface-container-low border-outline-variant/30 text-on-surface-variant'
+                  }`}>
+                    <input
+                      type="checkbox"
+                      checked={offerRateTypes.weekday}
+                      onChange={e => setOfferRateTypes(prev => ({ ...prev, weekday: e.target.checked }))}
+                      className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
+                    />
+                    <span>Weekday (Mon-Fri)</span>
+                  </label>
+                  <label className={`flex items-center gap-2 p-2 rounded-xl border text-xs cursor-pointer ${
+                    offerRateTypes.saturday ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-bold' : 'bg-surface-container-low border-outline-variant/30 text-on-surface-variant'
+                  }`}>
+                    <input
+                      type="checkbox"
+                      checked={offerRateTypes.saturday}
+                      onChange={e => setOfferRateTypes(prev => ({ ...prev, saturday: e.target.checked }))}
+                      className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
+                    />
+                    <span>Saturday</span>
+                  </label>
+                  <label className={`flex items-center gap-2 p-2 rounded-xl border text-xs cursor-pointer ${
+                    offerRateTypes.sunday ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-bold' : 'bg-surface-container-low border-outline-variant/30 text-on-surface-variant'
+                  }`}>
+                    <input
+                      type="checkbox"
+                      checked={offerRateTypes.sunday}
+                      onChange={e => setOfferRateTypes(prev => ({ ...prev, sunday: e.target.checked }))}
+                      className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
+                    />
+                    <span>Sunday</span>
+                  </label>
+                  <label className={`flex items-center gap-2 p-2 rounded-xl border text-xs cursor-pointer ${
+                    offerRateTypes.peak ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-bold' : 'bg-surface-container-low border-outline-variant/30 text-on-surface-variant'
+                  }`}>
+                    <input
+                      type="checkbox"
+                      checked={offerRateTypes.peak}
+                      onChange={e => setOfferRateTypes(prev => ({ ...prev, peak: e.target.checked }))}
+                      className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
+                    />
+                    <span>Peak Hours</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* 5. Live Real-Time Impact & Preview Table */}
+              <div className="bg-surface-container-low p-3.5 rounded-xl border border-outline-variant/40 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-headline font-bold text-xs text-on-surface flex items-center gap-1.5">
+                    <Zap className="w-3.5 h-3.5 text-emerald-600" /> Live Rate Preview ({offerPercentage}% OFF)
+                  </span>
+                  <span className="text-[11px] text-emerald-700 font-extrabold bg-emerald-100 px-2 py-0.5 rounded-full">
+                    {selectedCourtIdsForOffer.length} Pitch(es) Selected
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-[11px] text-left">
+                    <thead>
+                      <tr className="border-b border-outline-variant/40 text-on-surface-variant font-bold">
+                        <th className="py-1.5 pr-2">Pitch</th>
+                        {offerRateTypes.weekday && <th className="py-1.5 px-2">Weekday</th>}
+                        {offerRateTypes.saturday && <th className="py-1.5 px-2">Saturday</th>}
+                        {offerRateTypes.sunday && <th className="py-1.5 px-2">Sunday</th>}
+                        {offerRateTypes.peak && <th className="py-1.5 px-2">Peak Hours</th>}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-outline-variant/20">
+                      {courts.filter(c => selectedCourtIdsForOffer.includes(c.id)).map(court => {
+                        const preview = calculateOfferPricingForCourt(court, offerPercentage, offerRateTypes);
+                        return (
+                          <tr key={court.id} className="hover:bg-white/50">
+                            <td className="py-1.5 pr-2 font-bold text-on-surface">{court.name}</td>
+                            {offerRateTypes.weekday && (
+                              <td className="py-1.5 px-2">
+                                <span className="line-through text-on-surface-variant/70 mr-1">₹{preview.origWeekday}</span>
+                                <strong className="text-emerald-700">₹{preview.newBasePrice}</strong>
+                              </td>
+                            )}
+                            {offerRateTypes.saturday && (
+                              <td className="py-1.5 px-2">
+                                <span className="line-through text-on-surface-variant/70 mr-1">₹{preview.baseSat}</span>
+                                <strong className="text-emerald-700">₹{preview.newSatOfferPrice}</strong>
+                              </td>
+                            )}
+                            {offerRateTypes.sunday && (
+                              <td className="py-1.5 px-2">
+                                <span className="line-through text-on-surface-variant/70 mr-1">₹{preview.baseSun}</span>
+                                <strong className="text-emerald-700">₹{preview.newSunOfferPrice}</strong>
+                              </td>
+                            )}
+                            {offerRateTypes.peak && (
+                              <td className="py-1.5 px-2">
+                                {court.peak_enabled ? (
+                                  <>
+                                    <span className="line-through text-on-surface-variant/70 mr-1">₹{preview.basePeak}</span>
+                                    <strong className="text-emerald-700">₹{preview.newPeakOfferPrice}</strong>
+                                  </>
+                                ) : (
+                                  <span className="text-on-surface-variant/60 italic">N/A</span>
+                                )}
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-2 border-t border-outline-variant/40">
+                <button
+                  type="button"
+                  onClick={() => setShowOccasionOfferModal(false)}
+                  className="btn-secondary flex-1 py-2.5 font-bold text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={selectedCourtIdsForOffer.length === 0 || isApplyingOffer}
+                  onClick={handleApplyOccasionOffer}
+                  className="btn-primary flex-1 py-2.5 font-headline font-bold text-xs flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isApplyingOffer ? (
+                    <span>Applying {offerPercentage}% Offer...</span>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" /> Apply {offerPercentage}% Offer ({selectedCourtIdsForOffer.length} Pitches)
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Universal Confirmation Modal (Rendered at top-most z-index overlay level) */}
       <ConfirmModal
         isOpen={confirmState.isOpen}
