@@ -5,7 +5,7 @@ import { PostgresEngine } from '../../services/postgresEngine';
 import { SupabaseSyncService } from '../../services/supabaseSyncService';
 import { AdminUser, Court, BlockedSlot, Sport } from '../../types/schema';
 import { ConfirmModal } from '../common/ConfirmModal';
-import { Settings, ShieldAlert, Trash2, PlusCircle, Edit3, X, Check, Calendar, Zap, Clock, AlertTriangle, Tag } from 'lucide-react';
+import { Settings, ShieldAlert, Trash2, PlusCircle, Edit3, X, Check, Calendar, Zap, Clock, AlertTriangle, Tag, Sparkles, Percent, RotateCcw } from 'lucide-react';
 import { formatTime12hPlain, formatDateDDMMYYYY } from '../../utils/formatters';
 
 interface CourtPricingManagerProps {
@@ -196,6 +196,218 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
   const [blockEndDate, setBlockEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [blockEndTime, setBlockEndTime] = useState('23:00');
   const [blockReason, setBlockReason] = useState<'maintenance' | 'private_event' | 'owner_block'>('maintenance');
+
+  // Occasion Offer Modal State
+  const [showOccasionOfferModal, setShowOccasionOfferModal] = useState(false);
+  const [offerPercentage, setOfferPercentage] = useState<number>(10);
+  const [offerOccasionName, setOfferOccasionName] = useState<string>('');
+  const [selectedCourtIdsForOffer, setSelectedCourtIdsForOffer] = useState<string[]>([]);
+  const [offerRateTypes, setOfferRateTypes] = useState({
+    weekday: true,
+    saturday: true,
+    sunday: true,
+    peak: true
+  });
+  const [isApplyingOffer, setIsApplyingOffer] = useState(false);
+
+  // Helper: check if a court currently has any promotional offer active
+  const isCourtOfferActive = (c: Court) => {
+    const hasWeekdayOffer = Boolean(c.original_price_per_hour && c.original_price_per_hour > c.base_price_per_hour);
+    const satBase = c.saturday_price_per_hour ?? c.base_price_per_hour;
+    const hasSatOffer = Boolean(c.saturday_offer_price_per_hour && c.saturday_offer_price_per_hour > 0 && c.saturday_offer_price_per_hour !== satBase);
+    const sunBase = c.sunday_price_per_hour ?? c.base_price_per_hour;
+    const hasSunOffer = Boolean(c.sunday_offer_price_per_hour && c.sunday_offer_price_per_hour > 0 && c.sunday_offer_price_per_hour !== sunBase);
+    const peakBase = c.peak_price_per_hour ?? 1800;
+    const hasPeakOffer = Boolean(c.peak_enabled && c.peak_offer_price_per_hour && c.peak_offer_price_per_hour > 0 && c.peak_offer_price_per_hour !== peakBase);
+    return hasWeekdayOffer || hasSatOffer || hasSunOffer || hasPeakOffer;
+  };
+
+  const activeOfferCourts = courts.filter(isCourtOfferActive);
+
+  const handleOpenOccasionOfferModal = () => {
+    setSelectedCourtIdsForOffer(courts.map(c => c.id));
+    setShowOccasionOfferModal(true);
+  };
+
+  // Helper: calculate discounted prices for a court based on percentage and selected rate categories
+  const calculateOfferPricingForCourt = (court: Court, pct: number, types: typeof offerRateTypes) => {
+    const discountRatio = Math.max(0, (100 - pct) / 100);
+
+    // Weekday calculation (preserves true baseline MRP if already on discount)
+    const origWeekday = (court.original_price_per_hour && court.original_price_per_hour > court.base_price_per_hour)
+      ? court.original_price_per_hour
+      : court.base_price_per_hour;
+    const newBasePrice = types.weekday ? Math.round(origWeekday * discountRatio) : court.base_price_per_hour;
+    const newOriginalPrice = types.weekday ? origWeekday : court.original_price_per_hour;
+
+    // Saturday calculation
+    const baseSat = court.saturday_price_per_hour ?? court.base_price_per_hour;
+    const newSatOfferPrice = types.saturday ? Math.round(baseSat * discountRatio) : court.saturday_offer_price_per_hour;
+
+    // Sunday calculation
+    const baseSun = court.sunday_price_per_hour ?? court.base_price_per_hour;
+    const newSunOfferPrice = types.sunday ? Math.round(baseSun * discountRatio) : court.sunday_offer_price_per_hour;
+
+    // Peak hours calculation
+    const basePeak = court.peak_price_per_hour ?? 1800;
+    const newPeakOfferPrice = (types.peak && court.peak_enabled)
+      ? Math.round(basePeak * discountRatio)
+      : court.peak_offer_price_per_hour;
+
+    return {
+      origWeekday,
+      newBasePrice,
+      newOriginalPrice,
+      baseSat,
+      newSatOfferPrice,
+      baseSun,
+      newSunOfferPrice,
+      basePeak,
+      newPeakOfferPrice
+    };
+  };
+
+  const handleApplyOccasionOffer = async () => {
+    if (selectedCourtIdsForOffer.length === 0) {
+      alert('Please select at least one pitch/court to apply the offer to.');
+      return;
+    }
+    if (offerPercentage <= 0 || offerPercentage >= 100) {
+      alert('Discount percentage must be between 1% and 99%.');
+      return;
+    }
+    if (!offerRateTypes.weekday && !offerRateTypes.saturday && !offerRateTypes.sunday && !offerRateTypes.peak) {
+      alert('Please select at least one rate category (Weekday, Saturday, Sunday, or Peak).');
+      return;
+    }
+
+    setIsApplyingOffer(true);
+    try {
+      const updatedCourts = courts.map(court => {
+        if (!selectedCourtIdsForOffer.includes(court.id)) {
+          return court;
+        }
+
+        const calc = calculateOfferPricingForCourt(court, offerPercentage, offerRateTypes);
+        const updated: Court = {
+          ...court,
+          base_price_per_hour: calc.newBasePrice,
+          original_price_per_hour: calc.newOriginalPrice,
+          saturday_offer_price_per_hour: calc.newSatOfferPrice,
+          sunday_offer_price_per_hour: calc.newSunOfferPrice,
+          peak_offer_price_per_hour: calc.newPeakOfferPrice
+        };
+
+        SupabaseSyncService.syncCourtToSupabase(updated).catch(err => {
+          console.warn(`❌ [OccasionOffer] Error syncing court ${court.id} to Supabase:`, err);
+        });
+
+        AuditLogger.log(
+          currentAdmin.id,
+          'UPDATE_COURT',
+          'Court',
+          court.id,
+          court,
+          {
+            ...updated,
+            _offerApplied: `${offerPercentage}% OFF ${offerOccasionName ? `(${offerOccasionName})` : ''}`
+          }
+        );
+
+        return updated;
+      });
+
+      store.setCourts(updatedCourts);
+      setCourts(updatedCourts);
+      setShowOccasionOfferModal(false);
+      setIsApplyingOffer(false);
+    } catch (err) {
+      console.error('Failed to apply occasion offer:', err);
+      setIsApplyingOffer(false);
+      alert('Failed to apply offer across pitches. Please try again.');
+    }
+  };
+
+  const executeResetCourtOffer = (courtId: string) => {
+    const target = courts.find(c => c.id === courtId);
+    if (!target) return;
+
+    const restoredWeekday = (target.original_price_per_hour && target.original_price_per_hour > target.base_price_per_hour)
+      ? target.original_price_per_hour
+      : target.base_price_per_hour;
+
+    const updatedCourt: Court = {
+      ...target,
+      base_price_per_hour: restoredWeekday,
+      original_price_per_hour: undefined,
+      saturday_offer_price_per_hour: undefined,
+      sunday_offer_price_per_hour: undefined,
+      peak_offer_price_per_hour: undefined
+    };
+
+    const updatedCourts = courts.map(c => c.id === courtId ? updatedCourt : c);
+    store.setCourts(updatedCourts);
+    setCourts(updatedCourts);
+
+    SupabaseSyncService.syncCourtToSupabase(updatedCourt).catch(err => {
+      console.warn(`❌ [OccasionOffer] Error restoring court ${courtId} to Supabase:`, err);
+    });
+
+    AuditLogger.log(currentAdmin.id, 'UPDATE_COURT', 'Court', courtId, target, updatedCourt);
+    closeConfirm();
+  };
+
+  const handlePromptResetCourtOffer = (court: Court) => {
+    setConfirmState({
+      isOpen: true,
+      title: `End Offer on ${court.name}`,
+      message: `Reset "${court.name}" back to standard non-discounted pricing? Original weekday price will be restored to ₹${court.original_price_per_hour || court.base_price_per_hour}/hr and all weekend/peak offer prices will be cleared.`,
+      confirmText: 'Reset Pitch Pricing',
+      variant: 'warning',
+      onConfirm: () => executeResetCourtOffer(court.id)
+    });
+  };
+
+  const executeResetAllOffers = () => {
+    const updatedCourts = courts.map(court => {
+      if (!isCourtOfferActive(court)) return court;
+
+      const restoredWeekday = (court.original_price_per_hour && court.original_price_per_hour > court.base_price_per_hour)
+        ? court.original_price_per_hour
+        : court.base_price_per_hour;
+
+      const updatedCourt: Court = {
+        ...court,
+        base_price_per_hour: restoredWeekday,
+        original_price_per_hour: undefined,
+        saturday_offer_price_per_hour: undefined,
+        sunday_offer_price_per_hour: undefined,
+        peak_offer_price_per_hour: undefined
+      };
+
+      SupabaseSyncService.syncCourtToSupabase(updatedCourt).catch(err => {
+        console.warn(`❌ [OccasionOffer] Error resetting court ${court.id} to Supabase:`, err);
+      });
+
+      AuditLogger.log(currentAdmin.id, 'UPDATE_COURT', 'Court', court.id, court, updatedCourt);
+      return updatedCourt;
+    });
+
+    store.setCourts(updatedCourts);
+    setCourts(updatedCourts);
+    closeConfirm();
+  };
+
+  const handlePromptResetAllOffers = () => {
+    setConfirmState({
+      isOpen: true,
+      title: 'End All Active Offers Across All Pitches',
+      message: `Are you sure you want to end all promotional offers? All pitches (${activeOfferCourts.length}) will immediately revert back to their standard non-discounted rates across the Website and WhatsApp.`,
+      confirmText: 'Yes, End All Offers',
+      variant: 'warning',
+      onConfirm: executeResetAllOffers
+    });
+  };
 
   const canEdit = true; // Add, Edit, and Delete features enabled for Admin Panel
 
@@ -548,6 +760,13 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
         {canEdit && (
           <div className="flex flex-wrap items-center gap-2">
             <button
+              onClick={handleOpenOccasionOfferModal}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 font-headline font-bold shadow-sm transition-all"
+            >
+              <Sparkles className="w-4 h-4 text-emerald-200" /> + Add Occasion Offer
+            </button>
+
+            <button
               onClick={() => setShowAddCourtModal(true)}
               className="btn-primary text-xs px-4 py-2 flex items-center gap-1.5 font-headline font-bold shadow-sm"
             >
@@ -564,6 +783,44 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
         )}
       </div>
 
+      {/* Active Occasion Offer Banner */}
+      {activeOfferCourts.length > 0 && (
+        <div className="bg-gradient-to-r from-emerald-500/10 via-amber-500/10 to-emerald-500/10 border-2 border-emerald-500/30 rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm animate-fadeIn">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+              <Sparkles className="w-5 h-5 text-emerald-200" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="font-headline font-bold text-sm text-emerald-950">
+                  🎉 Active Occasion / Promotional Offer Running
+                </h4>
+                <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wide">
+                  {activeOfferCourts.length} of {courts.length} Pitches Discounted
+                </span>
+              </div>
+              <p className="text-xs text-on-surface-variant mt-0.5">
+                Discounted rates and original MRP strikethroughs are active across Website & WhatsApp bookings.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 w-full md:w-auto">
+            <button
+              onClick={handleOpenOccasionOfferModal}
+              className="btn-primary text-xs px-3.5 py-2 font-headline font-bold flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl shadow-xs"
+            >
+              <Edit3 className="w-3.5 h-3.5" /> Adjust Offer
+            </button>
+            <button
+              onClick={handlePromptResetAllOffers}
+              className="btn-secondary text-xs px-3.5 py-2 font-headline font-bold text-red-700 border-red-300 hover:bg-red-50 flex items-center gap-1.5 rounded-xl shadow-xs"
+            >
+              <RotateCcw className="w-3.5 h-3.5" /> End / Reset All Offers
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Courts Inventory Cards List */}
       <div>
         <div className="flex items-center justify-between mb-3">
@@ -577,12 +834,20 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
             const courtSports = sports.filter(s => court.sport_ids.includes(s.id));
             const satPrice = court.saturday_price_per_hour ?? court.base_price_per_hour;
             const sunPrice = court.sunday_price_per_hour ?? court.base_price_per_hour;
+            const hasCourtOffer = isCourtOfferActive(court);
 
             return (
               <div key={court.id} className="bg-white p-5 rounded-xl border border-outline-variant/50 shadow-sm space-y-3 relative group">
                 <div className="flex justify-between items-start">
                   <div>
-                    <h3 className="font-headline font-bold text-base text-on-surface leading-snug">{court.name}</h3>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <h3 className="font-headline font-bold text-base text-on-surface leading-snug">{court.name}</h3>
+                      {hasCourtOffer && (
+                        <span className="bg-emerald-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-md flex items-center gap-1 shadow-xs tracking-wider uppercase">
+                          <Sparkles className="w-2.5 h-2.5 text-emerald-200" /> Offer Active
+                        </span>
+                      )}
+                    </div>
                     <div className="flex flex-wrap gap-1 mt-1">
                       {courtSports.map(s => (
                         <span key={s.id} className="bg-primary/10 text-primary px-2 py-0.5 rounded-full text-[10px] font-bold">
@@ -673,7 +938,7 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
                   </div>
                   <div className="flex justify-between">
                     <span>Operating Hours:</span>
-                    <strong className="text-on-surface font-semibold">{court.opening_time} – {court.closing_time}</strong>
+                    <strong className="text-on-surface font-semibold">{formatTime12hPlain(court.opening_time)} – {formatTime12hPlain(court.closing_time)}</strong>
                   </div>
                   <div className="flex justify-between items-center pt-1 border-t border-outline-variant/30">
                     <span>Status:</span>
@@ -686,7 +951,16 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
                 </div>
 
                 {canEdit && (
-                  <div className="pt-2 flex justify-end gap-3 border-t border-outline-variant/30">
+                  <div className="pt-2 flex items-center justify-end gap-3 border-t border-outline-variant/30">
+                    {hasCourtOffer && (
+                      <button
+                        onClick={() => handlePromptResetCourtOffer(court)}
+                        className="text-xs text-amber-700 hover:text-amber-900 font-bold flex items-center gap-1 p-1 rounded hover:bg-amber-50 transition-colors mr-auto"
+                        title="Reset promotional rates back to standard rates for this pitch"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" /> End Offer
+                      </button>
+                    )}
                     <button
                       onClick={() => handleStartEditCourt(court)}
                       className="text-xs text-primary hover:text-primary-container font-bold flex items-center gap-1 p-1 rounded hover:bg-primary/10 transition-colors"
@@ -1853,7 +2127,7 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
                         <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" /> Active Booking Conflict Detected
                       </p>
                       <p className="text-[11px] text-amber-800">
-                        Booking <strong className="font-mono">{liveConflict.booking_ref}</strong> ({liveConflict.customer_name}) is scheduled on {formatDateDDMMYYYY(liveConflict.booking_date)} ({formatTime12hPlain(liveConflict.start_time)} – ${formatTime12hPlain(liveConflict.end_time)}). Please reschedule or cancel it first.
+                        Booking <strong className="font-mono">{liveConflict.booking_ref}</strong> ({liveConflict.customer_name}) is scheduled on {formatDateDDMMYYYY(liveConflict.booking_date)} ({formatTime12hPlain(liveConflict.start_time)} – {formatTime12hPlain(liveConflict.end_time)}). Please reschedule or cancel it first.
                       </p>
                     </div>
                   );

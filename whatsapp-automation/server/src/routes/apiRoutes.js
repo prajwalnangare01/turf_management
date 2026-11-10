@@ -9,6 +9,7 @@ import { WhatsAppService } from '../services/whatsappService.js';
 import { GatePassService } from '../services/gatePassService.js';
 import { EmailService } from '../services/emailService.js';
 import { SmsService } from '../services/smsService.js';
+import { WhatsAppFormatter } from '../utils/whatsappFormatter.js';
 import { getSupabase } from '../data/supabaseClient.js';
 import { getVenueDateString } from '../utils/venueTime.js';
 
@@ -582,8 +583,8 @@ apiRouter.get('/pay/:ref', async (req, res) => {
           <p class="text-xs text-slate-600">Booking <span class="font-mono font-bold text-emerald-700">${booking.booking_ref}</span> is confirmed and secured.</p>
           <div class="bg-slate-50 p-4 rounded-2xl text-left text-xs space-y-1.5 border border-slate-200">
             <p><strong>🏟️ Court:</strong> ${courtName}</p>
-            <p><strong>📅 Date:</strong> ${booking.booking_date}</p>
-            <p><strong>⏰ Time:</strong> ${booking.start_time} - ${booking.end_time}</p>
+            <p><strong>📅 Date:</strong> ${WhatsAppFormatter.formatDate(booking.booking_date)}</p>
+            <p><strong>⏰ Time:</strong> ${WhatsAppFormatter.formatTime(booking.start_time)} — ${WhatsAppFormatter.formatTime(booking.end_time)}</p>
             <p><strong>💰 Paid:</strong> ₹${booking.total_amount} (Razorpay UPI)</p>
           </div>
           <div class="pt-2 flex flex-col gap-2">
@@ -610,7 +611,7 @@ apiRouter.get('/pay/:ref', async (req, res) => {
           <div class="bg-amber-50 p-4 rounded-2xl text-left text-xs space-y-1 border border-amber-200 text-amber-900">
             <p><strong>Booking Ref:</strong> <span class="font-mono">${booking.booking_ref}</span></p>
             <p><strong>Requested Pitch:</strong> ${courtName}</p>
-            <p><strong>Slot:</strong> ${booking.booking_date} @ ${booking.start_time} - ${booking.end_time}</p>
+            <p><strong>Slot:</strong> ${WhatsAppFormatter.formatDate(booking.booking_date)} @ ${WhatsAppFormatter.formatTime(booking.start_time)} — ${WhatsAppFormatter.formatTime(booking.end_time)}</p>
           </div>
           <p class="text-xs text-slate-500 pt-1">Please return to WhatsApp or our website to check current available slots and book again.</p>
         </div>
@@ -664,7 +665,7 @@ apiRouter.get('/pay/:ref', async (req, res) => {
             </div>
             <div class="flex justify-between items-center">
               <span class="text-slate-500 font-bold uppercase text-[10px]">Date & Timing</span>
-              <span class="font-medium text-slate-800">${booking.booking_date} | ${booking.start_time} - ${booking.end_time}</span>
+              <span class="font-medium text-slate-800">${WhatsAppFormatter.formatDate(booking.booking_date)} | ${WhatsAppFormatter.formatTime(booking.start_time)} — ${WhatsAppFormatter.formatTime(booking.end_time)}</span>
             </div>
             <div class="flex justify-between items-center">
               <span class="text-slate-500 font-bold uppercase text-[10px]">Customer</span>

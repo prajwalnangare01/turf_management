@@ -1,6 +1,7 @@
 import React from 'react';
 import { store } from '../../services/store';
 import { AdminUser } from '../../types/schema';
+import { formatTime12hPlain, formatDateDDMMYYYY } from '../../utils/formatters';
 import { BarChart3, Download, TrendingUp } from 'lucide-react';
 
 interface ReportsAnalyticsProps {
@@ -30,9 +31,9 @@ export const ReportsAnalytics: React.FC<ReportsAnalyticsProps> = ({ currentAdmin
     const headers = ['Booking Ref', 'Date', 'Start Time', 'End Time', 'Source', 'Status', 'Amount (INR)'];
     const rows = bookings.map(b => [
       b.booking_ref,
-      b.booking_date,
-      b.start_time,
-      b.end_time,
+      formatDateDDMMYYYY(b.booking_date),
+      formatTime12hPlain(b.start_time),
+      formatTime12hPlain(b.end_time),
       b.source,
       b.status,
       b.total_amount

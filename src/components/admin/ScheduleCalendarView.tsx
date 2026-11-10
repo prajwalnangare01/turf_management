@@ -6,7 +6,7 @@ import { SlotEngine } from '../../services/slotEngine';
 import { RedisLockService } from '../../services/redisLockService';
 import { SupabaseSyncService } from '../../services/supabaseSyncService';
 import { Booking, AdminUser, Court, BlockedSlot } from '../../types/schema';
-import { formatTime12h, formatTimeRange12h, formatTime12hPlain, formatDateDDMMYYYY } from '../../utils/formatters';
+import { formatTime12h, formatTimeRange12h, formatTime12hPlain, formatTimeRange12hPlain, formatDateDDMMYYYY } from '../../utils/formatters';
 import { getVenueDateString, getVenueNow } from '../../utils/venueTime';
 import { OfflineBookingModal } from './OfflineBookingModal';
 import { AdminRefundModal } from './AdminRefundModal';
@@ -451,7 +451,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
               <p className="text-on-surface-variant">Customer: <strong className="text-on-surface font-semibold">{store.getCustomers().find(c => c.id === selectedBooking.customer_id)?.name || selectedBooking.customer_name || 'Customer'}</strong></p>
               <p className="text-on-surface-variant">Phone: <strong className="text-on-surface font-semibold">{selectedBooking.customer_phone || store.getCustomers().find(c => c.id === selectedBooking.customer_id)?.phone || 'N/A'}</strong></p>
               <p className="text-on-surface-variant">Court: <strong className="text-on-surface font-semibold">{store.getCourts().find(c => c.id === selectedBooking.court_id)?.name || selectedBooking.court_id}</strong></p>
-              <p className="text-on-surface-variant">Date & Time: <strong className="text-primary font-bold">{selectedBooking.booking_date} | {formatTimeRange12h(selectedBooking.start_time, selectedBooking.end_time)}</strong></p>
+              <p className="text-on-surface-variant">Date & Time: <strong className="text-primary font-bold">{formatDateDDMMYYYY(selectedBooking.booking_date)} | {formatTimeRange12hPlain(selectedBooking.start_time, selectedBooking.end_time)}</strong></p>
               <div className="flex items-center gap-1.5 text-on-surface-variant">
                 <span>Source:</span>
                 <span className={`px-2 py-0.5 rounded-full font-headline font-bold text-[10px] uppercase ${
@@ -725,7 +725,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
                       <span className="font-bold flex items-center gap-1 text-amber-800">
                         <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" /> Conflict:
                       </span>
-                      <span>Booking {conflict.booking_ref} on {formatDateDDMMYYYY(conflict.booking_date)} ({formatTime12hPlain(conflict.start_time)} – ${formatTime12hPlain(conflict.end_time)}) exists in this window.</span>
+                      <span>Booking {conflict.booking_ref} on {formatDateDDMMYYYY(conflict.booking_date)} ({formatTime12hPlain(conflict.start_time)} – {formatTime12hPlain(conflict.end_time)}) exists in this window.</span>
                     </div>
                   );
                 }

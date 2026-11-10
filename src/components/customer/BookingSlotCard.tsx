@@ -75,10 +75,10 @@ export const BookingSlotCard: React.FC<BookingSlotCardProps> = ({
   const isInteractive = isAvailable || isHeldByCurrent;
   const isDisabled = !isInteractive;
 
-  // Dynamic interactive container state classes as specified in requirements
-  let stateClasses = 'bg-white border-gray-200 hover:border-emerald-400 hover:shadow-sm';
+  // Dynamic interactive container state classes matching reference design
+  let stateClasses = 'bg-white border-gray-200 hover:border-emerald-500 hover:shadow-sm';
   if (isDisabled) {
-    stateClasses = 'opacity-50 grayscale cursor-not-allowed border-dashed bg-gray-50 border-gray-200';
+    stateClasses = 'opacity-50 grayscale cursor-not-allowed border-dashed bg-gray-50/80 border-gray-200';
   } else if (isSelected) {
     stateClasses = 'border-emerald-600 bg-emerald-50/40 ring-2 ring-emerald-500/20 shadow-sm';
   }
@@ -102,16 +102,17 @@ export const BookingSlotCard: React.FC<BookingSlotCardProps> = ({
           handleClick();
         }
       }}
-      className={`group rounded-xl p-3.5 border transition-all duration-200 select-none flex flex-col justify-between min-h-[110px] ${
+      className={`group rounded-2xl p-3 sm:p-3.5 border transition-all duration-200 select-none flex flex-col justify-between overflow-hidden ${
         isInteractive ? 'cursor-pointer' : 'cursor-not-allowed'
       } ${stateClasses} ${className}`}
     >
-      {/* 1. Header Row */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2.5">
+      {/* 1. Header Row: Time Details (Left) & Stacked Deal Badge (Right) */}
+      <div className="flex items-start justify-between gap-1.5 w-full">
+        {/* Left: Sun/Moon Icon Box + Stacked Time & Duration */}
+        <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
           {/* Squircle Time Icon Box */}
           <div
-            className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border ${
+            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 border ${
               isNight
                 ? 'bg-indigo-50/80 border-indigo-200/60 text-indigo-500'
                 : 'bg-amber-50/90 border-amber-200/60 text-amber-500'
@@ -124,45 +125,53 @@ export const BookingSlotCard: React.FC<BookingSlotCardProps> = ({
             )}
           </div>
 
-          {/* Time & Duration Display */}
-          <div className="flex flex-col">
-            <div className="flex items-baseline gap-1 leading-tight">
-              <span className="font-semibold text-gray-900 text-sm sm:text-base tracking-tight">
-                {time}
-              </span>
-              <span className="font-semibold text-gray-700 text-xs sm:text-sm">
-                {period}
-              </span>
-            </div>
-            <div className="flex items-center gap-1 text-[11px] text-gray-400 font-medium mt-0.5">
-              <Clock className="w-3 h-3 text-gray-400" />
-              <span>{duration} mins</span>
+          {/* Time & Duration: 02:00 on Line 1, PM on Line 2, 60 mins on Line 3 */}
+          <div className="flex flex-col min-w-0">
+            <span className="font-bold text-gray-900 text-sm sm:text-base leading-none tracking-tight">
+              {time}
+            </span>
+            <span className="font-bold text-gray-900 text-xs sm:text-sm leading-tight mt-0.5">
+              {period}
+            </span>
+            <div className="flex items-center gap-1 text-[11px] text-gray-400 font-medium mt-1 leading-none">
+              <Clock className="w-3 h-3 text-gray-400 shrink-0" />
+              <span className="truncate">{duration} mins</span>
             </div>
           </div>
         </div>
 
-        {/* Top-Right Badge: Discount pill or Peak Indicator */}
-        <div className="flex items-center gap-1 shrink-0">
+        {/* Right: Stacked Deal Badge Pill (Never overflows) */}
+        <div className="shrink-0 flex items-start gap-1">
           {hasDiscount && isAvailable && (
-            <div className="bg-emerald-50 text-emerald-700 border border-emerald-200/60 font-semibold text-xs px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
-              <Tag className="w-3 h-3 text-emerald-600" />
-              <span>{discountPct}% OFF</span>
+            <div className="bg-emerald-50 text-emerald-700 border border-emerald-200/80 rounded-2xl px-2.5 py-1 flex items-center gap-1.5 shadow-2xs">
+              <Tag className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <div className="flex flex-col text-left leading-none">
+                <span className="text-[11px] font-bold text-emerald-700 leading-tight">
+                  {discountPct}%
+                </span>
+                <span className="text-[9px] font-extrabold text-emerald-600 tracking-wider uppercase leading-tight">
+                  OFF
+                </span>
+              </div>
             </div>
           )}
 
           {slot.is_peak && isAvailable && (
-            <span className="bg-amber-50 text-amber-800 border border-amber-200/80 font-bold text-[10px] px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
-              <Zap className="w-2.5 h-2.5 fill-amber-600 text-amber-600" /> PEAK
+            <span className="bg-amber-50 text-amber-800 border border-amber-200/80 font-bold text-[9px] px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+              <Zap className="w-2.5 h-2.5 fill-amber-600 text-amber-600 shrink-0" /> PEAK
             </span>
           )}
         </div>
       </div>
 
-      {/* 2. Pricing & Status Footer Section */}
-      <div className="mt-3.5 pt-2 border-t border-gray-100/90 flex items-baseline justify-between gap-2">
+      {/* 2. Subtle Horizontal Hairline Divider */}
+      <div className="w-full my-3 border-t border-gray-100" />
+
+      {/* 3. Pricing & Footer Action Section */}
+      <div className="flex items-baseline justify-between gap-1.5 w-full">
         {/* Baseline-aligned prices */}
-        <div className="flex items-baseline gap-1.5">
-          <span className="text-lg font-bold text-emerald-600 tracking-tight leading-none">
+        <div className="flex items-baseline gap-1.5 min-w-0">
+          <span className="text-lg sm:text-xl font-bold text-emerald-600 tracking-tight leading-none">
             ₹{slot.price.toLocaleString('en-IN')}
           </span>
           {hasDiscount && (
@@ -179,7 +188,7 @@ export const BookingSlotCard: React.FC<BookingSlotCardProps> = ({
               <Check className="w-3 h-3 stroke-[3]" /> Selected
             </span>
           ) : isAvailable ? (
-            <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 group-hover:text-emerald-700 group-hover:translate-x-0.5 transition-all">
+            <span className="inline-flex items-center gap-1 text-xs sm:text-sm font-semibold text-emerald-600 group-hover:text-emerald-700 group-hover:translate-x-0.5 transition-all">
               Book <ArrowRight className="w-3.5 h-3.5" />
             </span>
           ) : slot.status === 'locked' ? (
@@ -187,12 +196,12 @@ export const BookingSlotCard: React.FC<BookingSlotCardProps> = ({
               <Lock className="w-3 h-3" /> Held
             </span>
           ) : (slot.status === 'booked_online' || slot.status === 'booked_offline') ? (
-            <span className="text-xs font-medium text-red-500">
-              Sold Out
+            <span className="text-xs font-medium text-gray-400">
+              Passed
             </span>
           ) : slot.status === 'blocked' ? (
             <span className="text-xs font-medium text-gray-400">
-              {slot.blocked_reason ? slot.blocked_reason.slice(0, 10) : 'Blocked'}
+              Blocked
             </span>
           ) : (
             <span className="text-xs font-medium text-gray-400">
