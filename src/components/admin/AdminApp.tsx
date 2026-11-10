@@ -51,6 +51,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onSwitchToCustomer }) => {
     try {
       localStorage.setItem('TURFFLOW_ADMIN_TAB', tab);
       const url = new URL(window.location.href);
+      url.searchParams.set('admin', 'true');
       url.searchParams.set('tab', tab);
       window.history.replaceState({}, '', url.toString());
     } catch {}

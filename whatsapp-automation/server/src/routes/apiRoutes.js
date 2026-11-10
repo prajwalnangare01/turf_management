@@ -37,17 +37,20 @@ async function findOrResolveBooking(ref, fallbackData = {}) {
     // Aggregate siblings if this is part of a multi-slot order
     const parentRef = WhatsAppFormatter.getBookingGroupRef(booking);
     if (parentRef) {
+      const isBookingActive = booking.status !== 'cancelled' && booking.status !== 'refunded';
       const siblings = store.getBookings().filter(b => 
-        WhatsAppFormatter.getBookingGroupRef(b) === parentRef ||
-        (b.gateway_payment_id && booking.gateway_payment_id && b.gateway_payment_id === booking.gateway_payment_id)
+        (isBookingActive ? (b.status !== 'cancelled' && b.status !== 'refunded') : b.id === booking.id) &&
+        (WhatsAppFormatter.getBookingGroupRef(b) === parentRef ||
+         (b.gateway_payment_id && booking.gateway_payment_id && b.gateway_payment_id === booking.gateway_payment_id))
       );
-      if (siblings.length > 1 && (!booking.all_slots || booking.all_slots.length <= 1)) {
+      if (siblings.length > 0) {
         booking.all_slots = Array.from(new Map(siblings.map(s => [`${s.start_time}-${s.end_time}`, {
           start_time: s.start_time,
           end_time: s.end_time,
           price: s.total_amount
         }])).values()).sort((a, b) => a.start_time.localeCompare(b.start_time));
         booking.total_order_amount = siblings.reduce((sum, s) => sum + (Number(s.total_amount) || 0), 0);
+        booking.formatted_slots = booking.all_slots.map(s => `${WhatsAppFormatter.formatTime(s.start_time)} – ${WhatsAppFormatter.formatTime(s.end_time)}`).join(', ');
       }
     }
     return booking;
@@ -129,6 +132,24 @@ async function findOrResolveBooking(ref, fallbackData = {}) {
  */
 apiRouter.get('/venue', (req, res) => {
   res.json({ success: true, venue: store.getVenue() });
+});
+
+apiRouter.post('/venue', (req, res) => {
+  const { venue } = req.body || {};
+  if (venue) {
+    const updated = store.setVenue(venue);
+    return res.json({ success: true, venue: updated });
+  }
+  res.status(400).json({ success: false, message: 'Missing venue data' });
+});
+
+apiRouter.put('/venue', (req, res) => {
+  const { venue } = req.body || {};
+  if (venue) {
+    const updated = store.setVenue(venue);
+    return res.json({ success: true, venue: updated });
+  }
+  res.status(400).json({ success: false, message: 'Missing venue data' });
 });
 
 /**
@@ -451,7 +472,7 @@ apiRouter.get('/bookings/:ref/pass', async (req, res) => {
       return res.status(404).send('Booking not found');
     }
 
-    const html = GatePassService.generatePassHtml(booking);
+    const html = await GatePassService.generatePassHtml(booking);
     res.setHeader('Content-Type', 'text/html');
     res.send(html);
   } catch (err) {
@@ -470,7 +491,7 @@ apiRouter.post('/bookings/generate-pass-html', async (req, res) => {
     }
 
     const resolved = await findOrResolveBooking(booking.booking_ref || booking.id, booking);
-    const html = GatePassService.generatePassHtml(resolved);
+    const html = await GatePassService.generatePassHtml(resolved);
     res.setHeader('Content-Type', 'text/html');
     res.send(html);
   } catch (err) {
@@ -483,12 +504,12 @@ apiRouter.post('/bookings/generate-pass-html', async (req, res) => {
  */
 apiRouter.post('/email/send', async (req, res) => {
   try {
-    const { to, subject, html, text, from } = req.body || {};
+    const { to, subject, html, text, from, attachments } = req.body || {};
     if (!to || !subject) {
       return res.status(400).json({ success: false, error: 'Recipient "to" and "subject" are required' });
     }
 
-    const result = await EmailService.sendEmail({ to, subject, html, text, from });
+    const result = await EmailService.sendEmail({ to, subject, html, text, from, attachments });
     if (!result.success && !result.simulated) {
       return res.status(400).json(result);
     }

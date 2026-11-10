@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import QRCode from 'qrcode';
 import { store } from '../../services/store';
 import { AuditLogger } from '../../services/auditLogger';
 import { AdminUser, CancellationPolicy, CancellationSettings } from '../../types/schema';
-import { Sliders, Save, RefreshCw, MessageSquare, DollarSign, Clock, PlusCircle, Trash2, ShieldCheck, ArrowRight, AlertCircle, RotateCcw, Mail, Send, CheckCircle2, Database, Radio } from 'lucide-react';
+import { Sliders, Save, RefreshCw, MessageSquare, DollarSign, Clock, PlusCircle, Trash2, ShieldCheck, ArrowRight, AlertCircle, RotateCcw, Mail, Send, CheckCircle2, Database, Radio, MapPin, QrCode, ExternalLink } from 'lucide-react';
 import { getSupabaseConfig, setSupabaseConfig, clearSupabaseConfig, testSupabaseConnection, isSupabaseConfigured } from '../../services/supabaseClient';
 import { SupabaseSyncService } from '../../services/supabaseSyncService';
 import { EmailService } from '../../services/emailService';
@@ -27,6 +28,22 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin }) =>
   const [newPercentage, setNewPercentage] = useState<number>(75);
   const [newLabel, setNewLabel] = useState<string>('Partial Refund (12h+ notice)');
   const [policySuccessMsg, setPolicySuccessMsg] = useState<string | null>(null);
+
+  // Venue Settings & Gate Pass Location QR States
+  const [venueQrDataUrl, setVenueQrDataUrl] = useState<string>('');
+  const [venueSuccessMsg, setVenueSuccessMsg] = useState<string | null>(null);
+
+  // Real-time Venue Location QR Code generation for testing & verification
+  useEffect(() => {
+    const targetUrl = venue.location_url || venue.google_maps_link || `https://maps.google.com/?q=${encodeURIComponent(venue.name + ', ' + venue.address)}`;
+    if (!targetUrl) {
+      setVenueQrDataUrl('');
+      return;
+    }
+    QRCode.toDataURL(targetUrl, { margin: 1, width: 180 })
+      .then(url => setVenueQrDataUrl(url))
+      .catch(() => setVenueQrDataUrl(''));
+  }, [venue.location_url, venue.google_maps_link, venue.name, venue.address]);
 
   // Supabase Sync State
   const [supabaseConfig, setSupabaseConfigState] = useState(() => getSupabaseConfig());
@@ -133,13 +150,35 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin }) =>
 
   const handleSaveVenue = (e: React.FormEvent) => {
     e.preventDefault();
-    if (currentAdmin.role !== 'owner') {
-      alert('Permission denied: Only Owners can modify venue parameters.');
+    if (currentAdmin.role === 'staff') {
+      alert('Permission denied: Staff accounts cannot modify venue parameters. Only Owners and Managers can update venue settings.');
       return;
     }
-    store.setVenue(venue);
-    AuditLogger.log(currentAdmin.id, 'UPDATE_VENUE_SETTINGS', 'Venue', venue.id, null, venue);
-    alert('Venue settings updated successfully!');
+    const targetMapUrl = venue.location_url || venue.google_maps_link || `https://maps.google.com/?q=${encodeURIComponent(venue.name + ', ' + venue.address)}`;
+    const updatedVenue = {
+      ...venue,
+      location_url: targetMapUrl,
+      google_maps_link: targetMapUrl
+    };
+
+    setVenue(updatedVenue);
+    store.setVenue(updatedVenue);
+    AuditLogger.log(currentAdmin.id, 'UPDATE_VENUE_SETTINGS', 'Venue', venue.id, null, updatedVenue);
+
+    // Sync to backend server
+    try {
+      fetch('/api/venue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ venue: updatedVenue })
+      }).catch(() => {});
+    } catch {}
+
+    // Sync to Supabase
+    SupabaseSyncService.syncVenueToSupabase(updatedVenue).catch(() => {});
+
+    setVenueSuccessMsg('Venue settings, address, and Google Maps location QR link updated successfully!');
+    setTimeout(() => setVenueSuccessMsg(null), 5000);
   };
 
   const handleSaveCancellationTerms = (e: React.FormEvent) => {
@@ -544,19 +583,154 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin }) =>
 
       {/* SECTION 2: VENUE OPERATIONAL PARAMETERS */}
       <div className="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/40 space-y-4">
-        <h2 className="font-headline font-bold text-lg text-primary flex items-center gap-2">
-          <Sliders className="w-5 h-5 text-primary" /> Venue & Operational Parameters
-        </h2>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-outline-variant/30 pb-3">
+          <div>
+            <h2 className="font-headline font-bold text-lg text-primary flex items-center gap-2">
+              <Sliders className="w-5 h-5 text-primary" /> Venue Location, Identity & Operational Parameters
+            </h2>
+            <p className="text-xs text-on-surface-variant font-medium mt-0.5">
+              Configure turf address, Google Maps navigation link (encoded into Gate Pass QR), tax details, and channels.
+            </p>
+          </div>
+          <span className="text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary px-2.5 py-1 rounded-full shrink-0">
+            {currentAdmin.role === 'staff' ? 'View Only (Staff)' : 'Admin Authority: Editable'}
+          </span>
+        </div>
+
+        {venueSuccessMsg && (
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 p-3 rounded-xl text-xs font-medium flex items-center gap-2 animate-in fade-in">
+            <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{venueSuccessMsg}</span>
+          </div>
+        )}
 
         <form onSubmit={handleSaveVenue} className="space-y-4 text-xs">
-          <div>
-            <label className="block text-on-surface-variant font-headline font-bold mb-1">Venue Name</label>
-            <input
-              type="text"
-              value={venue.name}
-              onChange={e => setVenue({ ...venue, name: e.target.value })}
-              className="form-input"
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-on-surface-variant font-headline font-bold mb-1">Venue Display Name *</label>
+              <input
+                type="text"
+                required
+                value={venue.name}
+                disabled={currentAdmin.role === 'staff'}
+                onChange={e => setVenue({ ...venue, name: e.target.value })}
+                className="form-input"
+              />
+            </div>
+            <div>
+              <label className="block text-on-surface-variant font-headline font-bold mb-1">Helpdesk / Owner Contact Phone *</label>
+              <input
+                type="text"
+                required
+                value={venue.contact_phone}
+                disabled={currentAdmin.role === 'staff'}
+                onChange={e => setVenue({ ...venue, contact_phone: e.target.value })}
+                className="form-input font-mono"
+              />
+            </div>
+          </div>
+
+          {/* TURF LOCATION & GATE PASS GOOGLE MAPS QR CONFIGURATION */}
+          <div className="p-4 bg-white rounded-xl border border-outline-variant/60 shadow-xs space-y-3">
+            <div className="flex items-center justify-between border-b border-outline-variant/20 pb-2">
+              <div className="flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-primary" />
+                <h3 className="font-headline font-bold text-sm text-on-surface">
+                  Turf Physical Address & Google Maps Navigation Link
+                </h3>
+              </div>
+              <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                <QrCode className="w-3 h-3 text-emerald-600" /> Embedded in Gate Pass
+              </span>
+            </div>
+
+            <p className="text-xs text-on-surface-variant leading-relaxed">
+              Admin Authority: Update the venue physical address and Google Maps directions link below. When updated, the new address and Google Maps link will appear across all Gate Passes, PDF receipts, WhatsApp notifications, and will be automatically encoded into the scannable Gate Pass Location QR Code.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start pt-1">
+              <div className="md:col-span-8 space-y-3">
+                {/* Physical Address */}
+                <div>
+                  <label className="block text-on-surface-variant font-headline font-bold mb-1">
+                    Venue Physical Address *
+                  </label>
+                  <textarea
+                    rows={2}
+                    required
+                    value={venue.address}
+                    disabled={currentAdmin.role === 'staff'}
+                    onChange={e => setVenue({ ...venue, address: e.target.value })}
+                    placeholder="e.g. Plot 42, Sports Enclave, Near Viman Nagar, Pune, Maharashtra 411045"
+                    className="form-input text-xs resize-none"
+                  />
+                  <p className="text-[10.5px] text-on-surface-variant mt-0.5">
+                    Printed at the bottom of customer Gate Passes, PDF passes, tax receipts, and booking alerts.
+                  </p>
+                </div>
+
+                {/* Google Maps Location URL */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-on-surface-variant font-headline font-bold">
+                      Google Maps Location Link (URL) *
+                    </label>
+                    {(venue.location_url || venue.google_maps_link) && (
+                      <a
+                        href={venue.location_url || venue.google_maps_link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[10.5px] font-bold text-primary hover:underline flex items-center gap-1"
+                      >
+                        <ExternalLink className="w-3 h-3" /> Test in Google Maps
+                      </a>
+                    )}
+                  </div>
+                  <input
+                    type="url"
+                    required
+                    value={venue.location_url || venue.google_maps_link || ''}
+                    disabled={currentAdmin.role === 'staff'}
+                    onChange={e => setVenue({ 
+                      ...venue, 
+                      location_url: e.target.value,
+                      google_maps_link: e.target.value 
+                    })}
+                    placeholder="https://maps.google.com/?q=18.5204,73.8567"
+                    className="form-input text-xs font-mono"
+                  />
+                  <p className="text-[10.5px] text-on-surface-variant mt-0.5">
+                    This exact Google Maps link is encoded into the Gate Pass QR code. Scanning the QR code with any mobile camera immediately opens Google Maps navigation.
+                  </p>
+                </div>
+              </div>
+
+              {/* Real-time Location QR Code Preview */}
+              <div className="md:col-span-4 bg-surface-container-low rounded-xl p-3.5 border border-outline-variant/40 flex flex-col items-center justify-center text-center">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1 flex items-center gap-1">
+                  <QrCode className="w-3 h-3 text-primary" /> Live Gate Pass QR
+                </span>
+                {venueQrDataUrl ? (
+                  <div className="p-1.5 bg-white rounded-lg border border-outline-variant/40 shadow-2xs my-1">
+                    <img 
+                      src={venueQrDataUrl} 
+                      alt="Turf Location QR Code" 
+                      className="w-24 h-24 sm:w-28 sm:h-28 object-contain"
+                    />
+                  </div>
+                ) : (
+                  <div className="w-24 h-24 bg-surface-container rounded-lg flex items-center justify-center border border-dashed border-outline-variant/40 my-1">
+                    <QrCode className="w-8 h-8 text-on-surface-variant/40 animate-pulse" />
+                  </div>
+                )}
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 mt-1">
+                  Gate Pass QR Ready
+                </span>
+                <span className="text-[9.5px] text-on-surface-variant mt-1 leading-tight">
+                  Scan with your phone to test navigation directly to the turf.
+                </span>
+              </div>
+            </div>
           </div>
 
           <div>
@@ -643,13 +817,13 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin }) =>
                   </label>
                   <input
                     type="text"
-                    value={venue.email_sender || 'TurfFlow Arena <onboarding@resend.dev>'}
+                    value={venue.email_sender || 'TurfFlow Arena <rajupainter84688@gmail.com>'}
                     onChange={e => setVenue({ ...venue, email_sender: e.target.value })}
-                    placeholder="TurfFlow Arena <onboarding@resend.dev>"
+                    placeholder="TurfFlow Arena <rajupainter84688@gmail.com>"
                     className="form-input text-xs"
                   />
                   <p className="text-[10px] text-on-surface-variant mt-1">
-                    Default: <code className="bg-surface-container px-1 py-0.5 rounded">onboarding@resend.dev</code> (or verified domain in Resend)
+                    Active Sender: <code className="bg-surface-container px-1 py-0.5 rounded text-primary font-bold">rajupainter84688@gmail.com</code> (TurfFlow Arena)
                   </p>
                 </div>
 

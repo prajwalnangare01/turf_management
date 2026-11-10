@@ -4,6 +4,13 @@ import { AdminApp } from './components/admin/AdminApp';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { ReminderScheduler } from './services/reminderScheduler';
 import { SupabaseSyncService } from './services/supabaseSyncService';
+import { RedisLockService } from './services/redisLockService';
+import { store } from './services/store';
+
+if (typeof window !== 'undefined') {
+  (window as any).__turfflow_redis = RedisLockService;
+  (window as any).__turfflow_store = store;
+}
 
 export const App: React.FC = () => {
   const checkIsAdminRoute = () => {
@@ -43,6 +50,7 @@ export const App: React.FC = () => {
   }, []);
 
   const handleSwitchToAdmin = () => {
+    try { sessionStorage.removeItem('turfflow_active_view'); } catch {}
     const currentParams = new URLSearchParams(window.location.search);
     currentParams.set('admin', 'true');
     window.history.pushState({}, '', `?${currentParams.toString()}`);
@@ -50,6 +58,7 @@ export const App: React.FC = () => {
   };
 
   const handleSwitchToCustomer = () => {
+    try { sessionStorage.removeItem('turfflow_active_view'); } catch {}
     const currentParams = new URLSearchParams(window.location.search);
     currentParams.delete('admin');
     const query = currentParams.toString() ? `?${currentParams.toString()}` : window.location.pathname;

@@ -109,6 +109,40 @@ export class RedisLockService {
   }
 
   /**
+   * Release all active locks belonging to a specific session or customer.
+   * Resolves the edge case where a user selects a slot and refreshes the page,
+   * ensuring their held slots are immediately released rather than remaining stuck for 5 minutes.
+   */
+  public static releaseAllLocksForSession(sessionId: string) {
+    if (!sessionId) return;
+    const locks = store.getSlotLocks();
+    const removedLocks: SlotLock[] = [];
+    const updated = locks.filter(l => {
+      if (l.locked_by === sessionId) {
+        removedLocks.push(l);
+        return false;
+      }
+      return true;
+    });
+
+    if (removedLocks.length > 0) {
+      store.setSlotLocks(updated);
+      for (const l of removedLocks) {
+        SupabaseSyncService.deleteSlotLockFromSupabase(l.court_id, l.date, l.start_time);
+        if (typeof window !== 'undefined') {
+          try {
+            fetch('/api/slots/release-lock', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ courtId: l.court_id, date: l.date, startTime: l.start_time, lockedBy: sessionId })
+            }).catch(() => {});
+          } catch (e) {}
+        }
+      }
+    }
+  }
+
+  /**
    * Release all locks for a booking time range (e.g. 18:00 to 20:00)
    */
   public static releaseLocksForBooking(courtId: string, date: string, startTime: string, endTime: string, sessionId?: string) {

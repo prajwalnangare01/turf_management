@@ -4,6 +4,7 @@ import { RedisLockService } from './redisLockService';
 import { AuditLogger } from './auditLogger';
 import { NotificationService } from './notificationService';
 import { SupabaseSyncService } from './supabaseSyncService';
+import { formatTimeRange12hPlain, getBookingGroupRef } from '../utils/formatters';
 
 export class PostgresEngine {
   /**
@@ -235,6 +236,43 @@ export class PostgresEngine {
       booking.refund_amount = 0;
     }
 
+    // If a multi-slot order booking was cancelled or refunded, dynamically re-calculate remaining active slots for all siblings
+    if (newStatus === 'cancelled' || newStatus === 'refunded') {
+      const groupRef = booking.group_ref || getBookingGroupRef(booking);
+      if (groupRef) {
+        const groupBookings = bookings.filter(b => 
+          getBookingGroupRef(b) === groupRef ||
+          b.group_ref === groupRef ||
+          (booking.gateway_payment_id && b.gateway_payment_id && b.gateway_payment_id === booking.gateway_payment_id)
+        );
+
+        const activeGroupBookings = groupBookings.filter(b => 
+          b.id !== booking.id && b.status !== 'cancelled' && b.status !== 'refunded'
+        );
+
+        const activeSlots = activeGroupBookings.map(s => ({
+          start_time: s.start_time,
+          end_time: s.end_time,
+          price: s.total_amount
+        })).sort((a, b) => a.start_time.localeCompare(b.start_time));
+
+        const activeTotalOrderAmount = activeGroupBookings.reduce((sum, s) => sum + (s.total_amount || 0), 0);
+        const activeFormattedSlots = activeSlots.map(s => formatTimeRange12hPlain(s.start_time, s.end_time)).join(', ');
+
+        for (const sibling of activeGroupBookings) {
+          sibling.all_slots = activeSlots;
+          sibling.total_order_amount = activeTotalOrderAmount;
+          sibling.formatted_slots = activeFormattedSlots;
+          SupabaseSyncService.updateBookingInSupabase(sibling.id, sibling).catch(() => {});
+        }
+
+        // On the cancelled booking itself, scope it to its own slot
+        booking.all_slots = [{ start_time: booking.start_time, end_time: booking.end_time, price: booking.total_amount }];
+        booking.formatted_slots = formatTimeRange12hPlain(booking.start_time, booking.end_time);
+        booking.total_order_amount = booking.total_amount;
+      }
+    }
+
     store.setBookings(bookings);
 
     // Sync metrics for customer (using actual refund amount if present)
@@ -280,11 +318,12 @@ export class PostgresEngine {
 
       if (!booking.booking_date || !booking.end_time) continue;
       const [bY, bM, bD] = booking.booking_date.split('-').map(Number);
+      const [bStartH] = (booking.start_time || '').split(':').map(Number);
       const [bH, bMin] = booking.end_time.split(':').map(Number);
       if (!bY || !bM || !bD || isNaN(bH) || isNaN(bMin)) continue;
 
       const slotEndTime = new Date(bY, bM - 1, bD, bH, bMin, 0);
-      if (bH === 0 && bMin === 0) {
+      if ((!isNaN(bStartH) && bH < bStartH) || (bH === 0 && bMin === 0)) {
         slotEndTime.setDate(slotEndTime.getDate() + 1);
       }
 

@@ -13,6 +13,7 @@ export interface AdminSession {
 export class AuthService {
   // Pre-configured admin passwords mapped by email
   private static ADMIN_CREDENTIALS: Record<string, string> = {
+    'rajupainter84688@gmail.com': 'admin123',
     'owner@turfflow.com': 'admin123',
     'manager@turfflow.com': 'manager123',
     'staff@turfflow.com': 'staff123',

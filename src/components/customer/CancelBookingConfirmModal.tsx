@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Booking } from '../../types/schema';
 import { store } from '../../services/store';
 import { formatTimeRange12h, formatTime12hPlain, formatDateDDMMYYYY } from '../../utils/formatters';
@@ -19,16 +19,34 @@ interface CancelBookingConfirmModalProps {
   booking: Booking | null;
   isOpen: boolean;
   onClose: () => void;
-  onConfirmed: (refundAmount: number, refundReason: string, metTerms: boolean, noticeHours: number) => void;
+  onConfirmed: (
+    refundAmount: number, 
+    refundReason: string, 
+    metTerms: boolean, 
+    noticeHours: number
+  ) => { success: boolean; message?: string } | void | Promise<{ success: boolean; message?: string } | void>;
+  onSuccessDone?: () => void;
 }
 
 export const CancelBookingConfirmModal: React.FC<CancelBookingConfirmModalProps> = ({
   booking,
   isOpen,
   onClose,
-  onConfirmed
+  onConfirmed,
+  onSuccessDone
 }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Reset state when a new booking is selected or modal opened
+  useEffect(() => {
+    if (isOpen) {
+      setIsSuccess(false);
+      setErrorMessage(null);
+      setIsSubmitting(false);
+    }
+  }, [booking?.id, isOpen]);
 
   if (!isOpen || !booking) return null;
 
@@ -50,16 +68,124 @@ export const CancelBookingConfirmModal: React.FC<CancelBookingConfirmModalProps>
   const metTerms = !isPast && diffHours >= cutoffHours;
   const refundAmount = metTerms ? Math.round((totalAmount * refundPercentage) / 100) : 0;
 
-  const handleCancelClick = () => {
-    if (isPast) return;
+  const handleCancelClick = async () => {
+    if (isPast || !booking) return;
     setIsSubmitting(true);
-    const reason = metTerms
-      ? `Customer cancellation (${diffHours.toFixed(1)}h notice, met $\\ge$ ${cutoffHours}h terms, ${refundPercentage}% refund)`
-      : `Customer cancellation (${diffHours.toFixed(1)}h notice, terms not met (< ${cutoffHours}h), ₹0 refund)`;
+    setErrorMessage(null);
+    try {
+      const reason = metTerms
+        ? `Customer cancellation (${diffHours.toFixed(1)}h notice, met >= ${cutoffHours}h terms, ${refundPercentage}% refund)`
+        : `Customer cancellation (${diffHours.toFixed(1)}h notice, terms not met (< ${cutoffHours}h), ₹0 refund)`;
 
-    onConfirmed(refundAmount, reason, metTerms, Math.max(0, diffHours));
-    setIsSubmitting(false);
+      const res = await onConfirmed(refundAmount, reason, metTerms, Math.max(0, diffHours));
+      if (res && typeof res === 'object' && res.success === false) {
+        setErrorMessage(res.message || 'Unable to cancel reservation. Please try again.');
+        setIsSubmitting(false);
+        return;
+      }
+      setIsSuccess(true);
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Cancellation failed. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
+
+  // SUCCESS STATE VIEW: Formatted cancellation success card
+  if (isSuccess) {
+    return (
+      <div className="modal-overlay">
+        <div className="bg-white border border-outline-variant/60 rounded-3xl sm:rounded-2xl w-full max-w-md p-5 sm:p-6 space-y-4 shadow-2xl animate-modalScaleIn text-on-surface overflow-hidden">
+          {/* Success Icon & Header */}
+          <div className="text-center space-y-2 pt-1">
+            <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner ring-4 ring-emerald-50">
+              <CheckCircle2 className="w-8 h-8" />
+            </div>
+            <div>
+              <h3 className="font-headline font-extrabold text-lg sm:text-xl text-gray-900">
+                Reservation Cancelled Successfully
+              </h3>
+              <p className="text-xs text-gray-500 font-medium mt-0.5">
+                Your pitch slot reservation has been cancelled.
+              </p>
+            </div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gray-100 text-gray-700 font-mono text-xs font-bold border border-gray-200">
+              <span className="text-gray-500">Ref:</span>
+              <span className="text-primary font-bold">{booking.booking_ref || booking.id}</span>
+            </div>
+          </div>
+
+          {/* Refund Breakdown Card */}
+          {refundAmount > 0 ? (
+            <div className="bg-emerald-50/90 border border-emerald-200 rounded-2xl p-4 text-center space-y-1.5 shadow-2xs">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 block">
+                Refund Initiated
+              </span>
+              <div className="font-headline font-black text-3xl text-emerald-700">
+                ₹{refundAmount}
+              </div>
+              <p className="text-xs text-emerald-950/80 font-medium pt-0.5">
+                Credited back to your original payment method within <strong className="font-bold text-emerald-950">{businessDays} business days</strong>.
+              </p>
+            </div>
+          ) : (
+            <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 text-center space-y-1.5 shadow-2xs">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-gray-600 block">
+                Non-Refundable Cancellation
+              </span>
+              <div className="font-headline font-black text-2xl text-gray-700">
+                ₹0 Refund
+              </div>
+              <p className="text-xs text-gray-600 font-medium pt-0.5">
+                Cancelled within the {cutoffHours}-hour matchday cut-off window. As per venue policy, no refund is applicable.
+              </p>
+            </div>
+          )}
+
+          {/* Booking Summary Box */}
+          <div className="bg-surface-container-low p-3.5 rounded-2xl border border-outline-variant/30 text-xs space-y-2">
+            <div className="flex justify-between items-center text-gray-600">
+              <span className="text-gray-500 font-medium">Court / Pitch:</span>
+              <strong className="text-gray-900 font-semibold">{court?.name || 'Pitch'}</strong>
+            </div>
+            <div className="flex justify-between items-center text-gray-600">
+              <span className="text-gray-500 font-medium">Match Date:</span>
+              <strong className="text-gray-900 font-semibold">{formatDateDDMMYYYY(booking.booking_date)}</strong>
+            </div>
+            <div className="flex justify-between items-center text-gray-600">
+              <span className="text-gray-500 font-medium">Slot Timing:</span>
+              <span className="text-primary font-bold flex items-center gap-1">
+                <TimeOfDayIcon time24={booking.start_time} className="w-3.5 h-3.5" />
+                <span>{formatTime12hPlain(booking.start_time)}</span>
+                <span>–</span>
+                <TimeOfDayIcon time24={booking.end_time} className="w-3.5 h-3.5" />
+                <span>{formatTime12hPlain(booking.end_time)}</span>
+              </span>
+            </div>
+          </div>
+
+          {/* Action Button */}
+          <div className="pt-1">
+            <button
+              type="button"
+              onClick={() => {
+                setIsSuccess(false);
+                if (onSuccessDone) {
+                  onSuccessDone();
+                } else {
+                  onClose();
+                }
+              }}
+              className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-headline font-bold text-xs sm:text-sm shadow-sm transition-all duration-150 cursor-pointer flex items-center justify-center gap-2"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Done</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="modal-overlay">
@@ -86,6 +212,14 @@ export const CancelBookingConfirmModal: React.FC<CancelBookingConfirmModalProps>
             <X className="w-4 h-4" />
           </button>
         </div>
+
+        {/* Error message alert if any */}
+        {errorMessage && (
+          <div className="p-2.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+        )}
 
         {/* Booking Snapshot */}
         <div className="bg-surface-container-low p-2.5 rounded-xl border border-outline-variant/30 text-xs space-y-1">

@@ -63,16 +63,11 @@ export class GatePassService {
     const courtName = (court?.name || booking.court_name || 'Turf Pitch').replace(/[^\x00-\x7F]/g, '');
     const sportName = (sport?.name || booking.sport_name || 'Football').replace(/[^\x00-\x7F]/g, '');
 
-    // Generate QR code for gate check-in scanner
-    const qrPayload = JSON.stringify({
-      ref: booking.booking_ref,
-      otp: otpCode,
-      court: courtName,
-      date: booking.booking_date,
-      time: `${booking.start_time}-${booking.end_time}`,
-      status: 'VERIFIED'
-    });
-    const qrBuffer = await QRCode.toBuffer(qrPayload, { margin: 1, width: 140 });
+    // Resolve accurate venue location link
+    const venueLocationUrl = venue.location_url || venue.google_maps_link || `https://maps.google.com/?q=${encodeURIComponent(venue.name + ', ' + venue.address)}`;
+
+    // Generate Location QR code for directions / navigation
+    const locationQrBuffer = await QRCode.toBuffer(venueLocationUrl, { margin: 1, width: 140 });
 
     return new Promise((resolve, reject) => {
       try {
@@ -151,32 +146,40 @@ export class GatePassService {
         drawField('Payment Status', 'VERIFIED (Razorpay Live UPI)', 70, y + 175);
         drawField('Channel', `WhatsApp AI Concierge (${booking.source || 'online'})`, 310, y + 175);
 
-        // 4. QR Code & Location Stamp
+        // 4. Turf Location QR Code & Address Stamp
         y = 480;
         doc.rect(50, y, 495, 120).fillAndStroke('#F8FAFC', '#E2E8F0');
         
-        // Draw QR Code
-        doc.image(qrBuffer, 70, y + 10, { width: 100 });
+        // Draw Location QR Code
+        doc.image(locationQrBuffer, 65, y + 10, { width: 95 });
+        doc.fillColor(primaryColor)
+          .fontSize(7)
+          .font('Helvetica-Bold')
+          .text('SCAN FOR GOOGLE MAPS', 55, y + 107, { width: 115, align: 'center' });
 
         doc.fillColor(darkColor)
           .fontSize(10)
           .font('Helvetica-Bold')
-          .text('VENUE ADDRESS & LOCATION', 190, y + 18);
+          .text('VENUE ADDRESS & DIRECTIONS', 185, y + 16);
 
         doc.fillColor(slateColor)
           .fontSize(9)
           .font('Helvetica')
-          .text(venue.address, 190, y + 34, { width: 330 });
+          .text(venue.address, 185, y + 32, { width: 340 });
 
         doc.fillColor(darkColor)
-          .fontSize(9)
+          .fontSize(8.5)
           .font('Helvetica-Bold')
-          .text(`GSTIN: ${venue.gst_number || '27AABCT1234F1Z0'}  |  Helpdesk: ${venue.contact_phone}`, 190, y + 68);
+          .text(`GSTIN: ${venue.gst_number || '27AABCT1234F1Z0'}  |  Helpdesk: ${venue.contact_phone}`, 185, y + 66);
 
         doc.fillColor(primaryColor)
           .fontSize(8.5)
           .font('Helvetica-Bold')
-          .text('Google Maps: ' + venue.google_maps_link, 190, y + 84, { width: 330 });
+          .text('Google Maps: ' + venueLocationUrl, 185, y + 84, { 
+            width: 340,
+            link: venueLocationUrl,
+            underline: true 
+          });
 
         // 5. Pitch Guidelines Box
         y = 620;
@@ -214,7 +217,7 @@ export class GatePassService {
   /**
    * Return printable HTML string matching the website's Ticket Pass modal
    */
-  static generatePassHtml(booking) {
+  static async generatePassHtml(booking) {
     const venue = store.getVenue();
     const court = store.getCourts().find(c => c.id === booking.court_id);
     const customer = store.getCustomers().find(c => c.id === booking.customer_id) || {
@@ -224,6 +227,15 @@ export class GatePassService {
     const rawCustomerPhone = customer.phone || booking.customer_phone || '';
     const cleanCustomerPhone = formatPhoneNumber(rawCustomerPhone);
     const otpCode = WhatsAppFormatter.getBookingGatePassOtp(booking);
+
+    // Resolve accurate venue location link & generate Location QR code
+    const venueLocationUrl = venue.location_url || venue.google_maps_link || `https://maps.google.com/?q=${encodeURIComponent(venue.name + ', ' + venue.address)}`;
+    let locationQrDataUrl = '';
+    try {
+      locationQrDataUrl = await QRCode.toDataURL(venueLocationUrl, { margin: 1, width: 140 });
+    } catch (e) {
+      console.warn('Could not generate location QR code:', e);
+    }
 
     return `<!DOCTYPE html>
 <html>
@@ -280,6 +292,16 @@ export class GatePassService {
     </div>
 
     <div class="ticket-body">
+      ${booking.status === 'cancelled' || booking.status === 'refunded' ? `
+      <div class="otp-box" style="background: #fef2f2; border: 2px dashed #ef4444; color: #991b1b;">
+        <div class="otp-title" style="color: #b91c1c;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+          <span>RESERVATION CANCELLED — INVALID FOR ENTRY</span>
+        </div>
+        <div class="otp-code" style="color: #dc2626; text-decoration: line-through;">${otpCode}</div>
+        <div style="font-size: 11px; font-weight: 600; color: #b91c1c;">${booking.status === 'refunded' ? `Refund of INR ${booking.refund_amount || 0} initiated.` : 'This slot is cancelled.'}</div>
+      </div>
+      ` : `
       <div class="otp-box">
         <div class="otp-title">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>
@@ -288,6 +310,7 @@ export class GatePassService {
         <div class="otp-code">${otpCode}</div>
         <div style="font-size: 11px; font-weight: 600;">Show this 4-digit code to the gate manager for check-in (Valid for all listed sessions)</div>
       </div>
+      `}
 
       <div class="info-grid">
         <div class="info-item">
@@ -352,18 +375,28 @@ export class GatePassService {
         </div>
       </div>
 
-      <div style="margin-top: 20px; padding: 14px; background: #f8fafc; border-radius: 10px; font-size: 11px; color: #475569; border: 1px solid #e2e8f0; line-height: 1.6;">
-        <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
-          <strong>Venue Location:</strong> ${venue.address}
+      <div style="margin-top: 20px; padding: 14px; background: #f8fafc; border-radius: 12px; font-size: 11px; color: #475569; border: 1px solid #e2e8f0; display: flex; gap: 16px; align-items: center;">
+        ${locationQrDataUrl ? `
+        <div style="text-align: center; flex-shrink: 0; background: #ffffff; padding: 6px; border-radius: 8px; border: 1px solid #cbd5e1;">
+          <img src="${locationQrDataUrl}" alt="Turf Location QR Code" style="width: 82px; height: 82px; display: block;" />
+          <span style="display: block; font-size: 8px; font-weight: 800; color: #006b30; text-transform: uppercase; margin-top: 4px; letter-spacing: 0.5px;">Scan Location</span>
         </div>
-        <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-          <strong>GSTIN:</strong> ${venue.gst_number || '27AABCT1234F1Z0'}
-        </div>
-        <div style="display: flex; align-items: center; gap: 6px;">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-          <strong>Helpdesk:</strong> ${venue.contact_phone}
+        ` : ''}
+        <div style="flex: 1; line-height: 1.6;">
+          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+            <strong>Venue Location:</strong> ${venue.address}
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <strong>GSTIN:</strong> ${venue.gst_number || '27AABCT1234F1Z0'} &bull; <strong>Contact:</strong> ${venue.contact_phone}
+          </div>
+          <div style="margin-top: 6px;">
+            <a href="${venueLocationUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; gap: 5px; color: #006b30; font-weight: 800; text-decoration: none; background: #e8f5e9; padding: 4px 10px; border-radius: 6px; border: 1px solid #a5d6a7; font-size: 11px;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+              Open Directions in Google Maps &rarr;
+            </a>
+          </div>
         </div>
       </div>
     </div>

@@ -3,7 +3,7 @@ import { store } from '../../services/store';
 import { PostgresEngine } from '../../services/postgresEngine';
 import { Booking, Customer } from '../../types/schema';
 import { CancelBookingConfirmModal } from './CancelBookingConfirmModal';
-import { Calendar, XCircle, AlertCircle, X, ShieldCheck, Tag, RotateCcw, Ticket } from 'lucide-react';
+import { Calendar, XCircle, AlertCircle, X, ShieldCheck, Tag, RotateCcw, Ticket, CloudRain } from 'lucide-react';
 import { formatDateDDMMYYYY, formatTimeRange12h } from '../../utils/formatters';
 
 interface BookingLookupModalProps {
@@ -12,13 +12,29 @@ interface BookingLookupModalProps {
 }
 
 export const BookingLookupModal: React.FC<BookingLookupModalProps> = ({ currentCustomer, onClose }) => {
-  const [userBookings, setUserBookings] = useState<Booking[]>(() => {
-    return store.getBookings().filter(b => b.customer_id === currentCustomer.id);
-  });
+  const currentDigits = currentCustomer.phone.replace(/\D/g, '').slice(-10);
+  const getCustomerBookings = () => {
+    const customerIds = new Set(
+      store.getCustomers().filter(c => 
+        c.id === currentCustomer.id || 
+        (currentDigits && c.phone.replace(/\D/g, '').slice(-10) === currentDigits)
+      ).map(c => c.id)
+    );
+    customerIds.add(currentCustomer.id);
+    return store.getBookings()
+      .filter(b => customerIds.has(b.customer_id) || (currentDigits && b.customer_phone && b.customer_phone.replace(/\D/g, '').slice(-10) === currentDigits))
+      .sort((a, b) => {
+        const timeA = new Date(`${a.booking_date}T${a.start_time}:00`).getTime() || 0;
+        const timeB = new Date(`${b.booking_date}T${b.start_time}:00`).getTime() || 0;
+        return timeB - timeA;
+      });
+  };
+
+  const [userBookings, setUserBookings] = useState<Booking[]>(() => getCustomerBookings());
   const [cancelModalBooking, setCancelModalBooking] = useState<Booking | null>(null);
 
   const refreshBookings = () => {
-    setUserBookings(store.getBookings().filter(b => b.customer_id === currentCustomer.id));
+    setUserBookings(getCustomerBookings());
   };
 
   const handleCancelBooking = (booking: Booking) => {
@@ -31,7 +47,7 @@ export const BookingLookupModal: React.FC<BookingLookupModalProps> = ({ currentC
     metTerms: boolean,
     noticeHours: number
   ) => {
-    if (!cancelModalBooking) return;
+    if (!cancelModalBooking) return { success: false, message: 'No reservation selected' };
     const targetBooking = cancelModalBooking;
     const nextStatus = refundAmount > 0 ? 'refunded' : 'cancelled';
 
@@ -44,16 +60,10 @@ export const BookingLookupModal: React.FC<BookingLookupModalProps> = ({ currentC
     });
 
     if (result.success) {
-      const businessDays = store.getCancellationSettings().processing_business_days || '5-7';
-      if (refundAmount > 0) {
-        alert(`Booking ${targetBooking.booking_ref} cancelled successfully!\n\nA refund of ₹${refundAmount} has been initiated and will reach your original payment method within ${businessDays} business days.`);
-      } else {
-        alert(`Booking ${targetBooking.booking_ref} cancelled.\n\nUnder venue terms, cancellations made within ${store.getCancellationSettings().cutoff_hours} hours of booking time are non-refundable (₹0 refund).`);
-      }
       refreshBookings();
-      setCancelModalBooking(null);
+      return { success: true };
     } else {
-      alert(result.message);
+      return { success: false, message: result.message };
     }
   };
 
@@ -108,6 +118,20 @@ export const BookingLookupModal: React.FC<BookingLookupModalProps> = ({ currentC
                 const metTerms = diffHours >= settings.cutoff_hours;
                 const refundAmt = metTerms ? Math.round((b.total_amount * settings.refund_percentage) / 100) : 0;
 
+                const isRainout = Boolean(
+                  (b.refund_reason && (
+                    b.refund_reason.toLowerCase().includes('rain') ||
+                    b.refund_reason.toLowerCase().includes('weather') ||
+                    b.refund_reason.includes('Emergency Rainout')
+                  )) ||
+                  (b.cancellation_reason && (
+                    b.cancellation_reason.toLowerCase().includes('rain') ||
+                    b.cancellation_reason.toLowerCase().includes('weather') ||
+                    b.cancellation_reason.includes('Emergency Rainout')
+                  )) ||
+                  (b.cancelled_by === 'admin' && (b.refund_reason?.toLowerCase().includes('rain') || b.notes?.toLowerCase().includes('rain')))
+                );
+
                 return (
                   <div
                     key={b.id}
@@ -115,7 +139,7 @@ export const BookingLookupModal: React.FC<BookingLookupModalProps> = ({ currentC
                   >
                     <div className="flex justify-between items-start">
                       <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-mono font-bold text-xs text-primary">{b.booking_ref}</span>
                           <span
                             className={`badge ${
@@ -123,12 +147,14 @@ export const BookingLookupModal: React.FC<BookingLookupModalProps> = ({ currentC
                                 ? 'badge-online'
                                 : b.status === 'completed'
                                 ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                                : isRainout
+                                ? 'bg-sky-100 text-sky-900 border-sky-300 font-bold'
                                 : b.status === 'cancelled' || b.status === 'refunded'
                                 ? 'badge-danger'
                                 : 'badge-warning'
                             }`}
                           >
-                            {b.status.replace('_', ' ').toUpperCase()}
+                            {isRainout ? '🌧️ RAINOUT (OWNER CANCEL)' : b.status.replace('_', ' ').toUpperCase()}
                           </span>
                         </div>
                         <h4 className="font-headline font-bold text-sm text-on-surface mt-1">
@@ -155,6 +181,43 @@ export const BookingLookupModal: React.FC<BookingLookupModalProps> = ({ currentC
                         <span className="font-bold text-on-surface">{formatTimeRange12h(b.start_time, b.end_time)}</span>
                       </div>
                     </div>
+
+                    {/* Cancellation Notice Strip (Rainout vs Standard) */}
+                    {(b.status === 'cancelled' || b.status === 'refunded') && (
+                      isRainout ? (
+                        <div className="bg-sky-50/90 border border-sky-200 rounded-xl p-3 space-y-1.5 text-sky-950">
+                          <div className="flex items-center justify-between text-xs font-bold text-sky-900 flex-wrap gap-1">
+                            <span className="flex items-center gap-1.5">
+                              <CloudRain className="w-4 h-4 text-sky-600 animate-pulse" />
+                              <span>Cancelled by Turf Owner (Rainout)</span>
+                            </span>
+                            <span className="bg-sky-200 text-sky-900 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-sky-300">
+                              100% Refund: ₹{b.refund_amount || b.total_amount}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-sky-900 font-medium leading-relaxed">
+                            This slot was proactively cancelled by the venue owner due to heavy rain and pitch waterlogging. A 100% full refund of ₹{b.refund_amount || b.total_amount} has been initiated back to your original payment method.
+                          </p>
+                          {b.refund_reason && (
+                            <p className="text-[10px] text-sky-700 font-mono italic">
+                              Owner Note: {b.refund_reason.replace('[Emergency Rainout]', '').trim()}
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="bg-red-50/80 border border-red-200 rounded-xl p-2.5 text-xs text-red-900 space-y-0.5">
+                          <div className="flex items-center justify-between font-bold">
+                            <span>{b.cancelled_by === 'customer' ? 'Reservation Cancelled by You' : 'Cancelled by Turf Management'}</span>
+                            {b.refund_amount !== undefined && b.refund_amount > 0 && (
+                              <span className="text-emerald-700 font-bold">Refund: ₹{b.refund_amount}</span>
+                            )}
+                          </div>
+                          {b.refund_reason && (
+                            <p className="text-[10.5px] text-red-800">Reason: {b.refund_reason}</p>
+                          )}
+                        </div>
+                      )
+                    )}
 
                     {/* Self-Serve Cancellation Section */}
                     {canCancel && (
@@ -186,6 +249,7 @@ export const BookingLookupModal: React.FC<BookingLookupModalProps> = ({ currentC
           isOpen={!!cancelModalBooking}
           onClose={() => setCancelModalBooking(null)}
           onConfirmed={handleExecuteCancellation}
+          onSuccessDone={() => setCancelModalBooking(null)}
         />
       </div>
     </div>

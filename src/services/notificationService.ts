@@ -33,7 +33,14 @@ export class NotificationService {
       const otp = getBookingGatePassOtp(booking);
       message = `⏰ Reminder: Your game at ${venue.name} starts in 1 hour (${start12})! Date: ${formattedDate}. Court: ${courtName}. Gate Entry OTP: ${otp}. Please arrive 10 mins early with turf shoes.`;
     } else if (type === 'cancellation') {
-      if (booking.refund_amount && booking.refund_amount > 0) {
+      const isRainout = 
+        booking.refund_reason?.toLowerCase().includes('rain') ||
+        booking.refund_reason?.toLowerCase().includes('weather') ||
+        booking.refund_reason?.includes('Emergency Rainout');
+
+      if (isRainout) {
+        message = `🌧️ Match Cancelled by Turf Management due to Rain: Ref ${booking.booking_ref} (${formattedDate} @ ${start12}). A 100% full refund of ₹${booking.refund_amount || booking.total_amount} has been initiated back to your original payment method. We apologize for the pitch conditions and thank you for your understanding!`;
+      } else if (booking.refund_amount && booking.refund_amount > 0) {
         message = `❌ Booking Cancelled: Ref ${booking.booking_ref} (${formattedDate} @ ${start12}). A refund of ₹${booking.refund_amount} has been initiated to your original payment method.`;
       } else {
         message = `❌ Booking Cancelled: Ref ${booking.booking_ref} for ${formattedDate} @ ${start12}. Per venue cancellation window policy, no refund is due.`;
@@ -65,9 +72,11 @@ export class NotificationService {
         : type === 'reminder'
           ? `⏰ Kickoff in 1 Hour: ${courtName} at ${formatTime12hPlain(booking.start_time)} (${venue.name})`
           : type === 'cancellation'
-            ? (booking.refund_amount && booking.refund_amount > 0
-                ? `Booking Cancelled & Refund Initiated: ${booking.booking_ref}`
-                : `Booking Cancelled: ${booking.booking_ref}`)
+            ? ((booking.refund_reason?.toLowerCase().includes('rain') || booking.refund_reason?.includes('Emergency Rainout'))
+                ? `🌧️ Match Cancelled by Venue due to Rain (100% Full Refund): ${booking.booking_ref}`
+                : (booking.refund_amount && booking.refund_amount > 0
+                    ? `Booking Cancelled & Refund Initiated: ${booking.booking_ref}`
+                    : `Booking Cancelled: ${booking.booking_ref}`))
             : `TurfFlow Notification - ${booking.booking_ref}`;
 
       const emailLog: NotificationLog = {

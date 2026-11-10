@@ -28,11 +28,13 @@ export default defineConfig(({ mode }) => {
               try {
                 const data = JSON.parse(body || '{}');
                 const apiKey = env.RESEND_API_KEY || env.VITE_RESEND_API_KEY || process.env.RESEND_API_KEY;
-                const fromEmail = data.from || env.RESEND_FROM_EMAIL || 'TurfFlow Arena <onboarding@resend.dev>';
+                const rawSender = data.from || env.RESEND_FROM_EMAIL || env.VITE_RESEND_FROM_EMAIL || 'rajupainter84688@gmail.com';
+                const fromEmail = rawSender.includes('<') ? rawSender : `TurfFlow Arena <${rawSender}>`;
+                const replyTo = data.reply_to || env.RESEND_REPLY_TO_EMAIL || 'rajupainter84688@gmail.com';
 
                 // If no real API key is configured or is a placeholder, return graceful simulation
                 if (!apiKey || apiKey === 're_your_resend_api_key' || !apiKey.startsWith('re_')) {
-                  console.log(`[Resend Simulated Email] To: ${data.to} | Subject: "${data.subject}"`);
+                  console.log(`[Resend Simulated Email] From: ${fromEmail} | To: ${data.to} | Subject: "${data.subject}"`);
                   res.setHeader('Content-Type', 'application/json');
                   res.end(JSON.stringify({
                     success: true,
@@ -44,7 +46,7 @@ export default defineConfig(({ mode }) => {
                 }
 
                 // Node.js native fetch call to Resend REST API (avoids any browser CORS restriction)
-                const resendResponse = await fetch('https://api.resend.com/emails', {
+                let resendResponse = await fetch('https://api.resend.com/emails', {
                   method: 'POST',
                   headers: {
                     'Authorization': `Bearer ${apiKey}`,
@@ -52,14 +54,39 @@ export default defineConfig(({ mode }) => {
                   },
                   body: JSON.stringify({
                     from: fromEmail,
+                    reply_to: replyTo,
                     to: Array.isArray(data.to) ? data.to : [data.to],
                     subject: data.subject,
                     html: data.html,
-                    text: data.text
+                    text: data.text,
+                    attachments: data.attachments || undefined
                   })
                 });
 
-                const resJson = await resendResponse.json();
+                let resJson = await resendResponse.json();
+
+                // If Resend rejects due to unverified custom/gmail domain, gracefully retry using onboarding sender with sender as display name and reply-to
+                if (!resendResponse.ok && (resJson?.message?.includes('not verified') || resJson?.message?.includes('domain'))) {
+                  const fallbackFrom = `rajupainter84688@gmail.com <onboarding@resend.dev>`;
+                  console.warn(`[Resend Sender Fallback] "${fromEmail}" unverified on Resend. Retrying via "${fallbackFrom}" with reply_to: "${replyTo}".`);
+                  resendResponse = await fetch('https://api.resend.com/emails', {
+                    method: 'POST',
+                    headers: {
+                      'Authorization': `Bearer ${apiKey}`,
+                      'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                      from: fallbackFrom,
+                      reply_to: replyTo,
+                      to: Array.isArray(data.to) ? data.to : [data.to],
+                      subject: data.subject,
+                      html: data.html,
+                      text: data.text,
+                      attachments: data.attachments || undefined
+                    })
+                  });
+                  resJson = await resendResponse.json();
+                }
 
                 if (!resendResponse.ok) {
                   res.statusCode = resendResponse.status;

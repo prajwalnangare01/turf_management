@@ -230,18 +230,18 @@ export const OfflineBookingModal: React.FC<OfflineBookingModalProps> = ({
 
   return (
     <div className="modal-overlay">
-      <div className="bg-white border border-outline-variant/60 rounded-3xl sm:rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl animate-modalScaleIn text-on-surface overflow-hidden">
+      <div className="bg-white border border-outline-variant/60 rounded-3xl sm:rounded-2xl w-full max-w-3xl lg:max-w-4xl max-h-[92vh] flex flex-col shadow-2xl animate-modalScaleIn text-on-surface overflow-hidden">
         <div className="p-3.5 sm:p-4 bg-surface-container-low border-b border-outline-variant/40 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             <PlusCircle className="w-5 h-5 text-secondary font-bold" />
-            <h3 className="font-headline font-bold text-xl text-primary">New Walk-in Booking</h3>
+            <h3 className="font-headline font-bold text-lg sm:text-xl text-primary">New Walk-in / Phone Reservation</h3>
           </div>
           <button onClick={onClose} className="text-on-surface-variant hover:text-on-surface p-1 rounded-full hover:bg-surface-container">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 text-xs overflow-y-auto overscroll-contain">
+        <form onSubmit={handleSubmit} className="p-3.5 sm:p-4 text-xs overflow-y-auto overscroll-contain space-y-3">
           {/* Real-Time Redis Lock Warning (CC-D01) */}
           {conflictInfo.hasLock && (
             <div className="p-3.5 bg-amber-50 border-2 border-amber-300 rounded-2xl text-amber-900 space-y-2.5 shadow-xs">
@@ -307,257 +307,301 @@ export const OfflineBookingModal: React.FC<OfflineBookingModalProps> = ({
             </div>
           )}
 
-          <div>
-            <label className="text-xs font-headline font-bold text-on-surface-variant mb-1 flex items-center gap-1.5">
-              <MapPin className="w-3.5 h-3.5 text-primary" /> Select Pitch / Arena *
-            </label>
-            <select
-              value={courtId}
-              onChange={e => {
-                setCourtId(e.target.value);
-                const c = courts.find(crt => crt.id === e.target.value);
-                if (c) {
-                  const slots = SlotEngine.computeSlotsForCourt(c, dateStr, undefined, true);
-                  if (slots.length > 0) setStartTime(slots[0].start_time);
-                }
-              }}
-              className="form-input"
-            >
-              {courts.map(c => (
-                <option key={c.id} value={c.id}>{c.name} (₹{c.base_price_per_hour}/hr)</option>
-              ))}
-            </select>
-          </div>
+          {/* 2-Column Responsive Layout for Desktop Zero-Scroll */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            {/* Left Column: Pitch, Date, Slot & Payment Channel */}
+            <div className="space-y-2.5 bg-surface-container-lowest p-3 rounded-xl border border-outline-variant/30">
+              <h4 className="text-[11px] font-headline font-bold text-primary uppercase tracking-wider flex items-center gap-1.5">
+                <MapPin className="w-3.5 h-3.5 text-primary" /> Pitch & Time Slot
+              </h4>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-xs font-headline font-bold text-on-surface-variant flex items-center gap-1.5">
-                  <Calendar className="w-3.5 h-3.5 text-primary" /> Date *
+              <div>
+                <label className="text-[11px] font-bold text-on-surface-variant mb-1 block">
+                  Select Pitch / Arena *
                 </label>
-                <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded border border-emerald-300">
-                  <Sparkles className="w-2.5 h-2.5 text-emerald-700 inline mr-1" /> Any Date ({formatDateDDMMYYYY(dateStr)})
-                </span>
-              </div>
-              <input
-                type="date"
-                required
-                min={getVenueDateString(0)}
-                value={dateStr}
-                onChange={e => {
-                  setDateStr(e.target.value);
-                  if (selectedCourt) {
-                    const slots = SlotEngine.computeSlotsForCourt(selectedCourt, e.target.value, undefined, true);
-                    if (slots.length > 0) setStartTime(slots[0].start_time);
-                  }
-                }}
-                className="form-input"
-              />
-              {/* Quick Jump Buttons for Future Dates */}
-              <div className="flex items-center gap-1 mt-1.5 flex-wrap">
-                {[
-                  { label: 'Today', days: 0 },
-                  { label: 'Tomorrow', days: 1 },
-                  { label: '+15 Days', days: 15 },
-                  { label: '+30 Days (Next Mo.)', days: 30 },
-                  { label: '+60 Days', days: 60 }
-                ].map(item => {
-                  const targetD = getVenueDateString(item.days);
-                  const isCurrent = dateStr === targetD;
-                  return (
-                    <button
-                      key={item.label}
-                      type="button"
-                      onClick={() => {
-                        setDateStr(targetD);
-                        if (selectedCourt) {
-                          const slots = SlotEngine.computeSlotsForCourt(selectedCourt, targetD, undefined, true);
-                          if (slots.length > 0) setStartTime(slots[0].start_time);
-                        }
-                      }}
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded transition ${
-                        isCurrent
-                          ? 'bg-primary text-white shadow-xs'
-                          : 'bg-surface-container hover:bg-primary/10 text-on-surface-variant border border-outline-variant/40'
-                      }`}
-                    >
-                      {item.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div>
-              <label className="text-xs font-headline font-bold text-on-surface-variant mb-1 flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-primary" /> Select Time Slot *
-              </label>
-              <select
-                value={startTime}
-                onChange={e => setStartTime(e.target.value)}
-                className="form-input font-bold"
-              >
-                {availableSlots.map(s => {
-                  const statusLabel = s.status === 'available' ? 'Available' : s.status.toUpperCase();
-                  return (
-                    <option key={s.start_time} value={s.start_time}>
-                      {formatTime12hPlain(s.start_time)} – {formatTime12hPlain(s.end_time)} ({statusLabel} - ₹{s.price})
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-headline font-bold text-on-surface-variant mb-1 flex items-center gap-1.5">
-                <User className="w-3.5 h-3.5 text-primary" /> Customer Name *
-              </label>
-              <input
-                type="text"
-                required
-                placeholder="e.g. Vikram"
-                value={name}
-                onChange={e => setName(e.target.value)}
-                className="form-input"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-headline font-bold text-on-surface-variant mb-1 flex items-center gap-1.5">
-                <Phone className="w-3.5 h-3.5 text-primary" /> Mobile Phone *
-              </label>
-              <input
-                type="tel"
-                required
-                maxLength={10}
-                placeholder="9876543210"
-                value={phone}
-                onChange={e => setPhone(e.target.value.replace(/\D/g, ''))}
-                className="form-input"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-headline font-bold text-on-surface-variant mb-1 flex items-center gap-1.5">
-                <Ticket className="w-3.5 h-3.5 text-primary" /> Booking Source
-              </label>
-              <select
-                value={source}
-                onChange={e => setSource(e.target.value as BookingSource)}
-                className="form-input"
-              >
-                <option value="offline_walkin">Walk-in Counter</option>
-                <option value="offline_phone">Phone Call</option>
-                <option value="offline_whatsapp">WhatsApp Direct</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-headline font-bold text-on-surface-variant mb-1 flex items-center gap-1.5">
-                <CreditCard className="w-3.5 h-3.5 text-primary" /> Payment Method
-              </label>
-              <select
-                value={paymentMethod}
-                onChange={e => {
-                  const val = e.target.value as any;
-                  setPaymentMethod(val);
-                  if (val === 'split') {
-                    setSplitCash(Math.floor(price / 2));
-                    setSplitUpi(price - Math.floor(price / 2));
-                  }
-                }}
-                className="form-input font-bold"
-              >
-                <option value="cash">💵 Cash Counter</option>
-                <option value="upi">📱 Direct UPI Scan</option>
-                <option value="card">💳 POS Card Machine</option>
-                <option value="split">⚖️ Split Tender (Cash + UPI)</option>
-              </select>
-            </div>
-          </div>
-
-          {/* CC-D04: Multi-Tender Split Payment Inputs */}
-          {paymentMethod === 'split' && (
-            <div className="p-3 bg-purple-50/80 border border-purple-200 rounded-xl space-y-3">
-              <div className="flex items-center justify-between text-purple-900">
-                <span className="font-headline font-bold text-xs flex items-center gap-1.5">
-                  <Split className="w-3.5 h-3.5 text-purple-700" /> Split Tender Breakdown
-                </span>
-                <span className="text-[10px] font-mono font-bold bg-purple-200/60 px-2 py-0.5 rounded">
-                  Target Total: ₹{price}
-                </span>
+                <select
+                  value={courtId}
+                  onChange={e => {
+                    setCourtId(e.target.value);
+                    const c = courts.find(crt => crt.id === e.target.value);
+                    if (c) {
+                      const slots = SlotEngine.computeSlotsForCourt(c, dateStr, undefined, true);
+                      if (slots.length > 0) setStartTime(slots[0].start_time);
+                    }
+                  }}
+                  className="form-input text-xs py-1.5 font-bold"
+                >
+                  {courts.map(c => (
+                    <option key={c.id} value={c.id}>{c.name} (₹{c.base_price_per_hour}/hr)</option>
+                  ))}
+                </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-2.5">
-                <div>
-                  <label className="block text-[10px] font-bold text-purple-900 mb-1">Cash Tender (₹) *</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max={price}
-                    value={splitCash}
-                    onChange={e => {
-                      const val = Number(e.target.value) || 0;
-                      setSplitCash(val);
-                      setSplitUpi(Math.max(0, price - val));
-                    }}
-                    className="form-input text-xs py-1.5 px-2.5 bg-white border-purple-300 font-bold"
-                  />
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] font-bold text-on-surface-variant flex items-center gap-1">
+                    <Calendar className="w-3 h-3 text-primary" /> Date *
+                  </label>
+                  <span className="text-[9.5px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.2 rounded border border-emerald-300">
+                    <Sparkles className="w-2.5 h-2.5 text-emerald-700 inline mr-0.5" /> {formatDateDDMMYYYY(dateStr)}
+                  </span>
                 </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-purple-900 mb-1">UPI Tender (₹) *</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max={price}
-                    value={splitUpi}
-                    onChange={e => {
-                      const val = Number(e.target.value) || 0;
-                      setSplitUpi(val);
-                      setSplitCash(Math.max(0, price - val));
-                    }}
-                    className="form-input text-xs py-1.5 px-2.5 bg-white border-purple-300 font-bold"
-                  />
+                <input
+                  type="date"
+                  required
+                  min={getVenueDateString(0)}
+                  value={dateStr}
+                  onChange={e => {
+                    setDateStr(e.target.value);
+                    if (selectedCourt) {
+                      const slots = SlotEngine.computeSlotsForCourt(selectedCourt, e.target.value, undefined, true);
+                      if (slots.length > 0) setStartTime(slots[0].start_time);
+                    }
+                  }}
+                  className="form-input text-xs py-1.5 font-bold"
+                />
+                {/* Quick Jump Buttons */}
+                <div className="flex items-center gap-1 mt-1 flex-wrap">
+                  {[
+                    { label: 'Today', days: 0 },
+                    { label: 'Tomorrow', days: 1 },
+                    { label: '+15 Days', days: 15 },
+                    { label: '+30 Days', days: 30 },
+                    { label: '+60 Days', days: 60 }
+                  ].map(item => {
+                    const targetD = getVenueDateString(item.days);
+                    const isCurrent = dateStr === targetD;
+                    return (
+                      <button
+                        key={item.label}
+                        type="button"
+                        onClick={() => {
+                          setDateStr(targetD);
+                          if (selectedCourt) {
+                            const slots = SlotEngine.computeSlotsForCourt(selectedCourt, targetD, undefined, true);
+                            if (slots.length > 0) setStartTime(slots[0].start_time);
+                          }
+                        }}
+                        className={`text-[9.5px] font-bold px-1.5 py-0.5 rounded transition ${
+                          isCurrent
+                            ? 'bg-primary text-white shadow-xs'
+                            : 'bg-surface-container hover:bg-primary/10 text-on-surface-variant border border-outline-variant/40'
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-purple-900 mb-0.5">UPI Reference / UTR (Optional)</label>
-                <input
-                  type="text"
-                  placeholder="e.g. UPI Ref / GooglePay txn id"
-                  value={splitUpiRef}
-                  onChange={e => setSplitUpiRef(e.target.value)}
-                  className="form-input text-xs py-1 px-2.5 bg-white border-purple-300"
-                />
+                <label className="text-[11px] font-bold text-on-surface-variant mb-1 flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-primary" /> Select Time Slot *
+                </label>
+                <select
+                  value={startTime}
+                  onChange={e => setStartTime(e.target.value)}
+                  className="form-input text-xs py-1.5 font-bold"
+                >
+                  {availableSlots.map(s => {
+                    const statusLabel = s.status === 'available' ? 'Available' : (s.status === 'past' || s.status.startsWith('booked')) ? 'Booked' : s.status.toUpperCase();
+                    return (
+                      <option key={s.start_time} value={s.start_time}>
+                        {formatTime12hPlain(s.start_time)} – {formatTime12hPlain(s.end_time)} ({statusLabel} - ₹{s.price})
+                      </option>
+                    );
+                  })}
+                </select>
               </div>
 
-              <div className="flex justify-between items-center text-[10px] font-bold pt-1 border-t border-purple-200">
-                <span className="text-purple-800">Split Total Recorded:</span>
-                <span className={((Number(splitCash) || 0) + (Number(splitUpi) || 0)) === price ? 'text-emerald-700 font-black' : 'text-red-600 font-black'}>
-                  ₹{(Number(splitCash) || 0) + (Number(splitUpi) || 0)} / ₹{price}
-                  {((Number(splitCash) || 0) + (Number(splitUpi) || 0)) === price ? ' (Balanced ✅)' : ' (Unbalanced ⚠️)'}
-                </span>
+              <div className="grid grid-cols-2 gap-2 pt-1 border-t border-outline-variant/30">
+                <div>
+                  <label className="text-[10.5px] font-bold text-on-surface-variant mb-0.5 flex items-center gap-1">
+                    <Ticket className="w-3 h-3 text-primary" /> Booking Source
+                  </label>
+                  <select
+                    value={source}
+                    onChange={e => setSource(e.target.value as BookingSource)}
+                    className="form-input text-xs py-1"
+                  >
+                    <option value="offline_walkin">Walk-in Counter</option>
+                    <option value="offline_phone">Phone Call</option>
+                    <option value="offline_whatsapp">WhatsApp Direct</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10.5px] font-bold text-on-surface-variant mb-0.5 flex items-center gap-1">
+                    <CreditCard className="w-3 h-3 text-primary" /> Payment Method
+                  </label>
+                  <select
+                    value={paymentMethod}
+                    onChange={e => {
+                      const val = e.target.value as any;
+                      setPaymentMethod(val);
+                      if (val === 'split') {
+                        setSplitCash(Math.floor(price / 2));
+                        setSplitUpi(price - Math.floor(price / 2));
+                      }
+                    }}
+                    className="form-input text-xs py-1 font-bold"
+                  >
+                    <option value="cash">💵 Cash Counter</option>
+                    <option value="upi">📱 Direct UPI Scan</option>
+                    <option value="card">💳 POS Card Machine</option>
+                    <option value="split">⚖️ Split Tender</option>
+                  </select>
+                </div>
               </div>
             </div>
-          )}
 
-          <div>
-            <label className="block text-xs font-headline font-bold text-on-surface-variant mb-1">Notes / Instructions</label>
-            <input
-              type="text"
-              placeholder="e.g. Paid cash at counter, requested extra bibs"
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              className="form-input"
-            />
+            {/* Right Column: Customer Info, Split Tender, Notes & Action */}
+            <div className="space-y-2.5 bg-surface-container-lowest p-3 rounded-xl border border-outline-variant/30 flex flex-col justify-between">
+              <div className="space-y-2.5">
+                <h4 className="text-[11px] font-headline font-bold text-primary uppercase tracking-wider flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5 text-primary" /> Customer & Payment Details
+                </h4>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10.5px] font-bold text-on-surface-variant mb-0.5 block">
+                      Customer Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Vikram"
+                      value={name}
+                      onChange={e => setName(e.target.value)}
+                      className="form-input text-xs py-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10.5px] font-bold text-on-surface-variant mb-0.5 block">
+                      Mobile Phone *
+                    </label>
+                    <input
+                      type="tel"
+                      required
+                      maxLength={10}
+                      placeholder="9876543210"
+                      value={phone}
+                      onChange={e => setPhone(e.target.value.replace(/\D/g, ''))}
+                      className="form-input text-xs py-1 font-mono"
+                    />
+                  </div>
+                </div>
+
+                {/* CC-D04: Multi-Tender Split Payment Inputs */}
+                {paymentMethod === 'split' && (
+                  <div className="p-2 bg-purple-50/80 border border-purple-200 rounded-xl space-y-1.5">
+                    <div className="flex items-center justify-between text-purple-900">
+                      <span className="font-headline font-bold text-[11px] flex items-center gap-1">
+                        <Split className="w-3 h-3 text-purple-700" /> Split Tender Breakdown
+                      </span>
+                      <span className="text-[9.5px] font-mono font-bold bg-purple-200/60 px-1.5 py-0.2 rounded">
+                        Target: ₹{price}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[9.5px] font-bold text-purple-900 mb-0.5">Cash Tender (₹) *</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max={price}
+                          value={splitCash}
+                          onChange={e => {
+                            const val = Number(e.target.value) || 0;
+                            setSplitCash(val);
+                            setSplitUpi(Math.max(0, price - val));
+                          }}
+                          className="form-input text-xs py-1 px-2 bg-white border-purple-300 font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[9.5px] font-bold text-purple-900 mb-0.5">UPI Tender (₹) *</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max={price}
+                          value={splitUpi}
+                          onChange={e => {
+                            const val = Number(e.target.value) || 0;
+                            setSplitUpi(val);
+                            setSplitCash(Math.max(0, price - val));
+                          }}
+                          className="form-input text-xs py-1 px-2 bg-white border-purple-300 font-bold"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <input
+                        type="text"
+                        placeholder="UPI Reference / UTR (Optional)"
+                        value={splitUpiRef}
+                        onChange={e => setSplitUpiRef(e.target.value)}
+                        className="form-input text-[11px] py-1 px-2 bg-white border-purple-300"
+                      />
+                    </div>
+
+                    <div className="flex justify-between items-center text-[9.5px] font-bold pt-0.5 border-t border-purple-200">
+                      <span className="text-purple-800">Split Total:</span>
+                      <span className={((Number(splitCash) || 0) + (Number(splitUpi) || 0)) === price ? 'text-emerald-700 font-black' : 'text-red-600 font-black'}>
+                        ₹{(Number(splitCash) || 0) + (Number(splitUpi) || 0)} / ₹{price}
+                        {((Number(splitCash) || 0) + (Number(splitUpi) || 0)) === price ? ' (Balanced ✅)' : ' (Unbalanced ⚠️)'}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-[10.5px] font-bold text-on-surface-variant mb-0.5">
+                    Notes / Instructions
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Paid cash at counter, requested extra bibs"
+                    value={notes}
+                    onChange={e => setNotes(e.target.value)}
+                    className="form-input text-xs py-1"
+                  />
+                </div>
+              </div>
+
+              {/* Price & Submit Action */}
+              <div className="pt-2 border-t border-outline-variant/30 space-y-2">
+                <div className="flex items-center justify-between bg-primary/5 p-2 rounded-xl border border-primary/20">
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] text-on-surface-variant font-medium block">Total Payable:</span>
+                    <span className="font-headline font-black text-base text-primary">₹{price}</span>
+                  </div>
+                  <div className="text-right text-[10px] text-on-surface-variant">
+                    <span className="font-bold text-on-surface block truncate max-w-[150px]">{selectedCourt?.name}</span>
+                    <span className="font-mono text-primary font-bold">{startTime}</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="btn-secondary col-span-1 py-2 text-xs font-bold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn-cta col-span-2 py-2 text-xs font-headline font-bold uppercase tracking-wider shadow-md flex items-center justify-center gap-1.5"
+                  >
+                    Confirm Booking (₹{price})
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
-
-          <button type="submit" className="btn-cta w-full py-3 text-xs font-headline font-bold uppercase tracking-wider shadow-md mt-2">
-            Confirm & Save Reservation (₹{price})
-          </button>
         </form>
       </div>
     </div>

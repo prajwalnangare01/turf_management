@@ -28,9 +28,12 @@ export interface Venue {
   id: string;
   name: string;
   address: string;
+  location_url?: string; // Google Maps Location Link
+  google_maps_link?: string; // Google Maps URL alias for compatibility
   timezone: string;
   gst_number: string;
   contact_phone: string;
+  contact_email?: string;
   is_active: boolean;
   min_notice_minutes: number;
   max_advance_days: number;
@@ -126,6 +129,7 @@ export interface Booking {
   refunded_at?: string;
   cancelled_by?: 'customer' | 'admin';
   cancelled_at?: string;
+  cancellation_reason?: string;
   cancellation_notice_hours?: number;
   cancellation_met_terms?: boolean;
   reminder_sent?: boolean;
@@ -238,3 +242,12 @@ export interface DynamicSlot {
   existing_booking?: Booking;
   blocked_reason?: string;
 }
+
+export interface DataArchiveSettings {
+  auto_dispatch_days: number; // e.g. 30
+  owner_email: string; // e.g. "owner@turfflow.com"
+  last_dispatch_date?: string; // ISO date string of last dispatch
+  next_dispatch_date?: string; // ISO date string of next dispatch
+  is_active: boolean; // default true
+}
+

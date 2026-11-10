@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS venues (
   whatsapp_enabled BOOLEAN DEFAULT TRUE,
   sms_fallback_enabled BOOLEAN DEFAULT TRUE,
   email_enabled BOOLEAN DEFAULT TRUE,
-  email_sender VARCHAR(255) DEFAULT 'TurfFlow <onboarding@resend.dev>',
+  email_sender VARCHAR(255) DEFAULT 'TurfFlow Arena <rajupainter84688@gmail.com>',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -36,7 +36,7 @@ ALTER TABLE venues ADD COLUMN IF NOT EXISTS max_advance_days INT DEFAULT 14;
 ALTER TABLE venues ADD COLUMN IF NOT EXISTS whatsapp_enabled BOOLEAN DEFAULT TRUE;
 ALTER TABLE venues ADD COLUMN IF NOT EXISTS sms_fallback_enabled BOOLEAN DEFAULT TRUE;
 ALTER TABLE venues ADD COLUMN IF NOT EXISTS email_enabled BOOLEAN DEFAULT TRUE;
-ALTER TABLE venues ADD COLUMN IF NOT EXISTS email_sender VARCHAR(255) DEFAULT 'TurfFlow <onboarding@resend.dev>';
+ALTER TABLE venues ADD COLUMN IF NOT EXISTS email_sender VARCHAR(255) DEFAULT 'TurfFlow Arena <rajupainter84688@gmail.com>';
 
 -- -----------------------------------------------------------------------------
 -- 2. SPORTS TABLE

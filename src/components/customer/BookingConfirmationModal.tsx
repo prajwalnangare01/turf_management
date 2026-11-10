@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import QRCode from 'qrcode';
 import { store } from '../../services/store';
 import { formatTimeRange12h, formatTime12hPlain, formatDateDDMMYYYY, formatPhoneNumber, getBookingGatePassOtp, getBookingGroupRef } from '../../utils/formatters';
 import { TimeOfDayIcon, getTimeOfDaySvg } from '../common/TimeOfDayIcon';
 import { 
   CheckCircle2, MapPin, MessageSquare, Download, X, KeyRound, Printer, 
-  Trophy, Calendar, Clock, User, CreditCard, Ticket, FileDown, Layers 
+  Trophy, Calendar, Clock, User, CreditCard, Ticket, FileDown, Layers,
+  QrCode, ExternalLink
 } from 'lucide-react';
 
 interface BookingConfirmationModalProps {
@@ -32,28 +34,27 @@ export const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> =
 
   // Resolve group reference and all sibling bookings for multi-slot orders
   const groupRef = getBookingGroupRef(booking);
+  const isActiveBooking = booking.status !== 'cancelled' && booking.status !== 'refunded';
   const siblingBookings = allBookings.filter(b => 
-    getBookingGroupRef(b) === groupRef ||
-    (b.group_ref && b.group_ref === groupRef) || 
-    b.booking_ref === groupRef || 
-    (booking.gateway_payment_id && booking.gateway_payment_id !== '' && b.gateway_payment_id === booking.gateway_payment_id)
+    (isActiveBooking ? (b.status !== 'cancelled' && b.status !== 'refunded') : b.id === booking.id) &&
+    (getBookingGroupRef(b) === groupRef ||
+     (b.group_ref && b.group_ref === groupRef) || 
+     b.booking_ref === groupRef || 
+     (booking.gateway_payment_id && booking.gateway_payment_id !== '' && b.gateway_payment_id === booking.gateway_payment_id))
   );
 
-  // Extract all slots: prefer explicit all_slots array, otherwise collect from sibling bookings
+  // Extract all slots: collect active slots from sibling bookings
   const allSlots: Array<{ start_time: string; end_time: string; price?: number }> = 
-    (booking.all_slots && booking.all_slots.length > 0)
-      ? booking.all_slots
-      : Array.from(new Map(siblingBookings.map(b => [`${b.start_time}-${b.end_time}`, {
-          start_time: b.start_time,
-          end_time: b.end_time,
-          price: b.total_amount
-        }])).values()).sort((a, b) => a.start_time.localeCompare(b.start_time));
+    Array.from(new Map(siblingBookings.map(b => [`${b.start_time}-${b.end_time}`, {
+      start_time: b.start_time,
+      end_time: b.end_time,
+      price: b.total_amount
+    }])).values()).sort((a, b) => a.start_time.localeCompare(b.start_time));
 
-  // Grand total paid across all slots
-  const grandTotalPaid = booking.total_order_amount ?? 
-    (siblingBookings.length > 0 
-      ? siblingBookings.reduce((sum, b) => sum + (b.total_amount || 0), 0)
-      : booking.total_amount);
+  // Grand total paid across all active slots
+  const grandTotalPaid = siblingBookings.length > 0 
+    ? siblingBookings.reduce((sum, b) => sum + (b.total_amount || 0), 0)
+    : (booking.total_order_amount ?? booking.total_amount);
 
   const formattedSlotsStr = booking.formatted_slots || 
     allSlots.map(s => formatTimeRange12h(s.start_time, s.end_time)).join(', ');
@@ -67,6 +68,15 @@ export const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> =
   const notif = store.getNotificationLogs().find(n => n.booking_id === booking?.id && n.channel !== 'email');
   const emailNotif = store.getNotificationLogs().find(n => n.booking_id === booking?.id && n.channel === 'email');
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const [locationQrDataUrl, setLocationQrDataUrl] = useState<string>('');
+
+  const venueLocationUrl = venue.location_url || venue.google_maps_link || `https://maps.google.com/?q=${encodeURIComponent(venue.name + ', ' + venue.address)}`;
+
+  useEffect(() => {
+    QRCode.toDataURL(venueLocationUrl, { margin: 1, width: 160 })
+      .then(url => setLocationQrDataUrl(url))
+      .catch(() => setLocationQrDataUrl(''));
+  }, [venueLocationUrl]);
 
   const handleDownloadPdfFile = async () => {
     setIsDownloadingPdf(true);
@@ -261,18 +271,28 @@ export const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> =
               </div>
             </div>
 
-            <div style="margin-top: 20px; padding: 14px; background: #f8fafc; border-radius: 10px; font-size: 11px; color: #475569; border: 1px solid #e2e8f0; line-height: 1.6;">
-              <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
-                <strong>Venue Location:</strong> ${venue.address}
+            <div style="margin-top: 20px; padding: 14px; background: #f8fafc; border-radius: 12px; font-size: 11px; color: #475569; border: 1px solid #e2e8f0; display: flex; gap: 16px; align-items: center;">
+              ${locationQrDataUrl ? `
+              <div style="text-align: center; flex-shrink: 0; background: #ffffff; padding: 6px; border-radius: 8px; border: 1px solid #cbd5e1;">
+                <img src="${locationQrDataUrl}" alt="Turf Location QR" style="width: 82px; height: 82px; display: block;" />
+                <span style="display: block; font-size: 8px; font-weight: 800; color: #006b30; text-transform: uppercase; margin-top: 4px; letter-spacing: 0.5px;">Scan Location</span>
               </div>
-              <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                <strong>GSTIN:</strong> ${venue.gst_number || '27AABCT1234F1Z0'}
-              </div>
-              <div style="display: flex; align-items: center; gap: 6px;">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-                <strong>Venue Contact:</strong> ${venue.contact_phone}
+              ` : ''}
+              <div style="flex: 1; line-height: 1.6;">
+                <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+                  <strong>Venue Location:</strong> ${venue.address}
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                  <strong>GSTIN:</strong> ${venue.gst_number || '27AABCT1234F1Z0'} &bull; <strong>Contact:</strong> ${venue.contact_phone}
+                </div>
+                <div style="margin-top: 6px;">
+                  <a href="${venueLocationUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; gap: 5px; color: #006b30; font-weight: 800; text-decoration: none; background: #e8f5e9; padding: 4px 10px; border-radius: 6px; border: 1px solid #a5d6a7; font-size: 11px;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+                    Open Directions in Google Maps &rarr;
+                  </a>
+                </div>
               </div>
             </div>
           </div>
@@ -418,10 +438,17 @@ export const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> =
 
           {/* Venue Location & WhatsApp Status in 1 neat row */}
           <div className="flex items-center justify-between bg-surface-container-low px-2.5 py-1.5 rounded-xl border border-outline-variant/30 text-[10.5px]">
-            <span className="flex items-center gap-1.5 text-on-surface truncate min-w-0 pr-2">
-              <MapPin className="w-3 h-3 text-primary shrink-0" />
-              <strong className="truncate">{venue.name}</strong>
-            </span>
+            <a
+              href={venueLocationUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-primary hover:underline truncate min-w-0 pr-2 font-semibold"
+              title="Open directions in Google Maps"
+            >
+              <MapPin className="w-3.5 h-3.5 text-primary shrink-0" />
+              <span className="truncate">{venue.name} • {venue.address}</span>
+              <ExternalLink className="w-2.5 h-2.5 shrink-0 opacity-70" />
+            </a>
             <span className="text-emerald-700 font-semibold flex items-center gap-1 shrink-0">
               <MessageSquare className="w-3 h-3 text-emerald-600" /> WhatsApp Pass Sent ({cleanPhone})
             </span>

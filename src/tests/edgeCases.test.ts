@@ -13,6 +13,8 @@ import { SmsService } from '../services/smsService';
 import { SmsVerificationService } from '../services/smsVerificationService';
 import { ReminderScheduler } from '../services/reminderScheduler';
 import { NotificationService } from '../services/notificationService';
+import { ExcelExportService } from '../services/excelExportService';
+import { DataArchiveService } from '../services/dataArchiveService';
 import { formatTimeRange12h, formatDateDDMMYYYY, getBookingGatePassOtp, getBookingGroupRef } from '../utils/formatters';
 import { Court, DynamicSlot, BlockedSlot, Booking } from '../types/schema';
 
@@ -1235,6 +1237,244 @@ async function runResendTests() {
   assert(groupA === 'TRF-20261110-2221', 'Group ref for primary is TRF-20261110-2221');
   assert(groupB === 'TRF-20261110-2221', 'Group ref for secondary sibling resolves to parent TRF-20261110-2221');
   assert(groupC === 'TRF-20261110-2221', 'Group ref for tertiary sibling resolves to parent TRF-20261110-2221');
+
+  // --- TEST 22: Multi-Slot Partial Cancellation & Gate Pass Dynamic Slot Pruning ---
+  console.log('\n--- TEST 22: Multi-Slot Partial Cancellation & Gate Pass Dynamic Slot Pruning ---');
+  const multiGroupRef = `TRF-GROUP-${Date.now()}`;
+  const commonMultiOtp = '8821';
+  const groupDate = '2026-11-20';
+  const commonPayment = `pay_partial_${Date.now()}`;
+
+  const slotA = PostgresEngine.createBooking({
+    booking_ref: multiGroupRef,
+    group_ref: multiGroupRef,
+    gate_pass_otp: commonMultiOtp,
+    gateway_payment_id: commonPayment,
+    customer_id: 'cust-multi-002',
+    court_id: targetCourt.id,
+    sport_id: 'sp-football',
+    booking_date: groupDate,
+    start_time: '19:00',
+    end_time: '20:00',
+    total_amount: 1800,
+    discount_amount: 0,
+    status: 'confirmed',
+    source: 'online'
+  }).booking!;
+
+  const slotB = PostgresEngine.createBooking({
+    booking_ref: `${multiGroupRef}-2`,
+    group_ref: multiGroupRef,
+    gate_pass_otp: commonMultiOtp,
+    gateway_payment_id: commonPayment,
+    customer_id: 'cust-multi-002',
+    court_id: targetCourt.id,
+    sport_id: 'sp-football',
+    booking_date: groupDate,
+    start_time: '21:00',
+    end_time: '22:00',
+    total_amount: 1800,
+    discount_amount: 0,
+    status: 'confirmed',
+    source: 'online'
+  }).booking!;
+
+  const slotC = PostgresEngine.createBooking({
+    booking_ref: `${multiGroupRef}-3`,
+    group_ref: multiGroupRef,
+    gate_pass_otp: commonMultiOtp,
+    gateway_payment_id: commonPayment,
+    customer_id: 'cust-multi-002',
+    court_id: targetCourt.id,
+    sport_id: 'sp-football',
+    booking_date: groupDate,
+    start_time: '23:00',
+    end_time: '00:00',
+    total_amount: 1800,
+    discount_amount: 0,
+    status: 'confirmed',
+    source: 'online'
+  }).booking!;
+
+  // Initially link all 3 slots
+  const initialThreeSlots = [
+    { start_time: '19:00', end_time: '20:00', price: 1800 },
+    { start_time: '21:00', end_time: '22:00', price: 1800 },
+    { start_time: '23:00', end_time: '00:00', price: 1800 }
+  ];
+  slotA.all_slots = initialThreeSlots;
+  slotB.all_slots = initialThreeSlots;
+  slotC.all_slots = initialThreeSlots;
+  slotA.total_order_amount = 5400;
+  slotB.total_order_amount = 5400;
+  slotC.total_order_amount = 5400;
+
+  // Now, cancel ONLY slotA (19:00 - 20:00)
+  const cancelResult = PostgresEngine.updateBookingStatus(slotA.id, 'cancelled', {
+    refundAmount: 0,
+    refundReason: 'Customer requested cancellation of 7pm slot',
+    cancelledBy: 'customer'
+  });
+  assert(cancelResult.success, 'Slot A successfully cancelled');
+
+  // Verify Slot A is cancelled
+  assert(slotA.status === 'cancelled', 'Slot A is cancelled');
+
+  // Verify remaining active siblings Slot B and Slot C have updated active slots (only 2 slots, NOT 3)
+  const storedSlotB = store.getBookings().find(b => b.id === slotB.id)!;
+  const storedSlotC = store.getBookings().find(b => b.id === slotC.id)!;
+
+  assert(storedSlotB.all_slots?.length === 2, 'Slot B all_slots now contains exactly 2 active sessions');
+  assert(storedSlotC.all_slots?.length === 2, 'Slot C all_slots now contains exactly 2 active sessions');
+  assert(!storedSlotB.all_slots?.some(s => s.start_time === '19:00'), 'Cancelled 19:00 (7 PM) slot is PRUNED from Slot B pass');
+  assert(!storedSlotC.all_slots?.some(s => s.start_time === '19:00'), 'Cancelled 19:00 (7 PM) slot is PRUNED from Slot C pass');
+  assert(storedSlotB.total_order_amount === 3600, 'Slot B pass total reflects remaining active sessions (₹3600, not ₹5400)');
+  assert(storedSlotC.total_order_amount === 3600, 'Slot C pass total reflects remaining active sessions (₹3600, not ₹5400)');
+
+  // Verify dynamic pass filter logic
+  const allStoredBookings = store.getBookings();
+  const activeSiblings = allStoredBookings.filter(b => 
+    (b.status !== 'cancelled' && b.status !== 'refunded') &&
+    (getBookingGroupRef(b) === multiGroupRef || b.group_ref === multiGroupRef)
+  );
+  assert(activeSiblings.length === 2, 'Active sibling query excludes the cancelled 7 PM booking');
+
+  // --------------------------------------------------------------------------
+  // TEST 23: Data Retention & Automated 30-Day Owner Excel Archival
+  // --------------------------------------------------------------------------
+  console.log('\n--- TEST 23: Data Retention Windows & Automated 30-Day Owner Excel Archive ---');
+
+  // 23.1: Verify Excel XML Spreadsheet Generation
+  const testCourts = store.getCourts();
+  const testCustomers = store.getCustomers();
+  const testVenue = store.getVenue();
+  const sampleBookings = [slotA, slotB, slotC];
+
+  const excelXml = ExcelExportService.generateExcelXml(sampleBookings, testCourts, testCustomers, testVenue, {
+    title: 'TurfFlow Arena Test Archive',
+    periodLabel: 'Last 30 Days'
+  });
+
+  assert(excelXml.includes('<?xml version="1.0" encoding="UTF-8"?>'), 'Excel XML starts with valid XML declaration');
+  assert(excelXml.includes('<Worksheet ss:Name="Booking Ledger">'), 'Excel XML contains Booking Ledger worksheet');
+  assert(excelXml.includes('<Worksheet ss:Name="Executive Summary">'), 'Excel XML contains Executive Summary worksheet');
+  assert(excelXml.includes('Match Date'), 'Excel XML contains Match Date column header');
+  assert(excelXml.includes('Slot Amount (₹)'), 'Excel XML contains Rupee currency header');
+  assert(excelXml.includes(slotB.booking_ref), 'Excel XML contains slotB reference');
+
+  // 23.2: Verify Universal CSV Generation with UTF-8 BOM
+  const csvData = ExcelExportService.generateCsv(sampleBookings, testCourts, testCustomers);
+  assert(csvData.startsWith('\uFEFF'), 'CSV starts with UTF-8 BOM for Microsoft Excel compatibility');
+  assert(csvData.includes('"Booking Reference"'), 'CSV includes standard RFC 4180 headers');
+  assert(csvData.includes(slotC.booking_ref), 'CSV contains slotC reference');
+
+  // 23.3: Verify Period Filtering (30-day vs 60-day)
+  const past45Days = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const past75Days = new Date(Date.now() - 75 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+  const booking45d = PostgresEngine.createBooking({
+    booking_ref: 'TRF-TEST-45D',
+    customer_id: testCust.id,
+    court_id: testCourts[0].id,
+    sport_id: store.getSports()[0].id,
+    booking_date: past45Days,
+    start_time: '10:00',
+    end_time: '11:00',
+    total_amount: 1500,
+    discount_amount: 0,
+    status: 'completed',
+    source: 'online'
+  }).booking!;
+
+  const booking75d = PostgresEngine.createBooking({
+    booking_ref: 'TRF-TEST-75D',
+    customer_id: testCust.id,
+    court_id: testCourts[0].id,
+    sport_id: store.getSports()[0].id,
+    booking_date: past75Days,
+    start_time: '10:00',
+    end_time: '11:00',
+    total_amount: 1500,
+    discount_amount: 0,
+    status: 'completed',
+    source: 'online'
+  }).booking!;
+
+  const last30dBookings = DataArchiveService.getBookingsForPeriod(30);
+  assert(!last30dBookings.some(b => b.id === booking45d.id), '30-day window correctly excludes 45-day-old booking');
+  assert(!last30dBookings.some(b => b.id === booking75d.id), '30-day window correctly excludes 75-day-old booking');
+
+  const last60dBookings = DataArchiveService.getBookingsForPeriod(60);
+  assert(last60dBookings.some(b => b.id === booking45d.id), '60-day admin window correctly includes 45-day-old booking');
+  assert(!last60dBookings.some(b => b.id === booking75d.id), '60-day admin window correctly excludes 75-day-old booking');
+
+  const allTimeBookings = DataArchiveService.getBookingsForPeriod(0);
+  assert(allTimeBookings.some(b => b.id === booking45d.id), 'All-time permanent backup retains 45-day-old booking');
+  assert(allTimeBookings.some(b => b.id === booking75d.id), 'All-time permanent backup retains 75-day-old booking');
+
+  // 23.4: Verify Owner Email Archive Dispatch & Notification Logging
+  const dispatchRes = await DataArchiveService.dispatchArchiveToOwner({
+    targetEmail: 'owner@turfflow.com',
+    periodDays: 30,
+    isManual: true
+  });
+  assert(dispatchRes.success, 'Data archive report dispatched to owner email');
+  assert(dispatchRes.recipient === 'owner@turfflow.com', 'Recipient is owner@turfflow.com');
+
+  const notifLogs = store.getNotificationLogs();
+  const archiveNotif = notifLogs.find(n => n.booking_id === 'ARCHIVE-30D');
+  assert(!!archiveNotif, 'Notification log recorded for 30-day owner data archive dispatch');
+  assert(archiveNotif!.recipient === 'owner@turfflow.com', 'Notification recipient recorded accurately');
+
+  // 23.5: Automated 30-Day Scheduler Trigger
+  // Simulate 31 days elapsed
+  store.updateDataArchiveSettings({
+    last_dispatch_date: new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString()
+  });
+
+  const configuredOwnerEmail = store.getDataArchiveSettings().owner_email || 'rajupainter84688@gmail.com';
+  const autoDispatchCheck = await DataArchiveService.checkAndDispatchAutomatedMonthlyArchive();
+  assert(autoDispatchCheck.dispatched === true, 'Automated scheduler detected 30+ days elapsed and triggered archive dispatch');
+  assert(autoDispatchCheck.recipient === configuredOwnerEmail, `Automated dispatch sent to configured owner email (${configuredOwnerEmail})`);
+
+  // --- TEST 24: Page Refresh & Hold Slot Auto-Release Corner Case ---
+  console.log('\n--- TEST 24: Page Refresh & Hold Slot Auto-Release Corner Case ---');
+  const refreshTestCourt = store.getCourts()[0];
+  const refreshTestDate = '2026-11-18';
+  const sessionUserA = 'sess_refresh_test_user_a';
+  const sessionUserB = 'sess_refresh_test_user_b';
+
+  // Step 1: User A locks 18:00 slot, User B locks 19:00 slot
+  const lockARes = RedisLockService.acquireLock(refreshTestCourt.id, refreshTestDate, '18:00', sessionUserA);
+  const lockBRes = RedisLockService.acquireLock(refreshTestCourt.id, refreshTestDate, '19:00', sessionUserB);
+  assert(lockARes.success, 'User A acquired 18:00 slot lock');
+  assert(lockBRes.success, 'User B acquired 19:00 slot lock');
+
+  // Verify both locks are actively recorded
+  assert(!!RedisLockService.getLock(refreshTestCourt.id, refreshTestDate, '18:00'), 'User A lock active');
+  assert(!!RedisLockService.getLock(refreshTestCourt.id, refreshTestDate, '19:00'), 'User B lock active');
+
+  // Step 2: User A refreshes the page (triggers releaseAllLocksForSession for User A)
+  RedisLockService.releaseAllLocksForSession(sessionUserA);
+
+  // Step 3: Verify User A slot is released immediately
+  const checkLockAAfterRefresh = RedisLockService.getLock(refreshTestCourt.id, refreshTestDate, '18:00');
+  assert(!checkLockAAfterRefresh, 'User A held slot was immediately released on refresh');
+
+  // Step 4: Verify User B slot is NOT affected and remains held
+  const checkLockBAfterRefresh = RedisLockService.getLock(refreshTestCourt.id, refreshTestDate, '19:00');
+  assert(!!checkLockBAfterRefresh, 'User B held slot remains protected and held');
+  assert(checkLockBAfterRefresh?.locked_by === sessionUserB, 'User B lock ownership preserved');
+
+  // Clean up User B lock
+  RedisLockService.releaseAllLocksForSession(sessionUserB);
+
+  // Step 5: Test registered Customer ID hold auto-release on refresh
+  const customerId = 'cust-101';
+  const custLockRes = RedisLockService.acquireLock(refreshTestCourt.id, refreshTestDate, '20:00', customerId);
+  assert(custLockRes.success, 'Customer locked 20:00 slot');
+  RedisLockService.releaseAllLocksForSession(customerId);
+  assert(!RedisLockService.getLock(refreshTestCourt.id, refreshTestDate, '20:00'), 'Customer held slot immediately released on refresh');
 
   console.log('\n🎉 ALL CORNER & EDGE CASE TESTS (INCLUDING AUTO-COMPLETE & OWNER REDUCED WORKFLOW) PASSED PERFECTLY!\n');
 }

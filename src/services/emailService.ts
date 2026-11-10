@@ -12,16 +12,25 @@ export interface EmailDispatchResult {
   preview: string;
 }
 
+export interface EmailAttachment {
+  filename: string;
+  content: string; // Base64 encoded string
+  contentType?: string;
+}
+
 export interface SendEmailPayload {
   to: string;
   subject: string;
   html: string;
   text: string;
   from?: string;
+  reply_to?: string;
+  attachments?: EmailAttachment[];
 }
 
 export class EmailService {
-  private static DEFAULT_SENDER = 'TurfFlow Arena <onboarding@resend.dev>';
+  private static DEFAULT_SENDER = 'TurfFlow Arena <rajupainter84688@gmail.com>';
+  private static DEFAULT_REPLY_TO = 'rajupainter84688@gmail.com';
 
   /**
    * Check if Resend is configured with a real API key
@@ -36,7 +45,7 @@ export class EmailService {
    * Routes through Vite dev server middleware (/api/email/send) or direct Resend REST API
    */
   public static async sendEmail(payload: SendEmailPayload): Promise<EmailDispatchResult> {
-    const fromAddress = payload.from || this.DEFAULT_SENDER;
+    const fromAddress = payload.from || (import.meta as any).env?.VITE_RESEND_FROM_EMAIL || this.DEFAULT_SENDER;
     const cleanTo = payload.to.trim();
     const plainPreview = payload.text.slice(0, 160).replace(/\n+/g, ' ');
 
@@ -48,9 +57,11 @@ export class EmailService {
         body: JSON.stringify({
           to: cleanTo,
           from: fromAddress,
+          reply_to: this.DEFAULT_REPLY_TO,
           subject: payload.subject,
           html: payload.html,
-          text: payload.text
+          text: payload.text,
+          attachments: payload.attachments
         })
       });
 
@@ -68,10 +79,26 @@ export class EmailService {
         const errJson = await response.json().catch(() => ({}));
         const errMsg = errJson?.error || errJson?.details?.message || errJson?.message || 'Resend delivery failed';
         const isSandbox = errMsg.includes('only send testing emails') || errMsg.includes('verify your domain');
+
+        if (isSandbox) {
+          // Gracefully fallback to simulation for unverified demo recipient domains
+          const simId = `sim_resend_sandbox_${Date.now()}`;
+          console.warn(`[Resend Sandbox Notice] ${errMsg}. Falling back to simulation for ${cleanTo}.`);
+          return {
+            success: true,
+            id: simId,
+            simulated: true,
+            sandboxRestricted: true,
+            recipient: cleanTo,
+            subject: payload.subject,
+            preview: plainPreview
+          };
+        }
+
         return {
           success: false,
           error: errMsg,
-          sandboxRestricted: isSandbox,
+          sandboxRestricted: false,
           simulated: false,
           recipient: cleanTo,
           subject: payload.subject,
@@ -94,10 +121,12 @@ export class EmailService {
           },
           body: JSON.stringify({
             from: fromAddress,
+            reply_to: this.DEFAULT_REPLY_TO,
             to: [cleanTo],
             subject: payload.subject,
             html: payload.html,
-            text: payload.text
+            text: payload.text,
+            attachments: payload.attachments
           })
         });
 
@@ -114,10 +143,24 @@ export class EmailService {
         } else {
           const directErr = await directRes.json().catch(() => ({}));
           const errMsg = directErr?.message || 'Resend API call rejected';
+          const isSandbox = errMsg.includes('only send testing emails') || errMsg.includes('verify your domain');
+          if (isSandbox) {
+            const simId = `sim_resend_sandbox_${Date.now()}`;
+            console.warn(`[Resend Sandbox Notice] ${errMsg}. Falling back to simulation for ${cleanTo}.`);
+            return {
+              success: true,
+              id: simId,
+              simulated: true,
+              sandboxRestricted: true,
+              recipient: cleanTo,
+              subject: payload.subject,
+              preview: plainPreview
+            };
+          }
           return {
             success: false,
             error: errMsg,
-            sandboxRestricted: errMsg.includes('only send testing emails') || errMsg.includes('verify your domain'),
+            sandboxRestricted: false,
             simulated: false,
             recipient: cleanTo,
             subject: payload.subject,
@@ -836,6 +879,192 @@ export class EmailService {
       html,
       text,
       from: venue.email_sender || this.DEFAULT_SENDER
+    });
+  }
+
+  /**
+   * 8. Send 30-Day Monthly Data Ledger & Financial Audit Email to Turf Owner
+   */
+  public static async sendMonthlyDataArchiveReport(params: {
+    toEmail: string;
+    venue: Venue;
+    periodDays?: number;
+    isLastMonth?: boolean;
+    monthName?: string;
+    bookings: Booking[];
+    summary: {
+      totalBookings: number;
+      grossRevenue: number;
+      totalRefunds: number;
+      netRevenue: number;
+      confirmedCount: number;
+      completedCount: number;
+      cancelledCount: number;
+      refundedCount: number;
+      onlineCount: number;
+      whatsappCount: number;
+      walkinCount: number;
+    };
+    startDateFormatted: string;
+    endDateFormatted: string;
+    csvPreview?: string;
+    attachments?: EmailAttachment[];
+  }): Promise<EmailDispatchResult> {
+    const { toEmail, venue, periodDays = 30, isLastMonth, monthName, summary, startDateFormatted, endDateFormatted } = params;
+    const reportTitle = isLastMonth 
+      ? `Monthly Data Archive - ${monthName || 'Previous Month'}` 
+      : `Last ${periodDays} Days Data Archive & Financial Ledger`;
+    const subject = `📊 ${venue.name}: ${reportTitle} (${startDateFormatted} – ${endDateFormatted})`;
+    const badgeLabel = isLastMonth
+      ? `📊 1ST OF MONTH BACKUP (${(monthName || 'LAST MONTH').toUpperCase()})`
+      : `📊 LAST ${periodDays} DAYS DATA BACKUP`;
+
+    const text = [
+      `TURFFLOW - ${reportTitle.toUpperCase()}`,
+      `Venue: ${venue.name} (GST: ${venue.gst_number})`,
+      `Period: ${startDateFormatted} to ${endDateFormatted}`,
+      ``,
+      `FINANCIAL & BOOKING SUMMARY:`,
+      `• Total Bookings: ${summary.totalBookings}`,
+      `• Gross Captured Revenue: ₹${summary.grossRevenue.toLocaleString('en-IN')}`,
+      `• Total Refunds Paid: ₹${summary.totalRefunds.toLocaleString('en-IN')}`,
+      `• Net Retained Revenue: ₹${summary.netRevenue.toLocaleString('en-IN')}`,
+      `• Active Confirmed Sessions: ${summary.confirmedCount}`,
+      `• Completed Matches: ${summary.completedCount}`,
+      `• Cancelled / Refunded: ${summary.cancelledCount + summary.refundedCount}`,
+      ``,
+      `BOOKING CHANNELS:`,
+      `• Website Online: ${summary.onlineCount}`,
+      `• WhatsApp Automation: ${summary.whatsappCount}`,
+      `• Walk-in / Phone: ${summary.walkinCount}`,
+      ``,
+      `All detailed records and multi-sheet Excel files are permanently backed up and can be downloaded from your Admin Analytics tab anytime.`,
+      `TurfFlow Automated Archive Service`
+    ].join('\n');
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${subject}</title>
+</head>
+<body style="margin: 0; padding: 24px; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #0f172a;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 650px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.06); border: 1px solid #e2e8f0;">
+    <!-- Header -->
+    <tr>
+      <td style="background: linear-gradient(135deg, #0f5132 0%, #107c41 100%); padding: 32px 24px; text-align: center; color: #ffffff;">
+        <div style="display: inline-block; background: rgba(255,255,255,0.2); color: #ffffff; font-size: 11px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; padding: 4px 14px; border-radius: 999px; margin-bottom: 10px;">
+          ${badgeLabel}
+        </div>
+        <h1 style="margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">Master Ledger &amp; Revenue Audit</h1>
+        <p style="margin: 8px 0 0 0; font-size: 13px; opacity: 0.9; color: #d1e7dd;">
+          ${venue.name} &bull; ${startDateFormatted} to ${endDateFormatted}
+        </p>
+      </td>
+    </tr>
+        </p>
+      </td>
+    </tr>
+
+    <!-- Body -->
+    <tr>
+      <td style="padding: 28px 24px;">
+        <p style="font-size: 15px; margin: 0 0 20px 0; color: #334155;">
+          Hello <strong>Venue Owner</strong>,<br/>
+          Attached is your scheduled <strong>30-day comprehensive data backup and financial archive</strong>. Your user-facing website maintains a lightweight 30-day window, while full audit data is compiled here.
+        </p>
+
+        <!-- KPI Grid -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
+          <tr>
+            <td width="50%" style="padding-right: 8px; vertical-align: top;">
+              <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 16px; text-align: center;">
+                <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #166534;">Net Retained Revenue</div>
+                <div style="font-size: 28px; font-weight: 900; color: #14532d; margin-top: 4px;">₹${summary.netRevenue.toLocaleString('en-IN')}</div>
+                <div style="font-size: 11px; color: #15803d; margin-top: 2px;">Gross: ₹${summary.grossRevenue.toLocaleString('en-IN')}</div>
+              </div>
+            </td>
+            <td width="50%" style="padding-left: 8px; vertical-align: top;">
+              <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; text-align: center;">
+                <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #475569;">Total Bookings</div>
+                <div style="font-size: 28px; font-weight: 900; color: #0f172a; margin-top: 4px;">${summary.totalBookings}</div>
+                <div style="font-size: 11px; color: #64748b; margin-top: 2px;">${summary.confirmedCount + summary.completedCount} Confirmed &bull; ${summary.cancelledCount + summary.refundedCount} Cancelled</div>
+              </div>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Summary Breakdown Table -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; margin-bottom: 24px; font-size: 13px;">
+          <tr style="background: #f8fafc;">
+            <td colspan="2" style="padding: 10px 16px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #475569; border-bottom: 1px solid #e2e8f0;">
+              Executive Financial &amp; Channel Metrics
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 16px; color: #64748b; border-bottom: 1px solid #f1f5f9; width: 50%;">Gross Captured Bookings</td>
+            <td style="padding: 10px 16px; font-weight: 700; color: #0f172a; text-align: right; border-bottom: 1px solid #f1f5f9;">₹${summary.grossRevenue.toLocaleString('en-IN')}</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 16px; color: #64748b; border-bottom: 1px solid #f1f5f9;">Total Customer Refunds</td>
+            <td style="padding: 10px 16px; font-weight: 700; color: #dc2626; text-align: right; border-bottom: 1px solid #f1f5f9;">- ₹${summary.totalRefunds.toLocaleString('en-IN')}</td>
+          </tr>
+          <tr style="background: #f0fdf4;">
+            <td style="padding: 12px 16px; font-weight: 800; color: #166534; border-bottom: 1px solid #dcfce7;">Net Retained Revenue</td>
+            <td style="padding: 12px 16px; font-weight: 900; color: #15803d; text-align: right; font-size: 15px; border-bottom: 1px solid #dcfce7;">₹${summary.netRevenue.toLocaleString('en-IN')}</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 16px; color: #64748b; border-bottom: 1px solid #f1f5f9;">Booking Channels</td>
+            <td style="padding: 10px 16px; font-weight: 600; color: #334155; text-align: right; border-bottom: 1px solid #f1f5f9;">
+              Website: <strong>${summary.onlineCount}</strong> &bull; WhatsApp: <strong>${summary.whatsappCount}</strong> &bull; Walk-in: <strong>${summary.walkinCount}</strong>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 16px; color: #64748b;">GST Number / Venue ID</td>
+            <td style="padding: 10px 16px; font-family: monospace; font-weight: 700; color: #334155; text-align: right;">${venue.gst_number || '29ABCDE1234F1Z5'}</td>
+          </tr>
+        </table>
+
+        ${params.attachments && params.attachments.length > 0 ? `
+        <!-- Attached Spreadsheet Notice -->
+        <div style="background: #ecfdf5; border: 1.5px solid #a7f3d0; border-radius: 12px; padding: 14px 18px; margin-bottom: 24px;">
+          <div style="font-size: 13px; font-weight: 800; color: #065f46;">📎 Excel File Attached: ${params.attachments[0].filename}</div>
+          <div style="font-size: 11px; color: #047857; margin-top: 3px;">
+            Complete multi-sheet ledger with all columns, customer names, verified contact numbers, gate OTPs, payment status, and revenue breakdown.
+          </div>
+        </div>
+        ` : ''}
+
+        <!-- Download & Access Note -->
+        <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 12px; padding: 16px; text-align: center;">
+          <div style="font-size: 13px; font-weight: 700; color: #0f172a; margin-bottom: 4px;">📥 On-Demand Excel &amp; CSV Downloads</div>
+          <div style="font-size: 12px; color: #64748b; line-height: 1.5;">
+            You can also directly download the complete multi-sheet Excel spreadsheet (.xls / .xlsx) with full customer details, OTPs, and pitch metrics at any time from your <strong>Admin Panel &gt; Reports &amp; Analytics</strong>.
+          </div>
+        </div>
+      </td>
+    </tr>
+
+    <!-- Footer -->
+    <tr>
+      <td style="background: #f8fafc; padding: 20px 24px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8;">
+        <p style="margin: 0 0 4px 0;">Automated Backup by <strong>${venue.name}</strong>.</p>
+        <p style="margin: 0;">Dispatched to Owner: ${toEmail} &bull; Contact Helpline: ${venue.contact_phone}</p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `;
+
+    return this.sendEmail({
+      to: toEmail,
+      subject,
+      html,
+      text,
+      from: venue.email_sender || this.DEFAULT_SENDER,
+      attachments: params.attachments
     });
   }
 }

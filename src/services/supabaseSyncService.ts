@@ -1,6 +1,6 @@
 import { store } from './store';
 import { getSupabase, isSupabaseConfigured } from './supabaseClient';
-import { Booking, Customer, Payment, BlockedSlot, Court, SlotLock } from '../types/schema';
+import { Booking, Customer, Payment, BlockedSlot, Court, SlotLock, Venue } from '../types/schema';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { getBookingGatePassOtp, getBookingGroupRef } from '../utils/formatters';
 
@@ -769,6 +769,41 @@ export class SupabaseSyncService {
       return true;
     } catch (err: any) {
       console.error('❌ [Supabase Sync] Exception syncing court to Supabase:', err.message);
+      return false;
+    }
+  }
+
+  public static async syncVenueToSupabase(venue: Venue): Promise<boolean> {
+    const supabase = getSupabase();
+    if (!supabase) return false;
+
+    try {
+      const payload: any = {
+        id: venue.id,
+        name: venue.name,
+        address: venue.address,
+        timezone: venue.timezone || 'Asia/Kolkata',
+        gst_number: venue.gst_number,
+        contact_phone: venue.contact_phone,
+        contact_email: venue.contact_email || null,
+        is_active: venue.is_active,
+        min_notice_minutes: venue.min_notice_minutes || 15,
+        max_advance_days: venue.max_advance_days || 14,
+        whatsapp_enabled: Boolean(venue.whatsapp_enabled),
+        sms_fallback_enabled: Boolean(venue.sms_fallback_enabled),
+        email_enabled: Boolean(venue.email_enabled),
+        email_sender: venue.email_sender || null
+      };
+
+      const { error } = await supabase.from('venues').upsert([payload], { onConflict: 'id' });
+      if (error) {
+        console.warn('⚠️ [Supabase Sync] Note when syncing venue to Supabase:', error.message);
+        return false;
+      }
+      console.log(`✅ [Supabase Sync] Venue ${venue.name} synced to Supabase.`);
+      return true;
+    } catch (err: any) {
+      console.warn('⚠️ [Supabase Sync] Exception syncing venue to Supabase:', err.message);
       return false;
     }
   }

@@ -149,7 +149,7 @@ export class WhatsAppFormatter {
     let out = `🏟️ *WELCOME TO ${venue.name.toUpperCase()}* 🏟️\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `📍 *Address:* ${venue.address}\n` +
-      `🗺️ *Map:* ${venue.google_maps_link}\n` +
+      `🗺️ *Map:* ${venue.location_url || venue.google_maps_link}\n` +
       `📞 *Helpdesk:* ${venue.contact_phone}\n` +
       `⏰ *Hours:* 06:00 AM — 11:00 PM (Daily)\n\n` +
       `✨ *Amenities:*\n`;

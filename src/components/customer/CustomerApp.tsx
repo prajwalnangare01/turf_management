@@ -6,6 +6,7 @@ import { RedisLockService } from '../../services/redisLockService';
 import { CustomerAuthService } from '../../services/customerAuthService';
 import { CustomerAuthModal } from './CustomerAuthModal';
 import { CustomerProfilePage } from './CustomerProfilePage';
+import { VenueInfoAndPoliciesPage, PolicySection } from './VenueInfoAndPoliciesPage';
 import { TurfSelectionCard } from './TurfSelectionCard';
 import { HoldSummaryBar } from './HoldSummaryBar';
 import { SlotGrid } from './SlotGrid';
@@ -15,7 +16,7 @@ import { BookingLookupModal } from './BookingLookupModal';
 import { ActiveCustomerHoldModal } from '../common/ActiveCustomerHoldModal';
 import { formatTimeRange12h, formatTime12hPlain, formatTimeRange12hPlain, formatDateDDMMYYYY } from '../../utils/formatters';
 import { CustomerPortalSkeleton, PitchGridSkeleton, SportCardsSkeleton } from '../common/SkeletonLoaders';
-import { ChevronRight, Search, UserCheck, User, LogOut, ShieldCheck, Clock, Calendar, Lock, MapPin } from 'lucide-react';
+import { ChevronRight, Search, UserCheck, User, LogOut, ShieldCheck, Clock, Calendar, Lock, MapPin, Phone, FileText, RotateCcw } from 'lucide-react';
 
 interface CustomerAppProps {
   onSwitchToAdmin: () => void;
@@ -35,8 +36,9 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
     return () => clearTimeout(timer);
   }, []);
 
-  // View state: 'booking' vs 'profile'
-  const [customerView, setCustomerView] = useState<'booking' | 'profile'>('booking');
+  // View state: 'booking' vs 'profile' vs 'policies'
+  const [customerView, setCustomerView] = useState<'booking' | 'profile' | 'policies'>('booking');
+  const [initialPolicySection, setInitialPolicySection] = useState<PolicySection>('helpline');
 
   // Filter sports to only those that have active courts configured at this venue
   const activeCourts = allCourts.filter(c => c.status === 'active');
@@ -71,9 +73,60 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
     return { iso, dayName, dayNum, monthName };
   });
 
-  const [sessionId] = useState(() => `sess_${Math.floor(Math.random() * 1000000)}`);
+  const [sessionId] = useState(() => {
+    try {
+      const stored = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('turfflow_user_session_id') : null;
+      if (stored) return stored;
+      const newId = `sess_${Math.floor(Math.random() * 1000000)}`;
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem('turfflow_user_session_id', newId);
+      }
+      return newId;
+    } catch {
+      return `sess_${Math.floor(Math.random() * 1000000)}`;
+    }
+  });
   const effectiveSessionId = currentCustomer ? currentCustomer.id : sessionId;
   const [selectedSlots, setSelectedSlots] = useState<DynamicSlot[]>([]);
+
+  // Automatically release held slots when the user refreshes or closes the page.
+  // Resolves the corner case where a user holds a slot, refreshes, and finds their own slot stuck as held for 5 minutes.
+  useEffect(() => {
+    const storedSession = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('turfflow_user_session_id') : null;
+
+    // 1. Immediately on page mount / refresh: clean up any dangling locks from prior page load
+    if (storedSession) {
+      RedisLockService.releaseAllLocksForSession(storedSession);
+    }
+    if (effectiveSessionId) {
+      RedisLockService.releaseAllLocksForSession(effectiveSessionId);
+    }
+    if (currentCustomer?.id) {
+      RedisLockService.releaseAllLocksForSession(currentCustomer.id);
+    }
+    refreshSlots();
+
+    // 2. Synchronously on window beforeunload & pagehide when user reloads or navigates away
+    const handleUnload = () => {
+      if (storedSession) {
+        RedisLockService.releaseAllLocksForSession(storedSession);
+      }
+      if (effectiveSessionId) {
+        RedisLockService.releaseAllLocksForSession(effectiveSessionId);
+      }
+      if (currentCustomer?.id) {
+        RedisLockService.releaseAllLocksForSession(currentCustomer.id);
+      }
+    };
+
+    window.addEventListener('beforeunload', handleUnload);
+    window.addEventListener('pagehide', handleUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleUnload);
+      window.removeEventListener('pagehide', handleUnload);
+    };
+  }, [effectiveSessionId, currentCustomer?.id]);
 
   // Modals
   const [showCheckout, setShowCheckout] = useState(false);
@@ -167,6 +220,15 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
   const handleToggleSlot = (slot: DynamicSlot) => {
     if (!selectedCourt) return;
 
+    // If slot is currently locked by another customer, show Active Customer Hold Modal (no login required to view timer)
+    if (slot.status === 'locked') {
+      const isMyLock = slot.locked_by === effectiveSessionId;
+      if (!isMyLock) {
+        setSelectedHoldSlot({ court: selectedCourt, date: selectedDate, time: slot.start_time });
+        return;
+      }
+    }
+
     // EDGE CASE: Require Login / Signup before reserving or locking slots
     if (!currentCustomer) {
       setAuthPromptMessage('Please sign in or create an account to reserve and lock pitch slots.');
@@ -179,15 +241,6 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
     if (currentCustomer.is_blacklisted) {
       alert(`Your account is currently suspended due to previous no-show violations. Online reservations are disabled. Please contact venue administration at ${venue.contact_phone}.`);
       return;
-    }
-
-    // If slot is currently locked by another customer, show Active Customer Hold Modal
-    if (slot.status === 'locked') {
-      const isMyLock = slot.locked_by === effectiveSessionId;
-      if (!isMyLock) {
-        setSelectedHoldSlot({ court: selectedCourt, date: selectedDate, time: slot.start_time });
-        return;
-      }
     }
 
     const exists = selectedSlots.some(s => s.start_time === slot.start_time);
@@ -296,6 +349,20 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
         onBackToBooking={() => setCustomerView('booking')}
         onLogout={handleCustomerLogout}
         onUpdateCustomer={(updated) => setCurrentCustomer(updated)}
+        onNavigateToPolicies={(sec) => {
+          if (sec) setInitialPolicySection(sec);
+          setCustomerView('policies');
+        }}
+      />
+    );
+  }
+
+  // If customer is viewing Venue Info & Policies page
+  if (customerView === 'policies') {
+    return (
+      <VenueInfoAndPoliciesPage
+        initialSection={initialPolicySection}
+        onBackToBooking={() => setCustomerView('booking')}
       />
     );
   }
@@ -323,6 +390,19 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Owner Helpline & Policies Quick Access Button */}
+          <button
+            onClick={() => {
+              setInitialPolicySection('helpline');
+              setCustomerView('policies');
+            }}
+            className="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-full text-xs font-headline font-bold border border-outline-variant/60 hover:border-primary/60 hover:bg-surface-container-low transition flex items-center gap-1.5 text-on-surface cursor-pointer shadow-2xs"
+            title="Owner Helpline, Location & Policies"
+          >
+            <Phone className="w-3.5 h-3.5 text-primary" />
+            <span className="hidden sm:inline">Help & Policies</span>
+          </button>
+
           {currentCustomer ? (
             <div className="flex items-center gap-2">
               <button
@@ -610,15 +690,72 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
           </section>
         )}
 
-        {/* Footer */}
-        <footer className="pt-8 pb-4 border-t border-outline-variant/30 text-xs text-on-surface-variant flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p>© 2026 {venue.name}. High Performance Sports Venues.</p>
-          <button
-            onClick={onSwitchToAdmin}
-            className="text-on-surface-variant/70 hover:text-primary transition-colors text-[11px] font-medium underline flex items-center gap-1"
-          >
-            Staff / Manager Portal Access
-          </button>
+        {/* Footer with Comprehensive Links */}
+        <footer className="pt-8 pb-4 border-t border-outline-variant/30 text-xs text-on-surface-variant space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-outline-variant/20">
+            <div className="flex items-center gap-2">
+              <img src="/logo.png" alt="TurfFlow" className="w-6 h-6 rounded-md object-contain" />
+              <span className="font-headline font-bold text-sm text-primary">{venue.name}</span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-semibold">
+              <button
+                onClick={() => {
+                  setInitialPolicySection('helpline');
+                  setCustomerView('policies');
+                }}
+                className="text-on-surface-variant hover:text-primary transition cursor-pointer flex items-center gap-1"
+              >
+                <Phone className="w-3.5 h-3.5 text-primary" /> Owner Helpline
+              </button>
+              <button
+                onClick={() => {
+                  setInitialPolicySection('location');
+                  setCustomerView('policies');
+                }}
+                className="text-on-surface-variant hover:text-primary transition cursor-pointer flex items-center gap-1"
+              >
+                <MapPin className="w-3.5 h-3.5 text-primary" /> Location & Map
+              </button>
+              <button
+                onClick={() => {
+                  setInitialPolicySection('cancellation');
+                  setCustomerView('policies');
+                }}
+                className="text-red-700 hover:text-red-800 transition cursor-pointer flex items-center gap-1 font-bold bg-red-50 hover:bg-red-100 px-2.5 py-1 rounded-lg border border-red-200"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-red-600" /> Cancellation & Refund Policy
+              </button>
+              <button
+                onClick={() => {
+                  setInitialPolicySection('terms');
+                  setCustomerView('policies');
+                }}
+                className="text-on-surface-variant hover:text-primary transition cursor-pointer flex items-center gap-1"
+              >
+                <FileText className="w-3.5 h-3.5 text-primary" /> Terms & Conditions
+              </button>
+              <button
+                onClick={() => {
+                  setInitialPolicySection('privacy');
+                  setCustomerView('policies');
+                }}
+                className="text-on-surface-variant hover:text-primary transition cursor-pointer flex items-center gap-1"
+              >
+                <Lock className="w-3.5 h-3.5 text-primary" /> Privacy Policy
+              </button>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-on-surface-variant/80">
+            <p>© 2026 {venue.name}. High Performance Sports Venues. GSTIN: {venue.gst_number || '29ABCDE1234F1Z5'}</p>
+            <button
+              onClick={onSwitchToAdmin}
+              className="text-on-surface-variant/70 hover:text-primary transition-colors font-medium underline flex items-center gap-1 cursor-pointer"
+            >
+              Staff / Manager Portal Access
+            </button>
+          </div>
         </footer>
           </>
         )}

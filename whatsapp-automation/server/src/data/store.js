@@ -5,6 +5,7 @@ export const DEFAULT_VENUE = {
   id: 'ven-001',
   name: 'TurfFlow Arena',
   address: 'Plot 42, Sports Enclave, Pune, Maharashtra 411045',
+  location_url: 'https://maps.google.com/?q=18.5204,73.8567',
   google_maps_link: 'https://maps.google.com/?q=18.5204,73.8567',
   timezone: 'Asia/Kolkata',
   gst_number: '27ABCDE1234F1Z5',
@@ -148,6 +149,16 @@ class Store {
   }
 
   getVenue() { return this.venue; }
+  setVenue(venue) {
+    if (!venue) return this.venue;
+    this.venue = {
+      ...this.venue,
+      ...venue,
+      location_url: venue.location_url || venue.google_maps_link || this.venue.location_url,
+      google_maps_link: venue.location_url || venue.google_maps_link || this.venue.google_maps_link
+    };
+    return this.venue;
+  }
   getSports() { return this.sports; }
   getCourts() { return this.courts; }
   getCancellationPolicies() { return this.cancellationPolicies; }

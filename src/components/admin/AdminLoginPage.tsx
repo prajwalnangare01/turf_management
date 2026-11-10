@@ -12,7 +12,7 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
   onLoginSuccess,
   onSwitchToCustomer
 }) => {
-  const [identity, setIdentity] = useState('owner@turfflow.com');
+  const [identity, setIdentity] = useState('rajupainter84688@gmail.com');
   const [password, setPassword] = useState('admin123');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -143,7 +143,7 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
             <div className="grid grid-cols-3 gap-2 text-[11px]">
               <button
                 type="button"
-                onClick={() => handleQuickFill('owner@turfflow.com', 'admin123')}
+                onClick={() => handleQuickFill('rajupainter84688@gmail.com', 'admin123')}
                 className="p-2 rounded-xl bg-surface-container-low hover:bg-primary/10 border border-outline-variant/40 text-center transition font-semibold text-primary"
               >
                 👑 Owner

@@ -12,8 +12,9 @@ import { OfflineBookingModal } from './OfflineBookingModal';
 import { AdminRefundModal } from './AdminRefundModal';
 import { EmergencyWeatherModal } from './EmergencyWeatherModal';
 import { ActiveCustomerHoldModal } from '../common/ActiveCustomerHoldModal';
+import { ConfirmModal } from '../common/ConfirmModal';
 import { CalendarTableSkeleton } from '../common/SkeletonLoaders';
-import { Calendar, ChevronLeft, ChevronRight, Plus, XCircle, CheckCircle, Lock, KeyRound, RotateCcw, CloudRain, ShieldAlert, Unlock, Wrench, Clock, AlertTriangle, Sun, Moon } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, Plus, XCircle, CheckCircle, Lock, KeyRound, RotateCcw, CloudRain, ShieldAlert, Unlock, Wrench, Clock, AlertTriangle, Sun, Moon, X } from 'lucide-react';
 
 interface ScheduleCalendarViewProps {
   currentAdmin: AdminUser;
@@ -38,6 +39,24 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
   // Detail drawer for selected booking
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [refundBooking, setRefundBooking] = useState<Booking | null>(null);
+
+  // Reusable Confirm Modal State for Complete / Cancel Actions
+  const [confirmState, setConfirmState] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText?: string;
+    cancelText?: string;
+    variant?: 'danger' | 'warning' | 'success' | 'info';
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {}
+  });
+
+  const closeConfirm = () => setConfirmState(prev => ({ ...prev, isOpen: false }));
 
   // Re-render when store updates via Supabase Realtime (e.g. WhatsApp hold/booking)
   const [, setStoreVersion] = useState(0);
@@ -198,14 +217,33 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
     ? allSlotStartTimes
     : Array.from({ length: 17 }, (_, i) => `${(6 + i).toString().padStart(2, '0')}:00`);
 
-  const handleUpdateStatus = (bookingId: string, status: 'completed' | 'cancelled') => {
-    const res = PostgresEngine.updateBookingStatus(bookingId, status);
-    if (res.success) {
-      AuditLogger.log(currentAdmin.id, `UPDATE_BOOKING_STATUS_${status.toUpperCase()}`, 'Booking', bookingId);
-      setSelectedBooking(null);
-    } else {
-      alert(res.message);
-    }
+  const requestStatusUpdate = (b: Booking, targetStatus: 'completed' | 'cancelled') => {
+    const cust = store.getCustomers().find(c => c.id === b.customer_id);
+    const custName = cust?.name || b.customer_name || 'Customer';
+    const court = store.getCourts().find(c => c.id === b.court_id);
+    const courtName = court?.name || 'Pitch Arena';
+    const isCancel = targetStatus === 'cancelled';
+
+    setConfirmState({
+      isOpen: true,
+      title: isCancel ? `Cancel Reservation: ${b.booking_ref || b.id}` : `Complete Reservation: ${b.booking_ref || b.id}`,
+      message: isCancel
+        ? `Are you sure you want to cancel the booking for "${custName}" on ${courtName} (${formatDateDDMMYYYY(b.booking_date)} at ${formatTimeRange12hPlain(b.start_time, b.end_time)})? This will cancel the reservation and release the slot back to available.`
+        : `Are you sure you want to mark the reservation for "${custName}" on ${courtName} (${formatDateDDMMYYYY(b.booking_date)} at ${formatTimeRange12hPlain(b.start_time, b.end_time)}) as Completed? This confirms customer check-in and concludes the match session.`,
+      confirmText: isCancel ? 'Yes, Cancel Booking' : 'Yes, Mark Completed',
+      cancelText: 'Keep Booking',
+      variant: isCancel ? 'danger' : 'success',
+      onConfirm: () => {
+        const res = PostgresEngine.updateBookingStatus(b.id, targetStatus);
+        if (res.success) {
+          AuditLogger.log(currentAdmin.id, `UPDATE_BOOKING_STATUS_${targetStatus.toUpperCase()}`, 'Booking', b.id);
+          closeConfirm();
+          setSelectedBooking(null);
+        } else {
+          alert(res.message);
+        }
+      }
+    });
   };
 
   return (
@@ -229,10 +267,6 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
               onChange={e => setSelectedDate(e.target.value)}
               className="form-input text-xs font-bold py-1.5 px-3 w-36"
             />
-
-            <span className="text-xs font-mono font-bold text-primary bg-primary/10 px-2 py-1 rounded-md border border-primary/20 shrink-0">
-              {formatDateDDMMYYYY(selectedDate)}
-            </span>
 
             <button onClick={() => changeDate(1)} className="btn-secondary p-1.5 rounded-lg" title="Next Day">
               <ChevronRight className="w-4 h-4 text-on-surface" />
@@ -461,7 +495,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
 
                       {slot.status === 'past' && (
                         <div className="w-full h-14 rounded-lg bg-gray-50 text-gray-400 text-[10px] flex items-center justify-center font-medium">
-                          Passed
+                          Booked
                         </div>
                       )}
                     </td>
@@ -478,116 +512,176 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
       {/* Booking Detail Drawer Modal */}
       {selectedBooking && (
         <div className="modal-overlay">
-          <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl animate-modalScaleIn text-on-surface max-h-[90vh] overflow-y-auto no-scrollbar">
-            <div className="flex justify-between items-center border-b border-outline-variant/40 pb-3">
-              <h3 className="font-headline font-bold text-lg text-primary">Booking Details</h3>
-              <span className="font-mono text-xs text-primary font-bold bg-primary/10 px-2 py-0.5 rounded">{selectedBooking.booking_ref || selectedBooking.id}</span>
-            </div>
-
-            {/* Prominent Gate Check-in OTP Display */}
-            <div className="bg-secondary-container/20 border-2 border-dashed border-secondary-container p-3.5 rounded-xl flex items-center justify-between">
-              <div className="flex items-center gap-1.5 font-headline font-bold text-xs text-on-secondary-container">
-                <KeyRound className="w-4 h-4 text-secondary" />
-                <span>Gate Verification OTP:</span>
-              </div>
-              <span className="font-mono font-black text-2xl tracking-[0.2em] bg-white text-on-secondary-container px-3 py-1 rounded shadow-sm border border-secondary-container/40">
-                {getBookingGatePassOtp(selectedBooking)}
-              </span>
-            </div>
-
-            <div className="bg-surface-container-low p-4 rounded-xl space-y-2 text-xs border border-outline-variant/30">
-              <p className="text-on-surface-variant">Customer: <strong className="text-on-surface font-semibold">{store.getCustomers().find(c => c.id === selectedBooking.customer_id)?.name || selectedBooking.customer_name || 'Customer'}</strong></p>
-              <p className="text-on-surface-variant">Phone: <strong className="text-on-surface font-semibold">{selectedBooking.customer_phone || store.getCustomers().find(c => c.id === selectedBooking.customer_id)?.phone || 'N/A'}</strong></p>
-              <p className="text-on-surface-variant">Court: <strong className="text-on-surface font-semibold">{store.getCourts().find(c => c.id === selectedBooking.court_id)?.name || selectedBooking.court_id}</strong></p>
-              <p className="text-on-surface-variant flex items-center gap-1.5 flex-wrap">
-                <span>Date & Time:</span>
-                <span className="text-primary font-bold inline-flex items-center gap-1.5">
-                  <span>{formatDateDDMMYYYY(selectedBooking.booking_date)} |</span>
-                  <span className={`p-1 rounded-md shrink-0 inline-flex items-center justify-center ${
-                    parseInt(selectedBooking.start_time.split(':')[0], 10) >= 18 || parseInt(selectedBooking.start_time.split(':')[0], 10) < 5
-                      ? 'bg-indigo-50 text-indigo-500'
-                      : 'bg-amber-50 text-amber-500'
-                  }`}>
-                    {parseInt(selectedBooking.start_time.split(':')[0], 10) >= 18 || parseInt(selectedBooking.start_time.split(':')[0], 10) < 5 ? (
-                      <Moon className="w-3 h-3" />
-                    ) : (
-                      <Sun className="w-3 h-3" />
-                    )}
-                  </span>
-                  <span>{formatTimeRange12hPlain(selectedBooking.start_time, selectedBooking.end_time)}</span>
-                </span>
-              </p>
-              <div className="flex items-center gap-1.5 text-on-surface-variant">
-                <span>Source:</span>
-                <span className={`px-2 py-0.5 rounded-full font-headline font-bold text-[10px] uppercase ${
-                  selectedBooking.source === 'offline_whatsapp'
-                    ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                    : selectedBooking.source === 'online'
-                    ? 'bg-primary/10 text-primary border border-primary/20'
-                    : 'bg-amber-100 text-amber-900 border border-amber-300'
-                }`}>
-                  {selectedBooking.source === 'offline_whatsapp' ? '💬 WhatsApp AI Agent' : selectedBooking.source === 'offline_walkin' ? '🚶 Walk-in Counter' : selectedBooking.source === 'offline_phone' ? '📞 Phone Reservation' : '🌐 Website Online'}
+          <div className="bg-white border border-outline-variant/60 rounded-3xl sm:rounded-2xl w-full max-w-xl sm:max-w-2xl max-h-[92vh] flex flex-col shadow-2xl animate-modalScaleIn text-on-surface overflow-hidden">
+            <div className="p-3 sm:p-3.5 bg-surface-container-low border-b border-outline-variant/40 flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-2">
+                <h3 className="font-headline font-bold text-base sm:text-lg text-primary">Booking Details</h3>
+                <span className="font-mono text-[11px] text-primary font-bold bg-primary/10 px-2 py-0.5 rounded border border-primary/20">
+                  {selectedBooking.booking_ref || selectedBooking.id}
                 </span>
               </div>
-              <p className="text-on-surface-variant">Status: <strong className="text-primary font-headline uppercase">{selectedBooking.status}</strong></p>
-              <p className="text-on-surface-variant">Amount Paid: <strong className="text-on-surface font-headline font-extrabold text-sm">₹{selectedBooking.total_amount}</strong></p>
+              <button
+                onClick={() => setSelectedBooking(null)}
+                className="text-on-surface-variant hover:text-on-surface p-1 rounded-full hover:bg-surface-container transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 sm:p-4 space-y-3 text-xs overflow-y-auto overscroll-contain flex-1">
+              {/* Prominent Gate Check-in OTP Display */}
+              <div className="bg-secondary-container/20 border-2 border-dashed border-secondary-container/80 p-2.5 rounded-xl flex items-center justify-between">
+                <div className="flex items-center gap-1.5 font-headline font-bold text-xs text-on-secondary-container">
+                  <KeyRound className="w-4 h-4 text-secondary" />
+                  <span>Gate Verification OTP:</span>
+                </div>
+                <span className="font-mono font-black text-xl sm:text-2xl tracking-[0.25em] bg-white text-on-secondary-container px-3 py-0.5 rounded-lg shadow-xs border border-secondary-container/40">
+                  {getBookingGatePassOtp(selectedBooking)}
+                </span>
+              </div>
+
+              {/* 2-Column Info Layout */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Left Card: Customer & Channel */}
+                <div className="bg-surface-container-low p-3 rounded-xl border border-outline-variant/30 space-y-2">
+                  <span className="text-[10px] font-bold text-primary uppercase tracking-wider block">Customer & Source</span>
+                  <div>
+                    <span className="text-on-surface-variant text-[11px] block">Customer Name:</span>
+                    <strong className="text-on-surface font-headline font-bold text-xs">
+                      {store.getCustomers().find(c => c.id === selectedBooking.customer_id)?.name || selectedBooking.customer_name || 'Customer'}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="text-on-surface-variant text-[11px] block">Phone:</span>
+                    <strong className="text-on-surface font-mono text-xs">
+                      {selectedBooking.customer_phone || store.getCustomers().find(c => c.id === selectedBooking.customer_id)?.phone || 'N/A'}
+                    </strong>
+                  </div>
+                  <div className="pt-1 border-t border-outline-variant/20 flex items-center justify-between">
+                    <span className="text-on-surface-variant text-[11px]">Booking Source:</span>
+                    <span className={`px-2 py-0.5 rounded-full font-headline font-bold text-[10px] uppercase ${
+                      selectedBooking.source === 'offline_whatsapp'
+                        ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                        : selectedBooking.source === 'online'
+                        ? 'bg-primary/10 text-primary border border-primary/20'
+                        : 'bg-amber-100 text-amber-900 border border-amber-300'
+                    }`}>
+                      {selectedBooking.source === 'offline_whatsapp' ? '💬 WhatsApp AI' : selectedBooking.source === 'offline_walkin' ? '🚶 Walk-in' : selectedBooking.source === 'offline_phone' ? '📞 Phone' : '🌐 Website'}
+                    </span>
+                  </div>
+                  {selectedBooking.notes && (
+                    <div className="pt-1 border-t border-outline-variant/20">
+                      <span className="text-on-surface-variant text-[10px] block">Notes:</span>
+                      <p className="text-[11px] italic text-on-surface font-medium">{selectedBooking.notes}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Right Card: Reservation & Payment */}
+                <div className="bg-surface-container-low p-3 rounded-xl border border-outline-variant/30 space-y-2 flex flex-col justify-between">
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-bold text-primary uppercase tracking-wider block">Match & Payment Details</span>
+                    <div>
+                      <span className="text-on-surface-variant text-[11px] block">Pitch / Arena:</span>
+                      <strong className="text-on-surface font-headline font-bold text-xs">
+                        {store.getCourts().find(c => c.id === selectedBooking.court_id)?.name || selectedBooking.court_id}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-on-surface-variant text-[11px] block">Date & Timing:</span>
+                      <div className="text-primary font-bold inline-flex items-center gap-1.5 mt-0.5">
+                        <span>{formatDateDDMMYYYY(selectedBooking.booking_date)}</span>
+                        <span>•</span>
+                        <span className={`p-0.5 rounded shrink-0 inline-flex items-center justify-center ${
+                          parseInt(selectedBooking.start_time.split(':')[0], 10) >= 18 || parseInt(selectedBooking.start_time.split(':')[0], 10) < 5
+                            ? 'bg-indigo-50 text-indigo-500'
+                            : 'bg-amber-50 text-amber-500'
+                        }`}>
+                          {parseInt(selectedBooking.start_time.split(':')[0], 10) >= 18 || parseInt(selectedBooking.start_time.split(':')[0], 10) < 5 ? (
+                            <Moon className="w-3 h-3" />
+                          ) : (
+                            <Sun className="w-3 h-3" />
+                          )}
+                        </span>
+                        <span>{formatTimeRange12hPlain(selectedBooking.start_time, selectedBooking.end_time)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-1.5 border-t border-outline-variant/20 flex justify-between items-center">
+                    <div>
+                      <span className="text-on-surface-variant text-[10.5px] block">Status:</span>
+                      <strong className="text-primary font-headline uppercase text-xs">{selectedBooking.status}</strong>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-on-surface-variant text-[10.5px] block">Amount Paid:</span>
+                      <strong className="text-on-surface font-headline font-extrabold text-sm text-primary">₹{selectedBooking.total_amount}</strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Refund Info Banner (if applicable) */}
               {selectedBooking.refund_amount !== undefined && (
-                <div className="bg-red-50 border border-red-200 p-2 rounded-lg text-red-900 space-y-0.5">
-                  <div className="flex justify-between font-bold">
+                <div className="bg-red-50 border border-red-200 p-2.5 rounded-xl text-red-900 space-y-1">
+                  <div className="flex justify-between font-bold text-xs">
                     <span>Refunded Amount:</span>
                     <span>₹{selectedBooking.refund_amount}</span>
                   </div>
                   {selectedBooking.cancellation_met_terms !== undefined && (
-                    <div className="text-[10px] font-bold">
+                    <div className="text-[10.5px] font-bold">
                       Terms Status: {selectedBooking.cancellation_met_terms ? '✅ Met Terms' : '⚠️ Terms Not Met'}
                     </div>
                   )}
                   {selectedBooking.refund_reason && (
-                    <p className="text-[10px] text-red-700 italic">Reason: {selectedBooking.refund_reason}</p>
+                    <div className="pt-0.5">
+                      {selectedBooking.refund_reason.toLowerCase().includes('rain') && (
+                        <div className="bg-sky-100 text-sky-900 border border-sky-300 rounded px-2 py-0.5 text-[10px] font-bold flex items-center gap-1 mb-1">
+                          <CloudRain className="w-3.5 h-3.5 text-sky-700 shrink-0" />
+                          <span>Proactively Cancelled due to Rain (Venue Owner)</span>
+                        </div>
+                      )}
+                      <p className="text-[10px] text-red-700 italic">Reason: {selectedBooking.refund_reason}</p>
+                    </div>
                   )}
                 </div>
               )}
-              {selectedBooking.notes && <p className="text-on-surface-variant italic mt-1">Notes: {selectedBooking.notes}</p>}
-            </div>
 
-            <div className="space-y-2">
-              <p className="text-xs font-headline font-bold text-on-surface-variant">Update Status & Actions:</p>
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  onClick={() => handleUpdateStatus(selectedBooking.id, 'completed')}
-                  className="btn-primary text-xs py-2 flex items-center justify-center gap-1 font-bold"
-                  title="Mark as Checked-in & Completed"
-                >
-                  <CheckCircle className="w-3.5 h-3.5" /> Complete
-                </button>
+              {/* Status Update Actions */}
+              <div className="space-y-1.5 pt-1 border-t border-outline-variant/30">
+                <p className="text-[11px] font-headline font-bold text-on-surface-variant">Update Status & Actions:</p>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    disabled={selectedBooking.status === 'completed'}
+                    onClick={() => requestStatusUpdate(selectedBooking, 'completed')}
+                    className="btn-primary text-xs py-2 flex items-center justify-center gap-1 font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Mark as Checked-in & Completed"
+                  >
+                    <CheckCircle className="w-3.5 h-3.5" /> Complete
+                  </button>
 
-                <button
-                  onClick={() => handleUpdateStatus(selectedBooking.id, 'cancelled')}
-                  className="py-2 text-xs bg-red-50 text-red-700 border border-red-200 rounded-lg font-bold hover:bg-red-100 flex items-center justify-center gap-1"
-                  title="Cancel Reservation"
-                >
-                  <XCircle className="w-3.5 h-3.5" /> Cancel
-                </button>
+                  <button
+                    disabled={selectedBooking.status === 'cancelled' || selectedBooking.status === 'refunded'}
+                    onClick={() => requestStatusUpdate(selectedBooking, 'cancelled')}
+                    className="py-2 text-xs bg-red-50 text-red-700 border border-red-200 rounded-lg font-bold hover:bg-red-100 flex items-center justify-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Cancel Reservation"
+                  >
+                    <XCircle className="w-3.5 h-3.5" /> Cancel
+                  </button>
 
-                <button
-                  onClick={() => {
-                    setRefundBooking(selectedBooking);
-                    setSelectedBooking(null);
-                  }}
-                  className="py-2 text-xs bg-purple-50 text-purple-900 border border-purple-300 rounded-lg font-bold hover:bg-purple-100 flex items-center justify-center gap-1"
-                  title="Issue Refund"
-                >
-                  <RotateCcw className="w-3.5 h-3.5 text-purple-700" /> Refund
-                </button>
+                  <button
+                    onClick={() => {
+                      setRefundBooking(selectedBooking);
+                      setSelectedBooking(null);
+                    }}
+                    className="py-2 text-xs bg-purple-50 text-purple-900 border border-purple-300 rounded-lg font-bold hover:bg-purple-100 flex items-center justify-center gap-1"
+                    title="Issue Refund"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 text-purple-700" /> Refund
+                  </button>
+                </div>
               </div>
             </div>
-
-            <button
-              onClick={() => setSelectedBooking(null)}
-              className="btn-secondary w-full py-2.5 text-xs font-bold mt-2"
-            >
-              Close
-            </button>
           </div>
         </div>
       )}
@@ -636,119 +730,123 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
       {/* CC-D03: Pitch Maintenance / Block Slot Modal */}
       {blockModalState.isOpen && (
         <div className="modal-overlay z-[9999]">
-          <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl animate-modalScaleIn text-on-surface max-h-[90vh] overflow-y-auto no-scrollbar">
-            <div className="flex justify-between items-center border-b border-outline-variant/40 pb-3">
-              <h3 className="font-headline font-bold text-lg text-primary flex items-center gap-2">
+          <div className="bg-white border border-outline-variant/60 rounded-3xl sm:rounded-2xl w-full max-w-2xl lg:max-w-3xl max-h-[92vh] flex flex-col shadow-2xl animate-modalScaleIn text-on-surface overflow-hidden">
+            <div className="p-3 sm:p-3.5 bg-surface-container-low border-b border-outline-variant/40 flex justify-between items-center shrink-0">
+              <h3 className="font-headline font-bold text-base sm:text-lg text-primary flex items-center gap-2">
                 <Lock className="w-5 h-5 text-gray-700" /> Block Court / Pitch
               </h3>
               <button
                 onClick={() => setBlockModalState(prev => ({ ...prev, isOpen: false }))}
-                className="text-on-surface-variant hover:text-on-surface p-1 rounded-full"
+                className="text-on-surface-variant hover:text-on-surface p-1 rounded-full hover:bg-surface-container transition-colors cursor-pointer"
               >
-                <XCircle className="w-5 h-5" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-700 space-y-1">
-              <p className="font-bold flex items-center gap-1.5">
-                <ShieldAlert className="w-4 h-4 text-amber-600" /> Active Booking Conflict Guard (CC-D03)
-              </p>
-              <p className="text-[11px] text-gray-600 leading-relaxed">
-                The system strictly blocks court maintenance reservations if any active confirmed or pending customer reservation exists in that interval.
-              </p>
-            </div>
-
-            <form onSubmit={e => { e.preventDefault(); handleCreateBlockSlot(); }} className="space-y-3 text-xs">
-              <div>
-                <label className="block font-bold text-on-surface-variant mb-1">Select Court Arena *</label>
-                <select
-                  value={blockModalState.courtId}
-                  onChange={e => setBlockModalState(prev => ({ ...prev, courtId: e.target.value }))}
-                  className="form-input text-xs font-bold"
-                >
-                  {courts.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
+            <form onSubmit={e => { e.preventDefault(); handleCreateBlockSlot(); }} className="p-3.5 sm:p-4 space-y-3 text-xs overflow-y-auto overscroll-contain flex-1">
+              <div className="p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-700 flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0" />
+                <p className="text-[11px] text-gray-600 leading-tight">
+                  Active Booking Conflict Guard (CC-D03): System strictly blocks maintenance reservations if any active booking exists in this time interval.
+                </p>
               </div>
 
-              {/* Maintenance Start Schedule */}
-              <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl space-y-2">
-                <p className="font-bold text-gray-800 flex items-center gap-1.5 text-xs">
-                  <Calendar className="w-3.5 h-3.5 text-primary" /> Maintenance Start *
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[10px] text-gray-500 font-semibold mb-0.5 block">Start Date *</label>
-                    <input
-                      type="date"
-                      required
-                      value={blockModalState.startDate}
-                      onChange={e => {
-                        const newStart = e.target.value;
-                        setBlockModalState(prev => ({
-                          ...prev,
-                          startDate: newStart,
-                          endDate: prev.endDate < newStart ? newStart : prev.endDate
-                        }));
-                      }}
-                      className="form-input text-xs font-semibold"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-gray-500 font-semibold mb-0.5 block">Start Time *</label>
-                    <input
-                      type="time"
-                      required
-                      value={blockModalState.startTime}
-                      onChange={e => setBlockModalState(prev => ({ ...prev, startTime: e.target.value }))}
-                      className="form-input text-xs font-bold"
-                    />
-                  </div>
+              {/* Court & Reason in 2 Columns */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block font-bold text-on-surface-variant mb-1">Select Court Arena *</label>
+                  <select
+                    value={blockModalState.courtId}
+                    onChange={e => setBlockModalState(prev => ({ ...prev, courtId: e.target.value }))}
+                    className="form-input text-xs py-1.5 font-bold"
+                  >
+                    {courts.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-on-surface-variant mb-1">Blocking Reason *</label>
+                  <select
+                    value={blockModalState.reason}
+                    onChange={e => setBlockModalState(prev => ({ ...prev, reason: e.target.value as any }))}
+                    className="form-input text-xs py-1.5 font-bold"
+                  >
+                    <option value="maintenance">🛠️ Pitch Maintenance & Turf Brushing</option>
+                    <option value="private_event">🏆 Private Tournament / League Match</option>
+                    <option value="owner_block">🔒 Venue Owner Reservation</option>
+                  </select>
                 </div>
               </div>
 
-              {/* Maintenance End Schedule */}
-              <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl space-y-2">
-                <p className="font-bold text-gray-800 flex items-center gap-1.5 text-xs">
-                  <Clock className="w-3.5 h-3.5 text-amber-700" /> Maintenance End *
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[10px] text-gray-500 font-semibold mb-0.5 block">End Date *</label>
-                    <input
-                      type="date"
-                      required
-                      min={blockModalState.startDate}
-                      value={blockModalState.endDate}
-                      onChange={e => setBlockModalState(prev => ({ ...prev, endDate: e.target.value }))}
-                      className="form-input text-xs font-semibold"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-gray-500 font-semibold mb-0.5 block">End Time *</label>
-                    <input
-                      type="time"
-                      required
-                      value={blockModalState.endTime}
-                      onChange={e => setBlockModalState(prev => ({ ...prev, endTime: e.target.value }))}
-                      className="form-input text-xs font-bold"
-                    />
+              {/* Start & End Schedules in 2 Columns */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {/* Maintenance Start Schedule */}
+                <div className="p-2.5 bg-gray-50 border border-gray-200 rounded-xl space-y-1.5">
+                  <p className="font-bold text-gray-800 flex items-center gap-1.5 text-[11px]">
+                    <Calendar className="w-3.5 h-3.5 text-primary" /> Maintenance Start *
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] text-gray-500 font-semibold mb-0.5 block">Start Date *</label>
+                      <input
+                        type="date"
+                        required
+                        value={blockModalState.startDate}
+                        onChange={e => {
+                          const newStart = e.target.value;
+                          setBlockModalState(prev => ({
+                            ...prev,
+                            startDate: newStart,
+                            endDate: prev.endDate < newStart ? newStart : prev.endDate
+                          }));
+                        }}
+                        className="form-input text-xs py-1 font-semibold"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-gray-500 font-semibold mb-0.5 block">Start Time *</label>
+                      <input
+                        type="time"
+                        required
+                        value={blockModalState.startTime}
+                        onChange={e => setBlockModalState(prev => ({ ...prev, startTime: e.target.value }))}
+                        className="form-input text-xs py-1 font-bold"
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div>
-                <label className="block font-bold text-on-surface-variant mb-1">Blocking Reason *</label>
-                <select
-                  value={blockModalState.reason}
-                  onChange={e => setBlockModalState(prev => ({ ...prev, reason: e.target.value as any }))}
-                  className="form-input text-xs font-bold"
-                >
-                  <option value="maintenance">🛠️ Pitch Maintenance & Turf Brushing</option>
-                  <option value="private_event">🏆 Private Tournament / League Match</option>
-                  <option value="owner_block">🔒 Venue Owner Reservation</option>
-                </select>
+                {/* Maintenance End Schedule */}
+                <div className="p-2.5 bg-gray-50 border border-gray-200 rounded-xl space-y-1.5">
+                  <p className="font-bold text-gray-800 flex items-center gap-1.5 text-[11px]">
+                    <Clock className="w-3.5 h-3.5 text-amber-700" /> Maintenance End *
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] text-gray-500 font-semibold mb-0.5 block">End Date *</label>
+                      <input
+                        type="date"
+                        required
+                        min={blockModalState.startDate}
+                        value={blockModalState.endDate}
+                        onChange={e => setBlockModalState(prev => ({ ...prev, endDate: e.target.value }))}
+                        className="form-input text-xs py-1 font-semibold"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-gray-500 font-semibold mb-0.5 block">End Time *</label>
+                      <input
+                        type="time"
+                        required
+                        value={blockModalState.endTime}
+                        onChange={e => setBlockModalState(prev => ({ ...prev, endTime: e.target.value }))}
+                        className="form-input text-xs py-1 font-bold"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Live Preview / Validation */}
@@ -802,7 +900,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
                 );
               })()}
 
-              <div className="pt-2 flex gap-2">
+              <div className="pt-2 flex gap-2 border-t border-outline-variant/30">
                 <button
                   type="button"
                   onClick={() => setBlockModalState(prev => ({ ...prev, isOpen: false }))}
@@ -825,6 +923,18 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
           </div>
         </div>
       )}
+      {/* Complete & Cancel Confirmation Popup Modal */}
+      <ConfirmModal
+        isOpen={confirmState.isOpen}
+        title={confirmState.title}
+        message={confirmState.message}
+        confirmText={confirmState.confirmText}
+        cancelText={confirmState.cancelText}
+        variant={confirmState.variant}
+        onConfirm={confirmState.onConfirm}
+        onCancel={closeConfirm}
+      />
+
     </div>
   );
 };

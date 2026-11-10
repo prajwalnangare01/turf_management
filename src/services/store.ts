@@ -1,14 +1,16 @@
 import { 
   Venue, Sport, Court, PricingRule, Customer, AdminUser, Booking, 
   Payment, SlotLock, BlockedSlot, CancellationPolicy, CancellationSettings, Coupon, 
-  NotificationLog, AuditLog 
+  NotificationLog, AuditLog, DataArchiveSettings 
 } from '../types/schema';
 
 // Initial Mock Seed Data
 const DEFAULT_VENUE: Venue = {
   id: 'ven-001',
   name: 'TurfFlow Arena',
-  address: 'Plot 42, Sports Enclave, Pune',
+  address: 'Plot 42, Sports Enclave, Pune, Maharashtra 411045',
+  location_url: 'https://maps.google.com/?q=18.5204,73.8567',
+  google_maps_link: 'https://maps.google.com/?q=18.5204,73.8567',
   timezone: 'Asia/Kolkata',
   gst_number: '29ABCDE1234F1Z5',
   contact_phone: '+91 95791 58374',
@@ -18,7 +20,7 @@ const DEFAULT_VENUE: Venue = {
   whatsapp_enabled: true,
   sms_fallback_enabled: true,
   email_enabled: true,
-  email_sender: 'TurfFlow <onboarding@resend.dev>'
+  email_sender: 'TurfFlow Arena <rajupainter84688@gmail.com>'
 };
 
 const DEFAULT_SPORTS: Sport[] = [
@@ -135,7 +137,7 @@ const DEFAULT_CUSTOMERS: Customer[] = [
 ];
 
 const DEFAULT_ADMIN_USERS: AdminUser[] = [
-  { id: 'adm-001', name: 'Sanjay Kumar (Owner)', email: 'owner@turfflow.com', phone: '9876500001', role: 'owner', is_active: true },
+  { id: 'adm-001', name: 'Sanjay Kumar (Owner)', email: 'rajupainter84688@gmail.com', phone: '9876500001', role: 'owner', is_active: true },
   { id: 'adm-002', name: 'Priya Mehta (Manager)', email: 'manager@turfflow.com', phone: '9876500002', role: 'manager', is_active: true },
   { id: 'adm-003', name: 'Arjun Das (FrontDesk Staff)', email: 'staff@turfflow.com', phone: '9876500003', role: 'staff', is_active: true }
 ];
@@ -196,6 +198,14 @@ const DEFAULT_COUPONS: Coupon[] = [
   }
 ];
 
+const DEFAULT_ARCHIVE_SETTINGS: DataArchiveSettings = {
+  auto_dispatch_days: 30,
+  owner_email: 'rajupainter84688@gmail.com',
+  last_dispatch_date: new Date(Date.now() - 25 * 24 * 60 * 60 * 1000).toISOString(),
+  next_dispatch_date: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
+  is_active: true
+};
+
 // Persistent State Helper using LocalStorage
 class AppStore {
   private venue: Venue = DEFAULT_VENUE;
@@ -210,6 +220,7 @@ class AppStore {
   private blockedSlots: BlockedSlot[] = DEFAULT_BLOCKED_SLOTS;
   private cancellationPolicies: CancellationPolicy[] = DEFAULT_CANCELLATION_POLICIES;
   private cancellationSettings: CancellationSettings = DEFAULT_CANCELLATION_SETTINGS;
+  private dataArchiveSettings: DataArchiveSettings = DEFAULT_ARCHIVE_SETTINGS;
   private coupons: Coupon[] = DEFAULT_COUPONS;
   private notificationLogs: NotificationLog[] = [];
   private auditLogs: AuditLog[] = [];
@@ -269,6 +280,18 @@ class AppStore {
         if (!this.venue.contact_phone || this.venue.contact_phone.includes('98765 43210') || this.venue.contact_phone.includes('9876543210')) {
           this.venue.contact_phone = '+91 95791 58374';
         }
+        if (!this.venue.email_sender || this.venue.email_sender.includes('onboarding@resend.dev')) {
+          this.venue.email_sender = 'TurfFlow Arena <rajupainter84688@gmail.com>';
+        }
+        if (!this.venue.contact_email || this.venue.contact_email.includes('contact@turfflow.com') || this.venue.contact_email.includes('apexturf')) {
+          this.venue.contact_email = 'rajupainter84688@gmail.com';
+        }
+        if (!this.venue.location_url) {
+          this.venue.location_url = this.venue.google_maps_link || 'https://maps.google.com/?q=18.5204,73.8567';
+        }
+        if (!this.venue.google_maps_link) {
+          this.venue.google_maps_link = this.venue.location_url;
+        }
         this.sports = parsed.sports || DEFAULT_SPORTS;
         const rawCourts: Court[] = parsed.courts || DEFAULT_COURTS;
         this.courts = rawCourts.map(c => {
@@ -287,10 +310,15 @@ class AppStore {
         );
         this.customers = parsed.customers || DEFAULT_CUSTOMERS;
         const rawAdmins: AdminUser[] = parsed.adminUsers || DEFAULT_ADMIN_USERS;
-        this.adminUsers = rawAdmins.map(a => ({
-          ...a,
-          email: a.email.replace('@apexturf.com', '@turfflow.com')
-        }));
+        this.adminUsers = rawAdmins.map(a => {
+          if (a.role === 'owner' && (a.email === 'owner@turfflow.com' || a.email.includes('@apexturf.com'))) {
+            return { ...a, email: 'rajupainter84688@gmail.com' };
+          }
+          return {
+            ...a,
+            email: a.email.replace('@apexturf.com', '@turfflow.com')
+          };
+        });
         const rawBookings: Booking[] = Array.isArray(parsed.bookings) ? parsed.bookings : [];
         this.bookings = rawBookings.map((b, idx) => ({
           ...b,
@@ -303,6 +331,10 @@ class AppStore {
         this.blockedSlots = parsed.blockedSlots || DEFAULT_BLOCKED_SLOTS;
         this.cancellationPolicies = parsed.cancellationPolicies || DEFAULT_CANCELLATION_POLICIES;
         this.cancellationSettings = parsed.cancellationSettings || DEFAULT_CANCELLATION_SETTINGS;
+        this.dataArchiveSettings = parsed.dataArchiveSettings || DEFAULT_ARCHIVE_SETTINGS;
+        if (!this.dataArchiveSettings.owner_email || this.dataArchiveSettings.owner_email === 'owner@turfflow.com' || this.dataArchiveSettings.owner_email.includes('sanjay.turfowner') || this.dataArchiveSettings.owner_email.includes('apexturf')) {
+          this.dataArchiveSettings.owner_email = 'rajupainter84688@gmail.com';
+        }
         this.coupons = parsed.coupons || DEFAULT_COUPONS;
         this.notificationLogs = parsed.notificationLogs || [];
         this.auditLogs = parsed.auditLogs || [];
@@ -328,6 +360,7 @@ class AppStore {
         blockedSlots: this.blockedSlots,
         cancellationPolicies: this.cancellationPolicies,
         cancellationSettings: this.cancellationSettings,
+        dataArchiveSettings: this.dataArchiveSettings,
         coupons: this.coupons,
         notificationLogs: this.notificationLogs,
         auditLogs: this.auditLogs
@@ -351,11 +384,16 @@ class AppStore {
   public getBlockedSlots() { return this.blockedSlots; }
   public getCancellationPolicies() { return this.cancellationPolicies; }
   public getCancellationSettings() { return this.cancellationSettings; }
+  public getDataArchiveSettings(): DataArchiveSettings { return this.dataArchiveSettings; }
   public getCoupons() { return this.coupons; }
   public getNotificationLogs() { return this.notificationLogs; }
   public getAuditLogs() { return this.auditLogs; }
 
   // Setters / Mutators
+  public updateDataArchiveSettings(settings: Partial<DataArchiveSettings>) {
+    this.dataArchiveSettings = { ...this.dataArchiveSettings, ...settings };
+    this.saveToStorage();
+  }
   public setVenue(venue: Venue) { this.venue = venue; this.saveToStorage(); }
   public setSports(sports: Sport[]) { this.sports = sports; this.saveToStorage(); }
   public setCourts(courts: Court[]) { this.courts = courts; this.saveToStorage(); }

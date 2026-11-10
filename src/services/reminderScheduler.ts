@@ -2,6 +2,7 @@ import { store } from './store';
 import { NotificationService } from './notificationService';
 import { Booking } from '../types/schema';
 import { PostgresEngine } from './postgresEngine';
+import { DataArchiveService } from './dataArchiveService';
 
 export class ReminderScheduler {
   private static timerId: any = null;
@@ -17,11 +18,17 @@ export class ReminderScheduler {
   }
 
   /**
-   * Check all bookings for today and dispatch 1-hour reminders
+   * Check all bookings for today and dispatch 1-hour reminders,
+   * plus verify if 30-day automated data archive backup is due for owner.
    */
   public static checkAndDispatch(): { dispatchedCount: number; checkedBookings: string[] } {
     // 1. Automatically complete any past/expired confirmed bookings
     PostgresEngine.autoCompleteExpiredBookings();
+
+    // 2. Automated 30-day archival check for owner
+    DataArchiveService.checkAndDispatchAutomatedMonthlyArchive().catch(err => {
+      console.warn('[ReminderScheduler] Automated monthly archive check warning:', err);
+    });
 
     const now = new Date();
     const bookings = store.getBookings();

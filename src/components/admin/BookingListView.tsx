@@ -8,7 +8,7 @@ import { AdminRefundModal } from './AdminRefundModal';
 import { formatTimeRange12h, formatTimeRange12hPlain, formatDateDDMMYYYY, getBookingGatePassOtp, formatPhoneNumber } from '../../utils/formatters';
 import { ReminderScheduler } from '../../services/reminderScheduler';
 import { BookingTableSkeleton } from '../common/SkeletonLoaders';
-import { Search, Filter, CheckCircle, XCircle, Calendar, ArrowUpDown, X, Clock, MapPin, Tag, RotateCcw, Sun, Moon } from 'lucide-react';
+import { Search, Filter, CheckCircle, XCircle, Calendar, ArrowUpDown, X, Clock, MapPin, Tag, RotateCcw, Sun, Moon, Layers } from 'lucide-react';
 
 interface BookingListViewProps {
   currentAdmin: AdminUser;
@@ -20,6 +20,7 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
   const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>('');
   const [sortOrder, setSortOrder] = useState<'latest' | 'oldest'>('latest');
+  const [retentionFilter, setRetentionFilter] = useState<'60days' | 'all'>('60days');
   const [isFiltering, setIsFiltering] = useState(false);
 
   useEffect(() => {
@@ -68,6 +69,10 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
   const customers = store.getCustomers();
   const courts = store.getCourts();
 
+  // Admin Operational Window: Last 60 Days (keeps active admin query fast & uncluttered)
+  const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
+  const sixtyDaysAgoStr = `${sixtyDaysAgo.getFullYear()}-${String(sixtyDaysAgo.getMonth() + 1).padStart(2, '0')}-${String(sixtyDaysAgo.getDate()).padStart(2, '0')}`;
+
   const filteredBookings = bookings
     .filter(b => {
       const cust = customers.find(c => c.id === b.customer_id);
@@ -81,11 +86,15 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
         (cust?.name && cust.name.toLowerCase().includes(q)) ||
         (cust?.phone && cust.phone.includes(q));
 
-      const matchesStatus = statusFilter === 'all' || b.status === statusFilter;
+      const matchesStatus = 
+        statusFilter === 'all' || 
+        b.status === statusFilter ||
+        (statusFilter === 'cancelled_all' && (b.status === 'cancelled' || b.status === 'refunded'));
       const matchesSource = sourceFilter === 'all' || b.source === sourceFilter;
       const matchesDate = !dateFilter || b.booking_date === dateFilter;
+      const matchesRetention = retentionFilter === 'all' || b.booking_date >= sixtyDaysAgoStr;
 
-      return matchesSearch && matchesStatus && matchesSource && matchesDate;
+      return matchesSearch && matchesStatus && matchesSource && matchesDate && matchesRetention;
     })
     .sort((a, b) => {
       const timeA = new Date(`${a.booking_date || ''}T${a.start_time || '00:00'}:00`).getTime() || 0;
@@ -131,9 +140,53 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
           <h2 className="font-headline font-bold text-lg text-primary flex items-center gap-2">
             <Calendar className="w-5 h-5 text-primary shrink-0" /> Bookings Audit Directory
           </h2>
-          <span className="text-xs text-on-surface-variant font-bold bg-white px-3 py-1 rounded-full border border-outline-variant/40">
-            {filteredBookings.length} Record{filteredBookings.length !== 1 ? 's' : ''} Found
-          </span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setRetentionFilter(prev => prev === '60days' ? 'all' : '60days')}
+              className={`text-xs px-2.5 py-1 rounded-full font-bold border transition flex items-center gap-1 cursor-pointer ${
+                retentionFilter === '60days'
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                  : 'bg-white text-on-surface-variant hover:text-on-surface border-outline-variant/40'
+              }`}
+              title="Toggle between last 60 days operational data and all-time records"
+            >
+              <Clock className="w-3 h-3 text-emerald-600" />
+              <span>{retentionFilter === '60days' ? 'Active: Last 60 Days' : 'Showing All History'}</span>
+            </button>
+            <span className="text-xs text-on-surface-variant font-bold bg-white px-3 py-1 rounded-full border border-outline-variant/40">
+              {filteredBookings.length} Record{filteredBookings.length !== 1 ? 's' : ''} Found
+            </span>
+          </div>
+        </div>
+
+        {/* Quick Segmented Status Tabs */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+          {[
+            { id: 'all', label: 'All Bookings', count: bookings.length },
+            { id: 'confirmed', label: 'Upcoming / Confirmed', count: bookings.filter(b => b.status === 'confirmed').length },
+            { id: 'completed', label: 'Completed', count: bookings.filter(b => b.status === 'completed').length },
+            { id: 'cancelled_all', label: 'Cancelled & Refunded', count: bookings.filter(b => b.status === 'cancelled' || b.status === 'refunded').length }
+          ].map(tab => {
+            const isActive = statusFilter === tab.id || (tab.id === 'cancelled_all' && (statusFilter === 'cancelled' || statusFilter === 'refunded' || statusFilter === 'cancelled_all'));
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setStatusFilter(tab.id)}
+                className={`px-3 py-1.5 rounded-xl font-headline font-bold transition flex items-center gap-1.5 shrink-0 cursor-pointer ${
+                  isActive
+                    ? 'bg-primary text-white shadow-xs'
+                    : 'bg-white text-on-surface-variant hover:text-on-surface border border-outline-variant/40'
+                }`}
+              >
+                <span>{tab.label}</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${isActive ? 'bg-white/20 text-white' : 'bg-surface-container text-on-surface-variant'}`}>
+                  {tab.count}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Filter Inputs Grid */}
@@ -179,10 +232,11 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
               className="form-input py-1.5 font-headline font-bold text-xs w-full"
             >
               <option value="all">All Statuses</option>
-              <option value="confirmed">Confirmed</option>
+              <option value="confirmed">Confirmed / Active</option>
               <option value="pending_payment">Pending Payment</option>
               <option value="completed">Completed</option>
-              <option value="cancelled">Cancelled</option>
+              <option value="cancelled_all">All Cancelled & Refunded</option>
+              <option value="cancelled">Cancelled (No Refund)</option>
               <option value="refunded">Refunded</option>
             </select>
           </div>

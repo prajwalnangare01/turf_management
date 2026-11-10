@@ -1102,516 +1102,475 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
       {/* Add Court Modal */}
       {showAddCourtModal && (
         <div className="modal-overlay">
-          <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl animate-modalScaleIn text-on-surface max-h-[85vh] overflow-y-auto no-scrollbar">
-            <div className="flex items-center justify-between border-b border-outline-variant/40 pb-3">
-              <h3 className="font-headline font-bold text-xl text-primary flex items-center gap-2">
+          <div className="bg-white border border-outline-variant rounded-3xl sm:rounded-2xl w-full max-w-4xl xl:max-w-5xl max-h-[92vh] flex flex-col shadow-2xl animate-modalScaleIn text-on-surface overflow-hidden">
+            <div className="p-3 sm:p-3.5 bg-surface-container-low border-b border-outline-variant/40 flex items-center justify-between shrink-0">
+              <h3 className="font-headline font-bold text-lg sm:text-xl text-primary flex items-center gap-2">
                 <PlusCircle className="w-5 h-5 text-primary" /> Add New Pitch / Turf Arena
               </h3>
-              <button onClick={() => setShowAddCourtModal(false)} className="text-on-surface-variant hover:text-on-surface p-1 rounded-full">
+              <button onClick={() => setShowAddCourtModal(false)} className="text-on-surface-variant hover:text-on-surface p-1 rounded-full hover:bg-surface-container transition-colors cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleAddCourt} className="space-y-4 text-xs">
-              <div>
-                <label className="block text-on-surface-variant font-headline font-bold mb-1">Pitch / Turf Name *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Turf C — 7-a-side FIFA Synthetic"
-                  value={newCourtName}
-                  onChange={e => setNewCourtName(e.target.value)}
-                  className="form-input"
-                />
-              </div>
-
-              <div>
-                <label className="block text-on-surface-variant font-headline font-bold mb-1.5">Supported Sports *</label>
-                <div className="flex flex-wrap gap-2">
-                  {sports.map(s => {
-                    const isSelected = selectedSportIds.includes(s.id);
-                    return (
-                      <button
-                        type="button"
-                        key={s.id}
-                        onClick={() => toggleSportSelection(s.id, false)}
-                        className={`px-3 py-1.5 rounded-lg border text-xs font-bold flex items-center gap-1.5 transition-all ${
-                          isSelected
-                            ? 'bg-primary text-white border-primary shadow-sm'
-                            : 'bg-surface-container-low text-on-surface-variant border-outline-variant/40 hover:border-primary'
-                        }`}
-                      >
-                        <span>{s.icon}</span>
-                        <span>{s.name}</span>
-                        {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                        {!PREDEFINED_SPORT_IDS.includes(s.id) && (
-                          <span
-                            role="button"
-                            tabIndex={0}
-                            onClick={(e) => handleDeleteCustomSport(s.id, s.name, e)}
-                            className="ml-1 p-0.5 hover:bg-red-500/30 hover:text-red-200 rounded-full transition-colors cursor-pointer"
-                            title={`Delete ${s.name} custom sport`}
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-
-                  <button
-                    type="button"
-                    onClick={() => setShowAddCustomSportAdd(prev => !prev)}
-                    className="px-3 py-1.5 rounded-lg border border-dashed border-primary text-primary bg-primary/5 hover:bg-primary/10 text-xs font-bold flex items-center gap-1.5 transition-all"
-                  >
-                    <span>➕</span>
-                    <span>Other / Custom Sport</span>
-                  </button>
-                </div>
-
-                {showAddCustomSportAdd && (
-                  <div className="bg-primary/5 border border-primary/20 p-3.5 rounded-xl space-y-3 mt-2.5 animate-modalScaleIn">
+            <form onSubmit={handleAddCourt} className="p-3.5 sm:p-4 text-xs overflow-y-auto overscroll-contain space-y-3 flex-1">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
+                {/* Left Column: Identity, Supported Sports & Operations */}
+                <div className="space-y-3 bg-surface-container-lowest p-3 rounded-xl border border-outline-variant/30 flex flex-col justify-between">
+                  <div className="space-y-3">
                     <div>
-                      <span className="text-[11px] font-bold text-primary uppercase tracking-wider block mb-1.5">
-                        ⚡ Quick 1-Click Sports
-                      </span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {[
-                          { name: 'Volleyball', icon: '🏐' },
-                          { name: 'Basketball', icon: '🏀' },
-                          { name: 'Futsal', icon: '⚽' },
-                          { name: 'Padel', icon: '🎾' },
-                          { name: 'Squash', icon: '🏸' },
-                          { name: 'Kabaddi', icon: '🤼' }
-                        ].map(preset => (
-                          <button
-                            type="button"
-                            key={preset.name}
-                            onClick={() => addPresetSport(preset.name, preset.icon, false)}
-                            className="bg-white hover:bg-primary/10 border border-outline-variant/50 text-on-surface text-[11px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 transition-colors"
-                          >
-                            <span>{preset.icon}</span>
-                            <span>{preset.name}</span>
-                          </button>
-                        ))}
-                      </div>
+                      <label className="block text-on-surface-variant font-headline font-bold mb-1">Pitch / Turf Name *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Turf C — 7-a-side FIFA Synthetic"
+                        value={newCourtName}
+                        onChange={e => setNewCourtName(e.target.value)}
+                        className="form-input text-xs py-1.5 font-bold"
+                      />
                     </div>
 
-                    <div className="border-t border-outline-variant/30 pt-2.5">
-                      <span className="text-[11px] font-bold text-on-surface block mb-1">
-                        Or Type Custom Sport Name:
-                      </span>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          placeholder="Type Sport Name (e.g. Volleyball, Swimming, Archery)"
-                          value={customSportName}
-                          onChange={e => setCustomSportName(e.target.value)}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              handleCreateCustomSport(false, e as any);
-                            }
-                          }}
-                          className="form-input text-xs flex-1 py-1.5 font-medium"
-                        />
+                    <div>
+                      <label className="block text-on-surface-variant font-headline font-bold mb-1">Supported Sports *</label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {sports.map(s => {
+                          const isSelected = selectedSportIds.includes(s.id);
+                          return (
+                            <button
+                              type="button"
+                              key={s.id}
+                              onClick={() => toggleSportSelection(s.id, false)}
+                              className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold flex items-center gap-1 transition-all ${
+                                isSelected
+                                  ? 'bg-primary text-white border-primary shadow-xs'
+                                  : 'bg-surface-container-low text-on-surface-variant border-outline-variant/40 hover:border-primary'
+                              }`}
+                            >
+                              <span>{s.icon}</span>
+                              <span>{s.name}</span>
+                              {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                              {!PREDEFINED_SPORT_IDS.includes(s.id) && (
+                                <span
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={(e) => handleDeleteCustomSport(s.id, s.name, e)}
+                                  className="ml-1 p-0.5 hover:bg-red-500/30 hover:text-red-200 rounded-full transition-colors cursor-pointer"
+                                  title={`Delete ${s.name} custom sport`}
+                                >
+                                  <X className="w-3 h-3" />
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+
                         <button
                           type="button"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            handleCreateCustomSport(false, e);
-                          }}
-                          className="btn-primary text-xs px-3.5 py-1.5 font-bold shrink-0 shadow-sm"
+                          onClick={() => setShowAddCustomSportAdd(prev => !prev)}
+                          className="px-2.5 py-1 rounded-lg border border-dashed border-primary text-primary bg-primary/5 hover:bg-primary/10 text-[11px] font-bold flex items-center gap-1 transition-all"
                         >
-                          + Add Sport
+                          <span>➕</span>
+                          <span>Other / Custom Sport</span>
                         </button>
                       </div>
+
+                      {showAddCustomSportAdd && (
+                        <div className="bg-primary/5 border border-primary/20 p-2.5 rounded-xl space-y-2 mt-2 animate-modalScaleIn">
+                          <div>
+                            <span className="text-[10px] font-bold text-primary uppercase tracking-wider block mb-1">
+                              ⚡ Quick 1-Click Sports
+                            </span>
+                            <div className="flex flex-wrap gap-1">
+                              {[
+                                { name: 'Volleyball', icon: '🏐' },
+                                { name: 'Basketball', icon: '🏀' },
+                                { name: 'Futsal', icon: '⚽' },
+                                { name: 'Padel', icon: '🎾' },
+                                { name: 'Squash', icon: '🏸' },
+                                { name: 'Kabaddi', icon: '🤼' }
+                              ].map(preset => (
+                                <button
+                                  type="button"
+                                  key={preset.name}
+                                  onClick={() => addPresetSport(preset.name, preset.icon, false)}
+                                  className="bg-white hover:bg-primary/10 border border-outline-variant/50 text-on-surface text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 transition-colors"
+                                >
+                                  <span>{preset.icon}</span>
+                                  <span>{preset.name}</span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="border-t border-outline-variant/30 pt-1.5">
+                            <span className="text-[10px] font-bold text-on-surface block mb-0.5">
+                              Or Type Custom Sport Name:
+                            </span>
+                            <div className="flex gap-1.5">
+                              <input
+                                type="text"
+                                placeholder="Sport Name (e.g. Swimming, Archery)"
+                                value={customSportName}
+                                onChange={e => setCustomSportName(e.target.value)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleCreateCustomSport(false, e as any);
+                                  }
+                                }}
+                                className="form-input text-xs flex-1 py-1 font-medium"
+                              />
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleCreateCustomSport(false, e);
+                                }}
+                                className="btn-primary text-xs px-2.5 py-1 font-bold shrink-0 shadow-xs"
+                              >
+                                + Add Sport
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
-                )}
-              </div>
 
-              {/* Day-based Pricing Configuration Box */}
-              <div className="bg-surface-container-low p-3.5 rounded-xl border border-outline-variant/40 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-headline font-bold text-xs text-primary flex items-center gap-1.5 uppercase tracking-wider">
-                    <Calendar className="w-4 h-4 text-primary" /> Weekday & Weekend Base Rates
-                  </h4>
-                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
-                    Discount UI Enabled
-                  </span>
-                </div>
+                  {/* Operations & Timing Box */}
+                  <div className="bg-surface-container-low p-2.5 rounded-xl border border-outline-variant/40 space-y-2 mt-auto">
+                    <span className="text-[10.5px] font-headline font-bold text-primary uppercase tracking-wider block">
+                      🕒 Operational Timings & Slot Specs
+                    </span>
 
-                {/* Original vs Discounted Rate inputs */}
-                <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl space-y-2">
-                  <span className="text-[11px] font-bold text-emerald-950 flex items-center gap-1.5">
-                    🏷️ Pitch Base Pricing & UI Discount Strike-through
-                  </span>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-on-surface-variant font-headline font-bold text-[11px] mb-1">
-                        Original Price / MRP (₹/hr)
-                      </label>
-                      <input
-                        type="number"
-                        placeholder="e.g. 1500"
-                        min={0}
-                        value={newOriginalPrice}
-                        onChange={e => setNewOriginalPrice(e.target.value === '' ? '' : Number(e.target.value))}
-                        className="form-input font-bold text-on-surface-variant bg-white"
-                      />
-                      <span className="text-[10px] text-on-surface-variant/70 block mt-0.5">
-                        Will show as strikethrough (cut out) on the website
-                      </span>
-                    </div>
-
-                    <div>
-                      <label className="block text-emerald-900 font-headline font-bold text-[11px] mb-1">
-                        Discounted / Active Price (₹/hr) *
-                      </label>
-                      <input
-                        type="number"
-                        required
-                        min={100}
-                        value={newPrice}
-                        onChange={e => setNewPrice(Number(e.target.value))}
-                        className="form-input font-bold text-emerald-900 bg-white border-emerald-400"
-                      />
-                      <span className="text-[10px] text-emerald-700 block mt-0.5">
-                        Actual booking price charged to customers
-                      </span>
-                    </div>
-                  </div>
-
-                  {Number(newOriginalPrice) > Number(newPrice) && (
-                    <div className="flex items-center gap-2 pt-1 text-xs font-bold text-emerald-800 border-t border-emerald-200/60">
-                      <span>UI Preview:</span>
-                      <span className="line-through text-on-surface-variant">₹{newOriginalPrice}</span>
-                      <span className="text-emerald-900 font-extrabold text-sm">₹{newPrice}/hr</span>
-                      <span className="bg-emerald-200/70 text-emerald-900 text-[10px] px-2 py-0.5 rounded-full font-black">
-                        {Math.round(((Number(newOriginalPrice) - Number(newPrice)) / Number(newOriginalPrice)) * 100)}% OFF (Save ₹{Number(newOriginalPrice) - Number(newPrice)})
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                  {/* Saturday */}
-                  <div className="bg-white p-3 rounded-xl border border-amber-300/70 shadow-xs space-y-1.5">
-                    <label className="block text-amber-950 font-headline font-bold text-xs flex items-center justify-between">
-                      <span>Saturday (Sat) Rate *</span>
-                      <span className="text-[10px] text-amber-800 font-normal">Weekend</span>
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-3 gap-2">
                       <div>
-                        <span className="block text-[10px] text-on-surface-variant font-semibold mb-0.5">Regular (₹/hr)</span>
-                        <input
-                          type="number"
-                          required
-                          min={100}
-                          value={newSatPrice}
-                          onChange={e => setNewSatPrice(Number(e.target.value))}
-                          className="form-input font-bold text-amber-900 bg-amber-50/50 border-amber-300 py-1"
-                        />
-                      </div>
-                      <div>
-                        <span className="block text-[10px] text-emerald-800 font-semibold mb-0.5">Offer Price (Optional)</span>
-                        <input
-                          type="number"
-                          placeholder="e.g. 1400"
-                          min={0}
-                          value={newSatOfferPrice}
-                          onChange={e => setNewSatOfferPrice(e.target.value === '' ? '' : Number(e.target.value))}
-                          className="form-input font-bold text-emerald-900 bg-white border-emerald-300 py-1"
-                        />
-                      </div>
-                    </div>
-                    {newSatOfferPrice !== '' && Number(newSatOfferPrice) > 0 && Number(newSatOfferPrice) !== Number(newSatPrice) && (
-                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-800 pt-0.5 border-t border-emerald-100">
-                        <span className="line-through text-on-surface-variant/70">₹{Math.max(Number(newSatPrice), Number(newSatOfferPrice))}</span>
-                        <span className="text-emerald-900 font-extrabold">₹{Math.min(Number(newSatPrice), Number(newSatOfferPrice))}/hr</span>
-                        <span className="bg-emerald-200/70 text-emerald-900 px-1.5 py-0.2 rounded-full font-black">
-                          {Math.round(((Math.abs(Number(newSatPrice) - Number(newSatOfferPrice))) / Math.max(Number(newSatPrice), Number(newSatOfferPrice))) * 100)}% OFF
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Sunday */}
-                  <div className="bg-white p-3 rounded-xl border border-amber-300/70 shadow-xs space-y-1.5">
-                    <label className="block text-amber-950 font-headline font-bold text-xs flex items-center justify-between">
-                      <span>Sunday (Sun) Rate *</span>
-                      <span className="text-[10px] text-amber-800 font-normal">Weekend</span>
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <span className="block text-[10px] text-on-surface-variant font-semibold mb-0.5">Regular (₹/hr)</span>
-                        <input
-                          type="number"
-                          required
-                          min={100}
-                          value={newSunPrice}
-                          onChange={e => setNewSunPrice(Number(e.target.value))}
-                          className="form-input font-bold text-amber-900 bg-amber-50/50 border-amber-300 py-1"
-                        />
-                      </div>
-                      <div>
-                        <span className="block text-[10px] text-emerald-800 font-semibold mb-0.5">Offer Price (Optional)</span>
-                        <input
-                          type="number"
-                          placeholder="e.g. 1400"
-                          min={0}
-                          value={newSunOfferPrice}
-                          onChange={e => setNewSunOfferPrice(e.target.value === '' ? '' : Number(e.target.value))}
-                          className="form-input font-bold text-emerald-900 bg-white border-emerald-300 py-1"
-                        />
-                      </div>
-                    </div>
-                    {newSunOfferPrice !== '' && Number(newSunOfferPrice) > 0 && Number(newSunOfferPrice) !== Number(newSunPrice) && (
-                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-800 pt-0.5 border-t border-emerald-100">
-                        <span className="line-through text-on-surface-variant/70">₹{Math.max(Number(newSunPrice), Number(newSunOfferPrice))}</span>
-                        <span className="text-emerald-900 font-extrabold">₹{Math.min(Number(newSunPrice), Number(newSunOfferPrice))}/hr</span>
-                        <span className="bg-emerald-200/70 text-emerald-900 px-1.5 py-0.2 rounded-full font-black">
-                          {Math.round(((Math.abs(Number(newSunPrice) - Number(newSunOfferPrice))) / Math.max(Number(newSunPrice), Number(newSunOfferPrice))) * 100)}% OFF
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Peak Hours Configuration Box */}
-              <div className="bg-amber-50/70 p-3.5 rounded-xl border border-amber-300/80 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-headline font-bold text-xs text-amber-900 flex items-center gap-1.5 uppercase tracking-wider">
-                    <Zap className="w-4 h-4 text-amber-600 fill-amber-500" /> Peak Hours & Peak Rate Setup
-                  </h4>
-                  <label className="flex items-center gap-2 text-xs font-bold text-amber-900 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={newPeakEnabled}
-                      onChange={e => setNewPeakEnabled(e.target.checked)}
-                      className="rounded text-amber-600 focus:ring-amber-500 w-4 h-4"
-                    />
-                    Enable Peak Hours
-                  </label>
-                </div>
-
-                {newPeakEnabled && (
-                  <div className="space-y-2 pt-1">
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      <div>
-                        <label className="block text-amber-900 font-headline font-bold mb-1">Peak Start *</label>
+                        <label className="block text-[10.5px] text-on-surface-variant font-bold mb-0.5">Opening Time *</label>
                         <select
-                          value={newPeakStart}
-                          onChange={e => setNewPeakStart(e.target.value)}
-                          className="form-input font-bold text-amber-950 border-amber-300"
+                          value={newOpening}
+                          onChange={e => setNewOpening(e.target.value)}
+                          className="form-input text-xs py-1 font-bold"
                         >
-                          <option value="16:00">04:00 PM</option>
-                          <option value="17:00">05:00 PM</option>
-                          <option value="18:00">06:00 PM (Standard Evening)</option>
-                          <option value="19:00">07:00 PM</option>
-                          <option value="20:00">08:00 PM</option>
+                          <option value="05:00">05:00 AM</option>
+                          <option value="05:30">05:30 AM</option>
+                          <option value="06:00">06:00 AM (Standard)</option>
+                          <option value="06:30">06:30 AM</option>
+                          <option value="07:00">07:00 AM</option>
+                          <option value="07:30">07:30 AM</option>
+                          <option value="08:00">08:00 AM</option>
+                          <option value="08:30">08:30 AM</option>
+                          <option value="09:00">09:00 AM</option>
+                          <option value="09:30">09:30 AM</option>
+                          <option value="10:00">10:00 AM</option>
                         </select>
                       </div>
-
                       <div>
-                        <label className="block text-amber-900 font-headline font-bold mb-1">Peak End *</label>
+                        <label className="block text-[10.5px] text-on-surface-variant font-bold mb-0.5">Closing Time *</label>
                         <select
-                          value={newPeakEnd}
-                          onChange={e => setNewPeakEnd(e.target.value)}
-                          className="form-input font-bold text-amber-950 border-amber-300"
+                          value={newClosing}
+                          onChange={e => setNewClosing(e.target.value)}
+                          className="form-input text-xs py-1 font-bold"
                         >
                           <option value="20:00">08:00 PM</option>
                           <option value="21:00">09:00 PM</option>
                           <option value="22:00">10:00 PM</option>
-                          <option value="23:00">11:00 PM (Night Closing)</option>
+                          <option value="23:00">11:00 PM (Night)</option>
+                          <option value="23:30">11:30 PM</option>
                           <option value="00:00">12:00 AM (Midnight)</option>
+                          <option value="01:00">01:00 AM</option>
+                          <option value="02:00">02:00 AM (Late Night)</option>
                         </select>
                       </div>
-
                       <div>
-                        <label className="block text-amber-900 font-headline font-bold mb-1">Peak Rate (₹/hr) *</label>
+                        <label className="block text-[10.5px] text-on-surface-variant font-bold mb-0.5">Buffer (Mins)</label>
                         <input
                           type="number"
                           required
-                          min={100}
-                          value={newPeakPrice}
-                          onChange={e => setNewPeakPrice(Number(e.target.value))}
-                          className="form-input font-bold text-amber-950 border-amber-300 bg-white"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-emerald-800 font-headline font-bold mb-1">Offer Price (Optional)</label>
-                        <input
-                          type="number"
-                          placeholder="e.g. 1500"
                           min={0}
-                          value={newPeakOfferPrice}
-                          onChange={e => setNewPeakOfferPrice(e.target.value === '' ? '' : Number(e.target.value))}
-                          className="form-input font-bold text-emerald-900 border-emerald-400 bg-white"
+                          value={newBuffer}
+                          onChange={e => setNewBuffer(Number(e.target.value))}
+                          className="form-input text-xs py-1 font-bold"
                         />
                       </div>
                     </div>
 
-                    {newPeakOfferPrice !== '' && Number(newPeakOfferPrice) > 0 && Number(newPeakOfferPrice) !== Number(newPeakPrice) && (
-                      <div className="flex items-center gap-2 pt-1 text-xs font-bold text-emerald-800 border-t border-amber-200">
-                        <span>Peak UI Preview:</span>
-                        <span className="line-through text-on-surface-variant">₹{Math.max(Number(newPeakPrice), Number(newPeakOfferPrice))}</span>
-                        <span className="text-emerald-900 font-extrabold text-sm">₹{Math.min(Number(newPeakPrice), Number(newPeakOfferPrice))}/hr</span>
-                        <span className="bg-emerald-200/70 text-emerald-900 text-[10px] px-2 py-0.5 rounded-full font-black">
-                          {Math.round(((Math.abs(Number(newPeakPrice) - Number(newPeakOfferPrice))) / Math.max(Number(newPeakPrice), Number(newPeakOfferPrice))) * 100)}% OFF (Save ₹{Math.abs(Number(newPeakPrice) - Number(newPeakOfferPrice))})
+                    <div className="grid grid-cols-2 gap-2 pt-1 border-t border-outline-variant/30">
+                      <div>
+                        <label className="block text-[10.5px] text-on-surface-variant font-bold mb-0.5">Slot Duration *</label>
+                        <select
+                          value={newDuration}
+                          onChange={e => setNewDuration(Number(e.target.value))}
+                          className="form-input text-xs py-1 font-bold"
+                        >
+                          <option value={60}>60 Minutes (Standard)</option>
+                          <option value={30}>30 Minutes</option>
+                          <option value={90}>90 Minutes</option>
+                          <option value={120}>120 Minutes</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10.5px] text-on-surface-variant font-bold mb-0.5">Initial Status</label>
+                        <select
+                          value={newStatus}
+                          onChange={e => setNewStatus(e.target.value as any)}
+                          className="form-input text-xs py-1 font-bold"
+                        >
+                          <option value="active">Active (Available)</option>
+                          <option value="maintenance">Maintenance</option>
+                          <option value="inactive">Inactive</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Column: Pricing & Weekend/Peak Rates */}
+                <div className="space-y-2.5 bg-surface-container-lowest p-3 rounded-xl border border-outline-variant/30">
+                  {/* Base Pricing */}
+                  <div className="p-2.5 bg-emerald-50/70 border border-emerald-200 rounded-xl space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-emerald-950 flex items-center gap-1">
+                        🏷️ Weekday Base Pricing & Discount Strike-through
+                      </span>
+                      {Number(newOriginalPrice) > Number(newPrice) && (
+                        <span className="bg-emerald-200/80 text-emerald-900 text-[9.5px] px-1.5 py-0.2 rounded-full font-black">
+                          {Math.round(((Number(newOriginalPrice) - Number(newPrice)) / Number(newOriginalPrice)) * 100)}% OFF
                         </span>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10.5px] text-on-surface-variant font-bold mb-0.5">
+                          Original MRP (₹/hr)
+                        </label>
+                        <input
+                          type="number"
+                          placeholder="e.g. 1500"
+                          min={0}
+                          value={newOriginalPrice}
+                          onChange={e => setNewOriginalPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                          className="form-input text-xs py-1 font-bold bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10.5px] text-emerald-900 font-bold mb-0.5">
+                          Active Price (₹/hr) *
+                        </label>
+                        <input
+                          type="number"
+                          required
+                          min={100}
+                          value={newPrice}
+                          onChange={e => setNewPrice(Number(e.target.value))}
+                          className="form-input text-xs py-1 font-bold text-emerald-900 bg-white border-emerald-400"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Weekend Rates */}
+                  <div className="grid grid-cols-2 gap-2">
+                    {/* Saturday */}
+                    <div className="bg-amber-50/50 p-2 rounded-xl border border-amber-300/70 space-y-1">
+                      <div className="flex justify-between items-center text-amber-950 font-bold text-[11px]">
+                        <span>Saturday Rate *</span>
+                        <span className="text-[9.5px] text-amber-800">Weekend</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <div>
+                          <span className="block text-[9.5px] text-on-surface-variant font-semibold mb-0.5">Regular (₹)</span>
+                          <input
+                            type="number"
+                            required
+                            min={100}
+                            value={newSatPrice}
+                            onChange={e => setNewSatPrice(Number(e.target.value))}
+                            className="form-input text-xs py-1 font-bold bg-white border-amber-300"
+                          />
+                        </div>
+                        <div>
+                          <span className="block text-[9.5px] text-emerald-800 font-semibold mb-0.5">Offer (₹)</span>
+                          <input
+                            type="number"
+                            placeholder="Optional"
+                            min={0}
+                            value={newSatOfferPrice}
+                            onChange={e => setNewSatOfferPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                            className="form-input text-xs py-1 font-bold text-emerald-900 bg-white border-emerald-300"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Sunday */}
+                    <div className="bg-amber-50/50 p-2 rounded-xl border border-amber-300/70 space-y-1">
+                      <div className="flex justify-between items-center text-amber-950 font-bold text-[11px]">
+                        <span>Sunday Rate *</span>
+                        <span className="text-[9.5px] text-amber-800">Weekend</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <div>
+                          <span className="block text-[9.5px] text-on-surface-variant font-semibold mb-0.5">Regular (₹)</span>
+                          <input
+                            type="number"
+                            required
+                            min={100}
+                            value={newSunPrice}
+                            onChange={e => setNewSunPrice(Number(e.target.value))}
+                            className="form-input text-xs py-1 font-bold bg-white border-amber-300"
+                          />
+                        </div>
+                        <div>
+                          <span className="block text-[9.5px] text-emerald-800 font-semibold mb-0.5">Offer (₹)</span>
+                          <input
+                            type="number"
+                            placeholder="Optional"
+                            min={0}
+                            value={newSunOfferPrice}
+                            onChange={e => setNewSunOfferPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                            className="form-input text-xs py-1 font-bold text-emerald-900 bg-white border-emerald-300"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Peak Hours Configuration Box */}
+                  <div className="bg-amber-50/60 p-2.5 rounded-xl border border-amber-300/80 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-headline font-bold text-[11px] text-amber-900 flex items-center gap-1 uppercase tracking-wider">
+                        <Zap className="w-3.5 h-3.5 text-amber-600 fill-amber-500" /> Peak Hours Setup
+                      </h4>
+                      <label className="flex items-center gap-1.5 text-[11px] font-bold text-amber-900 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={newPeakEnabled}
+                          onChange={e => setNewPeakEnabled(e.target.checked)}
+                          className="rounded text-amber-600 focus:ring-amber-500 w-3.5 h-3.5"
+                        />
+                        Enable Peak Hours
+                      </label>
+                    </div>
+
+                    {newPeakEnabled && (
+                      <div className="grid grid-cols-4 gap-2 pt-0.5">
+                        <div>
+                          <label className="block text-[9.5px] text-amber-900 font-bold mb-0.5">Peak Start *</label>
+                          <select
+                            value={newPeakStart}
+                            onChange={e => setNewPeakStart(e.target.value)}
+                            className="form-input text-xs py-1 font-bold border-amber-300 bg-white"
+                          >
+                            <option value="16:00">04:00 PM</option>
+                            <option value="17:00">05:00 PM</option>
+                            <option value="18:00">06:00 PM</option>
+                            <option value="19:00">07:00 PM</option>
+                            <option value="20:00">08:00 PM</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[9.5px] text-amber-900 font-bold mb-0.5">Peak End *</label>
+                          <select
+                            value={newPeakEnd}
+                            onChange={e => setNewPeakEnd(e.target.value)}
+                            className="form-input text-xs py-1 font-bold border-amber-300 bg-white"
+                          >
+                            <option value="20:00">08:00 PM</option>
+                            <option value="21:00">09:00 PM</option>
+                            <option value="22:00">10:00 PM</option>
+                            <option value="23:00">11:00 PM</option>
+                            <option value="00:00">12:00 AM</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[9.5px] text-amber-900 font-bold mb-0.5">Peak Rate *</label>
+                          <input
+                            type="number"
+                            required
+                            min={100}
+                            value={newPeakPrice}
+                            onChange={e => setNewPeakPrice(Number(e.target.value))}
+                            className="form-input text-xs py-1 font-bold border-amber-300 bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[9.5px] text-emerald-800 font-bold mb-0.5">Offer (Opt)</label>
+                          <input
+                            type="number"
+                            placeholder="Optional"
+                            min={0}
+                            value={newPeakOfferPrice}
+                            onChange={e => setNewPeakOfferPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                            className="form-input text-xs py-1 font-bold text-emerald-900 border-emerald-400 bg-white"
+                          />
+                        </div>
                       </div>
                     )}
                   </div>
-                )}
-              </div>
 
-              {/* Offer End Date (Optional) */}
-              <div className="bg-emerald-50/70 p-3 rounded-xl border border-emerald-300/80 space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-emerald-950 font-headline font-bold text-xs flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-emerald-700" />
-                    <span>Offer End Date (Optional)</span>
-                  </label>
-                  {newOfferEndDate && (
-                    <button
-                      type="button"
-                      onClick={() => setNewOfferEndDate('')}
-                      className="text-[10px] text-red-600 hover:underline font-bold"
-                    >
-                      Clear End Date
-                    </button>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="date"
-                    min={todayStr}
-                    value={newOfferEndDate}
-                    onChange={e => setNewOfferEndDate(e.target.value)}
-                    className="form-input text-xs font-bold py-1.5 px-3 bg-white border-emerald-400 flex-1"
-                  />
-                  <div className="flex gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setNewOfferEndDate('')}
-                      className={`text-[11px] px-2 py-1 rounded-lg font-bold border transition-all ${!newOfferEndDate ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs' : 'bg-white text-emerald-900 border-emerald-200 hover:bg-emerald-100'}`}
-                    >
-                      Indefinite
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setNewOfferEndDate(getUpcomingSundayDate())}
-                      className={`text-[11px] px-2 py-1 rounded-lg font-bold border transition-all ${newOfferEndDate === getUpcomingSundayDate() ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs' : 'bg-white text-emerald-900 border-emerald-200 hover:bg-emerald-100'}`}
-                    >
-                      Till Sun
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setNewOfferEndDate(getFutureDateString(7))}
-                      className={`text-[11px] px-2 py-1 rounded-lg font-bold border transition-all ${newOfferEndDate === getFutureDateString(7) ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs' : 'bg-white text-emerald-900 border-emerald-200 hover:bg-emerald-100'}`}
-                    >
-                      +7 Days
-                    </button>
+                  {/* Offer End Date (Optional) */}
+                  <div className="bg-emerald-50/60 p-2 rounded-xl border border-emerald-300/70 space-y-1">
+                    <div className="flex items-center justify-between text-[10.5px]">
+                      <label className="text-emerald-950 font-bold flex items-center gap-1">
+                        <Calendar className="w-3.5 h-3.5 text-emerald-700" />
+                        <span>Offer End Date (Optional)</span>
+                      </label>
+                      {newOfferEndDate && (
+                        <button
+                          type="button"
+                          onClick={() => setNewOfferEndDate('')}
+                          className="text-[9.5px] text-red-600 hover:underline font-bold"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="date"
+                        min={todayStr}
+                        value={newOfferEndDate}
+                        onChange={e => setNewOfferEndDate(e.target.value)}
+                        className="form-input text-xs font-bold py-1 px-2 bg-white border-emerald-400 flex-1"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setNewOfferEndDate('')}
+                        className={`text-[10px] px-2 py-1 rounded font-bold border ${!newOfferEndDate ? 'bg-emerald-700 text-white' : 'bg-white text-emerald-900 border-emerald-200'}`}
+                      >
+                        Indefinite
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewOfferEndDate(getUpcomingSundayDate())}
+                        className={`text-[10px] px-2 py-1 rounded font-bold border ${newOfferEndDate === getUpcomingSundayDate() ? 'bg-emerald-700 text-white' : 'bg-white text-emerald-900 border-emerald-200'}`}
+                      >
+                        Till Sun
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewOfferEndDate(getFutureDateString(7))}
+                        className={`text-[10px] px-2 py-1 rounded font-bold border ${newOfferEndDate === getFutureDateString(7) ? 'bg-emerald-700 text-white' : 'bg-white text-emerald-900 border-emerald-200'}`}
+                      >
+                        +7 Days
+                      </button>
+                    </div>
                   </div>
                 </div>
-                <p className="text-[10px] text-emerald-800">
-                  Optional. If set, promotional rates apply for booking dates up to this day, then automatically revert to regular rates.
-                </p>
               </div>
 
-              <div>
-                <label className="block text-on-surface-variant font-headline font-bold mb-1">Slot Duration *</label>
-                <select
-                  value={newDuration}
-                  onChange={e => setNewDuration(Number(e.target.value))}
-                  className="form-input font-bold"
-                >
-                  <option value={60}>60 Minutes (Standard)</option>
-                  <option value={30}>30 Minutes</option>
-                  <option value={90}>90 Minutes</option>
-                  <option value={120}>120 Minutes</option>
-                </select>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-on-surface-variant font-headline font-bold mb-1">Opening Time *</label>
-                  <select
-                    value={newOpening}
-                    onChange={e => setNewOpening(e.target.value)}
-                    className="form-input font-bold"
-                  >
-                    <option value="05:00">05:00 AM</option>
-                    <option value="05:30">05:30 AM</option>
-                    <option value="06:00">06:00 AM (Standard)</option>
-                    <option value="06:30">06:30 AM</option>
-                    <option value="07:00">07:00 AM</option>
-                    <option value="07:30">07:30 AM</option>
-                    <option value="08:00">08:00 AM</option>
-                    <option value="08:30">08:30 AM</option>
-                    <option value="09:00">09:00 AM</option>
-                    <option value="09:30">09:30 AM</option>
-                    <option value="10:00">10:00 AM</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-on-surface-variant font-headline font-bold mb-1">Closing Time *</label>
-                  <select
-                    value={newClosing}
-                    onChange={e => setNewClosing(e.target.value)}
-                    className="form-input font-bold"
-                  >
-                    <option value="20:00">08:00 PM (20:00)</option>
-                    <option value="21:00">09:00 PM (21:00)</option>
-                    <option value="22:00">10:00 PM (22:00)</option>
-                    <option value="23:00">11:00 PM (23:00 Night)</option>
-                    <option value="23:30">11:30 PM</option>
-                    <option value="00:00">12:00 AM (Midnight)</option>
-                    <option value="01:00">01:00 AM</option>
-                    <option value="02:00">02:00 AM (Late Night)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-on-surface-variant font-headline font-bold mb-1">Buffer (Mins)</label>
-                  <input
-                    type="number"
-                    required
-                    min={0}
-                    value={newBuffer}
-                    onChange={e => setNewBuffer(Number(e.target.value))}
-                    className="form-input"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-on-surface-variant font-headline font-bold mb-1">Initial Status</label>
-                <select
-                  value={newStatus}
-                  onChange={e => setNewStatus(e.target.value as any)}
-                  className="form-input"
-                >
-                  <option value="active">Active (Available for booking)</option>
-                  <option value="maintenance">Maintenance</option>
-                  <option value="inactive">Inactive</option>
-                </select>
-              </div>
-
-              <div className="flex gap-3 pt-3">
+              {/* Action Buttons */}
+              <div className="flex gap-2.5 pt-2 border-t border-outline-variant/30">
                 <button
                   type="button"
                   onClick={() => setShowAddCourtModal(false)}
-                  className="btn-secondary flex-1 py-2.5 font-bold"
+                  className="btn-secondary flex-1 py-2 text-xs font-bold"
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn-primary flex-1 py-2.5 font-headline font-bold">
+                <button type="submit" className="btn-primary flex-1 py-2 text-xs font-headline font-bold">
                   Save & Launch Pitch
                 </button>
               </div>
@@ -1623,511 +1582,474 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
       {/* Edit Court Modal */}
       {editingCourt && (
         <div className="modal-overlay">
-          <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl animate-modalScaleIn text-on-surface max-h-[85vh] overflow-y-auto no-scrollbar">
-            <div className="flex items-center justify-between border-b border-outline-variant/40 pb-3">
-              <h3 className="font-headline font-bold text-xl text-primary flex items-center gap-2">
+          <div className="bg-white border border-outline-variant rounded-3xl sm:rounded-2xl w-full max-w-4xl xl:max-w-5xl max-h-[92vh] flex flex-col shadow-2xl animate-modalScaleIn text-on-surface overflow-hidden">
+            <div className="p-3 sm:p-3.5 bg-surface-container-low border-b border-outline-variant/40 flex items-center justify-between shrink-0">
+              <h3 className="font-headline font-bold text-lg sm:text-xl text-primary flex items-center gap-2">
                 <Edit3 className="w-5 h-5 text-primary" /> Edit Pitch Configuration
               </h3>
-              <button onClick={() => setEditingCourt(null)} className="text-on-surface-variant hover:text-on-surface p-1 rounded-full">
+              <button onClick={() => setEditingCourt(null)} className="text-on-surface-variant hover:text-on-surface p-1 rounded-full hover:bg-surface-container transition-colors cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleUpdateCourt} className="space-y-4 text-xs">
-              <div>
-                <label className="block text-on-surface-variant font-headline font-bold mb-1">Pitch Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={editName}
-                  onChange={e => setEditName(e.target.value)}
-                  className="form-input"
-                />
-              </div>
-
-              <div>
-                <label className="block text-on-surface-variant font-headline font-bold mb-1.5">Supported Sports *</label>
-                <div className="flex flex-wrap gap-2">
-                  {sports.map(s => {
-                    const isSelected = editSportIds.includes(s.id);
-                    return (
-                      <button
-                        type="button"
-                        key={s.id}
-                        onClick={() => toggleSportSelection(s.id, true)}
-                        className={`px-3 py-1.5 rounded-lg border text-xs font-bold flex items-center gap-1.5 transition-all ${
-                          isSelected
-                            ? 'bg-primary text-white border-primary shadow-sm'
-                            : 'bg-surface-container-low text-on-surface-variant border-outline-variant/40 hover:border-primary'
-                        }`}
-                      >
-                        <span>{s.icon}</span>
-                        <span>{s.name}</span>
-                        {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                        {!PREDEFINED_SPORT_IDS.includes(s.id) && (
-                          <span
-                            role="button"
-                            tabIndex={0}
-                            onClick={(e) => handleDeleteCustomSport(s.id, s.name, e)}
-                            className="ml-1 p-0.5 hover:bg-red-500/30 hover:text-red-200 rounded-full transition-colors cursor-pointer"
-                            title={`Delete ${s.name} custom sport`}
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-
-                  <button
-                    type="button"
-                    onClick={() => setShowAddCustomSportEdit(prev => !prev)}
-                    className="px-3 py-1.5 rounded-lg border border-dashed border-primary text-primary bg-primary/5 hover:bg-primary/10 text-xs font-bold flex items-center gap-1.5 transition-all"
-                  >
-                    <span>➕</span>
-                    <span>Other / Custom Sport</span>
-                  </button>
-                </div>
-
-                {showAddCustomSportEdit && (
-                  <div className="bg-primary/5 border border-primary/20 p-3.5 rounded-xl space-y-3 mt-2.5 animate-modalScaleIn">
+            <form onSubmit={handleUpdateCourt} className="p-3.5 sm:p-4 text-xs overflow-y-auto overscroll-contain space-y-3 flex-1">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
+                {/* Left Column: Identity, Supported Sports & Operations */}
+                <div className="space-y-3 bg-surface-container-lowest p-3 rounded-xl border border-outline-variant/30 flex flex-col justify-between">
+                  <div className="space-y-3">
                     <div>
-                      <span className="text-[11px] font-bold text-primary uppercase tracking-wider block mb-1.5">
-                        ⚡ Quick 1-Click Sports
-                      </span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {[
-                          { name: 'Volleyball', icon: '🏐' },
-                          { name: 'Basketball', icon: '🏀' },
-                          { name: 'Futsal', icon: '⚽' },
-                          { name: 'Padel', icon: '🎾' },
-                          { name: 'Squash', icon: '🏸' },
-                          { name: 'Kabaddi', icon: '🤼' }
-                        ].map(preset => (
-                          <button
-                            type="button"
-                            key={preset.name}
-                            onClick={() => addPresetSport(preset.name, preset.icon, true)}
-                            className="bg-white hover:bg-primary/10 border border-outline-variant/50 text-on-surface text-[11px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 transition-colors"
-                          >
-                            <span>{preset.icon}</span>
-                            <span>{preset.name}</span>
-                          </button>
-                        ))}
-                      </div>
+                      <label className="block text-on-surface-variant font-headline font-bold mb-1">Pitch Name *</label>
+                      <input
+                        type="text"
+                        required
+                        value={editName}
+                        onChange={e => setEditName(e.target.value)}
+                        className="form-input text-xs py-1.5 font-bold"
+                      />
                     </div>
 
-                    <div className="border-t border-outline-variant/30 pt-2.5">
-                      <span className="text-[11px] font-bold text-on-surface block mb-1">
-                        Or Type Custom Sport Name:
-                      </span>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          placeholder="Type Sport Name (e.g. Volleyball, Swimming, Archery)"
-                          value={customSportName}
-                          onChange={e => setCustomSportName(e.target.value)}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              handleCreateCustomSport(true, e as any);
-                            }
-                          }}
-                          className="form-input text-xs flex-1 py-1.5 font-medium"
-                        />
+                    <div>
+                      <label className="block text-on-surface-variant font-headline font-bold mb-1">Supported Sports *</label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {sports.map(s => {
+                          const isSelected = editSportIds.includes(s.id);
+                          return (
+                            <button
+                              type="button"
+                              key={s.id}
+                              onClick={() => toggleSportSelection(s.id, true)}
+                              className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold flex items-center gap-1 transition-all ${
+                                isSelected
+                                  ? 'bg-primary text-white border-primary shadow-xs'
+                                  : 'bg-surface-container-low text-on-surface-variant border-outline-variant/40 hover:border-primary'
+                              }`}
+                            >
+                              <span>{s.icon}</span>
+                              <span>{s.name}</span>
+                              {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                              {!PREDEFINED_SPORT_IDS.includes(s.id) && (
+                                <span
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={(e) => handleDeleteCustomSport(s.id, s.name, e)}
+                                  className="ml-1 p-0.5 hover:bg-red-500/30 hover:text-red-200 rounded-full transition-colors cursor-pointer"
+                                  title={`Delete ${s.name} custom sport`}
+                                >
+                                  <X className="w-3 h-3" />
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+
                         <button
                           type="button"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            handleCreateCustomSport(true, e);
-                          }}
-                          className="btn-primary text-xs px-3.5 py-1.5 font-bold shrink-0 shadow-sm"
+                          onClick={() => setShowAddCustomSportEdit(prev => !prev)}
+                          className="px-2.5 py-1 rounded-lg border border-dashed border-primary text-primary bg-primary/5 hover:bg-primary/10 text-[11px] font-bold flex items-center gap-1 transition-all"
                         >
-                          + Add Sport
+                          <span>➕</span>
+                          <span>Other / Custom Sport</span>
                         </button>
                       </div>
+
+                      {showAddCustomSportEdit && (
+                        <div className="bg-primary/5 border border-primary/20 p-2.5 rounded-xl space-y-2 mt-2 animate-modalScaleIn">
+                          <div>
+                            <span className="text-[10px] font-bold text-primary uppercase tracking-wider block mb-1">
+                              ⚡ Quick 1-Click Sports
+                            </span>
+                            <div className="flex flex-wrap gap-1">
+                              {[
+                                { name: 'Volleyball', icon: '🏐' },
+                                { name: 'Basketball', icon: '🏀' },
+                                { name: 'Futsal', icon: '⚽' },
+                                { name: 'Padel', icon: '🎾' },
+                                { name: 'Squash', icon: '🏸' },
+                                { name: 'Kabaddi', icon: '🤼' }
+                              ].map(preset => (
+                                <button
+                                  type="button"
+                                  key={preset.name}
+                                  onClick={() => addPresetSport(preset.name, preset.icon, true)}
+                                  className="bg-white hover:bg-primary/10 border border-outline-variant/50 text-on-surface text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 transition-colors"
+                                >
+                                  <span>{preset.icon}</span>
+                                  <span>{preset.name}</span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="border-t border-outline-variant/30 pt-1.5">
+                            <span className="text-[10px] font-bold text-on-surface block mb-0.5">
+                              Or Type Custom Sport Name:
+                            </span>
+                            <div className="flex gap-1.5">
+                              <input
+                                type="text"
+                                placeholder="Sport Name (e.g. Volleyball, Archery)"
+                                value={customSportName}
+                                onChange={e => setCustomSportName(e.target.value)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleCreateCustomSport(true, e as any);
+                                  }
+                                }}
+                                className="form-input text-xs flex-1 py-1 font-medium"
+                              />
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleCreateCustomSport(true, e);
+                                }}
+                                className="btn-primary text-xs px-2.5 py-1 font-bold shrink-0 shadow-xs"
+                              >
+                                + Add Sport
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
-                )}
-              </div>
 
-              {/* Day-based Pricing Configuration Box */}
-              <div className="bg-surface-container-low p-3.5 rounded-xl border border-outline-variant/40 space-y-2.5">
-                <h4 className="font-headline font-bold text-xs text-primary flex items-center gap-1.5 uppercase tracking-wider">
-                  <Calendar className="w-4 h-4 text-primary" /> Weekday & Weekend Base Rates
-                </h4>
+                  {/* Operations & Timing Box */}
+                  <div className="bg-surface-container-low p-2.5 rounded-xl border border-outline-variant/40 space-y-2 mt-auto">
+                    <span className="text-[10.5px] font-headline font-bold text-primary uppercase tracking-wider block">
+                      🕒 Operational Timings & Slot Specs
+                    </span>
 
-                {/* Strikethrough Discount Configuration */}
-                <div className="bg-emerald-50/70 border border-emerald-300/70 rounded-lg p-3 space-y-2">
-                  <div className="flex items-center gap-1.5 text-emerald-950 font-bold text-xs">
-                    <Tag className="w-4 h-4 text-emerald-700" />
-                    <span>Customer Discount & Strikethrough Pricing</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-on-surface-variant font-headline font-bold text-[11px] mb-1">
-                        Original Price / MRP (₹/hr)
-                      </label>
-                      <input
-                        type="number"
-                        placeholder="e.g. 1500"
-                        min={0}
-                        value={editOriginalPrice}
-                        onChange={e => setEditOriginalPrice(e.target.value === '' ? '' : Number(e.target.value))}
-                        className="form-input font-bold text-on-surface-variant bg-white"
-                      />
-                      <span className="text-[10px] text-on-surface-variant/70 block mt-0.5">
-                        Will show as strikethrough (cut out) on the website
-                      </span>
-                    </div>
-
-                    <div>
-                      <label className="block text-emerald-900 font-headline font-bold text-[11px] mb-1">
-                        Discounted / Active Price (₹/hr) *
-                      </label>
-                      <input
-                        type="number"
-                        required
-                        min={100}
-                        value={editPrice}
-                        onChange={e => setEditPrice(Number(e.target.value))}
-                        className="form-input font-bold text-emerald-900 bg-white border-emerald-400"
-                      />
-                      <span className="text-[10px] text-emerald-700 block mt-0.5">
-                        Actual booking price charged to customers
-                      </span>
-                    </div>
-                  </div>
-
-                  {Number(editOriginalPrice) > Number(editPrice) && (
-                    <div className="flex items-center gap-2 pt-1 text-xs font-bold text-emerald-800 border-t border-emerald-200/60">
-                      <span>UI Preview:</span>
-                      <span className="line-through text-on-surface-variant">₹{editOriginalPrice}</span>
-                      <span className="text-emerald-900 font-extrabold text-sm">₹{editPrice}/hr</span>
-                      <span className="bg-emerald-200/70 text-emerald-900 text-[10px] px-2 py-0.5 rounded-full font-black">
-                        {Math.round(((Number(editOriginalPrice) - Number(editPrice)) / Number(editOriginalPrice)) * 100)}% OFF (Save ₹{Number(editOriginalPrice) - Number(editPrice)})
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                  {/* Saturday */}
-                  <div className="bg-white p-3 rounded-xl border border-amber-300/70 shadow-xs space-y-1.5">
-                    <label className="block text-amber-950 font-headline font-bold text-xs flex items-center justify-between">
-                      <span>Saturday (Sat) Rate *</span>
-                      <span className="text-[10px] text-amber-800 font-normal">Weekend</span>
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-3 gap-2">
                       <div>
-                        <span className="block text-[10px] text-on-surface-variant font-semibold mb-0.5">Regular (₹/hr)</span>
-                        <input
-                          type="number"
-                          required
-                          min={100}
-                          value={editSatPrice}
-                          onChange={e => setEditSatPrice(Number(e.target.value))}
-                          className="form-input font-bold text-amber-900 bg-amber-50/50 border-amber-300 py-1"
-                        />
-                      </div>
-                      <div>
-                        <span className="block text-[10px] text-emerald-800 font-semibold mb-0.5">Offer Price (Optional)</span>
-                        <input
-                          type="number"
-                          placeholder="e.g. 1400"
-                          min={0}
-                          value={editSatOfferPrice}
-                          onChange={e => setEditSatOfferPrice(e.target.value === '' ? '' : Number(e.target.value))}
-                          className="form-input font-bold text-emerald-900 bg-white border-emerald-300 py-1"
-                        />
-                      </div>
-                    </div>
-                    {editSatOfferPrice !== '' && Number(editSatOfferPrice) > 0 && Number(editSatOfferPrice) !== Number(editSatPrice) && (
-                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-800 pt-0.5 border-t border-emerald-100">
-                        <span className="line-through text-on-surface-variant/70">₹{Math.max(Number(editSatPrice), Number(editSatOfferPrice))}</span>
-                        <span className="text-emerald-900 font-extrabold">₹{Math.min(Number(editSatPrice), Number(editSatOfferPrice))}/hr</span>
-                        <span className="bg-emerald-200/70 text-emerald-900 px-1.5 py-0.2 rounded-full font-black">
-                          {Math.round(((Math.abs(Number(editSatPrice) - Number(editSatOfferPrice))) / Math.max(Number(editSatPrice), Number(editSatOfferPrice))) * 100)}% OFF
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Sunday */}
-                  <div className="bg-white p-3 rounded-xl border border-amber-300/70 shadow-xs space-y-1.5">
-                    <label className="block text-amber-950 font-headline font-bold text-xs flex items-center justify-between">
-                      <span>Sunday (Sun) Rate *</span>
-                      <span className="text-[10px] text-amber-800 font-normal">Weekend</span>
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <span className="block text-[10px] text-on-surface-variant font-semibold mb-0.5">Regular (₹/hr)</span>
-                        <input
-                          type="number"
-                          required
-                          min={100}
-                          value={editSunPrice}
-                          onChange={e => setEditSunPrice(Number(e.target.value))}
-                          className="form-input font-bold text-amber-900 bg-amber-50/50 border-amber-300 py-1"
-                        />
-                      </div>
-                      <div>
-                        <span className="block text-[10px] text-emerald-800 font-semibold mb-0.5">Offer Price (Optional)</span>
-                        <input
-                          type="number"
-                          placeholder="e.g. 1400"
-                          min={0}
-                          value={editSunOfferPrice}
-                          onChange={e => setEditSunOfferPrice(e.target.value === '' ? '' : Number(e.target.value))}
-                          className="form-input font-bold text-emerald-900 bg-white border-emerald-300 py-1"
-                        />
-                      </div>
-                    </div>
-                    {editSunOfferPrice !== '' && Number(editSunOfferPrice) > 0 && Number(editSunOfferPrice) !== Number(editSunPrice) && (
-                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-800 pt-0.5 border-t border-emerald-100">
-                        <span className="line-through text-on-surface-variant/70">₹{Math.max(Number(editSunPrice), Number(editSunOfferPrice))}</span>
-                        <span className="text-emerald-900 font-extrabold">₹{Math.min(Number(editSunPrice), Number(editSunOfferPrice))}/hr</span>
-                        <span className="bg-emerald-200/70 text-emerald-900 px-1.5 py-0.2 rounded-full font-black">
-                          {Math.round(((Math.abs(Number(editSunPrice) - Number(editSunOfferPrice))) / Math.max(Number(editSunPrice), Number(editSunOfferPrice))) * 100)}% OFF
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Peak Hours Configuration Box */}
-              <div className="bg-amber-50/70 p-3.5 rounded-xl border border-amber-300/80 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-headline font-bold text-xs text-amber-900 flex items-center gap-1.5 uppercase tracking-wider">
-                    <Zap className="w-4 h-4 text-amber-600 fill-amber-500" /> Peak Hours & Peak Rate Setup
-                  </h4>
-                  <label className="flex items-center gap-2 text-xs font-bold text-amber-900 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={editPeakEnabled}
-                      onChange={e => setEditPeakEnabled(e.target.checked)}
-                      className="rounded text-amber-600 focus:ring-amber-500 w-4 h-4"
-                    />
-                    Enable Peak Hours
-                  </label>
-                </div>
-
-                {editPeakEnabled && (
-                  <div className="space-y-2 pt-1">
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      <div>
-                        <label className="block text-amber-900 font-headline font-bold mb-1">Peak Start *</label>
+                        <label className="block text-[10.5px] text-on-surface-variant font-bold mb-0.5">Opening Time *</label>
                         <select
-                          value={editPeakStart}
-                          onChange={e => setEditPeakStart(e.target.value)}
-                          className="form-input font-bold text-amber-950 border-amber-300"
+                          value={editOpening}
+                          onChange={e => setEditOpening(e.target.value)}
+                          className="form-input text-xs py-1 font-bold"
                         >
-                          <option value="16:00">04:00 PM</option>
-                          <option value="17:00">05:00 PM</option>
-                          <option value="18:00">06:00 PM (Standard Evening)</option>
-                          <option value="19:00">07:00 PM</option>
-                          <option value="20:00">08:00 PM</option>
+                          <option value="05:00">05:00 AM</option>
+                          <option value="05:30">05:30 AM</option>
+                          <option value="06:00">06:00 AM (Standard)</option>
+                          <option value="06:30">06:30 AM</option>
+                          <option value="07:00">07:00 AM</option>
+                          <option value="07:30">07:30 AM</option>
+                          <option value="08:00">08:00 AM</option>
+                          <option value="08:30">08:30 AM</option>
+                          <option value="09:00">09:00 AM</option>
+                          <option value="09:30">09:30 AM</option>
+                          <option value="10:00">10:00 AM</option>
                         </select>
                       </div>
-
                       <div>
-                        <label className="block text-amber-900 font-headline font-bold mb-1">Peak End *</label>
+                        <label className="block text-[10.5px] text-on-surface-variant font-bold mb-0.5">Closing Time *</label>
                         <select
-                          value={editPeakEnd}
-                          onChange={e => setEditPeakEnd(e.target.value)}
-                          className="form-input font-bold text-amber-950 border-amber-300"
+                          value={editClosing}
+                          onChange={e => setEditClosing(e.target.value)}
+                          className="form-input text-xs py-1 font-bold"
                         >
                           <option value="20:00">08:00 PM</option>
                           <option value="21:00">09:00 PM</option>
                           <option value="22:00">10:00 PM</option>
-                          <option value="23:00">11:00 PM (Night Closing)</option>
+                          <option value="23:00">11:00 PM (Night)</option>
+                          <option value="23:30">11:30 PM</option>
                           <option value="00:00">12:00 AM (Midnight)</option>
+                          <option value="01:00">01:00 AM</option>
+                          <option value="02:00">02:00 AM (Late Night)</option>
                         </select>
                       </div>
-
                       <div>
-                        <label className="block text-amber-900 font-headline font-bold mb-1">Peak Rate (₹/hr) *</label>
+                        <label className="block text-[10.5px] text-on-surface-variant font-bold mb-0.5">Buffer (Mins)</label>
                         <input
                           type="number"
                           required
-                          min={100}
-                          value={editPeakPrice}
-                          onChange={e => setEditPeakPrice(Number(e.target.value))}
-                          className="form-input font-bold text-amber-950 border-amber-300 bg-white"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-emerald-800 font-headline font-bold mb-1">Offer Price (Optional)</label>
-                        <input
-                          type="number"
-                          placeholder="e.g. 1500"
                           min={0}
-                          value={editPeakOfferPrice}
-                          onChange={e => setEditPeakOfferPrice(e.target.value === '' ? '' : Number(e.target.value))}
-                          className="form-input font-bold text-emerald-900 border-emerald-400 bg-white"
+                          value={editBuffer}
+                          onChange={e => setEditBuffer(Number(e.target.value))}
+                          className="form-input text-xs py-1 font-bold"
                         />
                       </div>
                     </div>
 
-                    {editPeakOfferPrice !== '' && Number(editPeakOfferPrice) > 0 && Number(editPeakOfferPrice) !== Number(editPeakPrice) && (
-                      <div className="flex items-center gap-2 pt-1 text-xs font-bold text-emerald-800 border-t border-amber-200">
-                        <span>Peak UI Preview:</span>
-                        <span className="line-through text-on-surface-variant">₹{Math.max(Number(editPeakPrice), Number(editPeakOfferPrice))}</span>
-                        <span className="text-emerald-900 font-extrabold text-sm">₹{Math.min(Number(editPeakPrice), Number(editPeakOfferPrice))}/hr</span>
-                        <span className="bg-emerald-200/70 text-emerald-900 text-[10px] px-2 py-0.5 rounded-full font-black">
-                          {Math.round(((Math.abs(Number(editPeakPrice) - Number(editPeakOfferPrice))) / Math.max(Number(editPeakPrice), Number(editPeakOfferPrice))) * 100)}% OFF (Save ₹{Math.abs(Number(editPeakPrice) - Number(editPeakOfferPrice))})
+                    <div className="grid grid-cols-2 gap-2 pt-1 border-t border-outline-variant/30">
+                      <div>
+                        <label className="block text-[10.5px] text-on-surface-variant font-bold mb-0.5">Slot Duration *</label>
+                        <select
+                          value={editDuration}
+                          onChange={e => setEditDuration(Number(e.target.value))}
+                          className="form-input text-xs py-1 font-bold"
+                        >
+                          <option value={60}>60 Minutes (Standard)</option>
+                          <option value={30}>30 Minutes</option>
+                          <option value={90}>90 Minutes</option>
+                          <option value={120}>120 Minutes</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10.5px] text-on-surface-variant font-bold mb-0.5">Pitch Status</label>
+                        <select
+                          value={editStatus}
+                          onChange={e => setEditStatus(e.target.value as any)}
+                          className="form-input text-xs py-1 font-bold"
+                        >
+                          <option value="active">Active (Available)</option>
+                          <option value="maintenance">Maintenance</option>
+                          <option value="inactive">Inactive</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Column: Pricing & Weekend/Peak Rates */}
+                <div className="space-y-2.5 bg-surface-container-lowest p-3 rounded-xl border border-outline-variant/30">
+                  {/* Base Pricing */}
+                  <div className="p-2.5 bg-emerald-50/70 border border-emerald-200 rounded-xl space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-emerald-950 flex items-center gap-1">
+                        🏷️ Weekday Base Pricing & Discount Strike-through
+                      </span>
+                      {Number(editOriginalPrice) > Number(editPrice) && (
+                        <span className="bg-emerald-200/80 text-emerald-900 text-[9.5px] px-1.5 py-0.2 rounded-full font-black">
+                          {Math.round(((Number(editOriginalPrice) - Number(editPrice)) / Number(editOriginalPrice)) * 100)}% OFF
                         </span>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10.5px] text-on-surface-variant font-bold mb-0.5">
+                          Original MRP (₹/hr)
+                        </label>
+                        <input
+                          type="number"
+                          placeholder="e.g. 1500"
+                          min={0}
+                          value={editOriginalPrice}
+                          onChange={e => setEditOriginalPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                          className="form-input text-xs py-1 font-bold bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10.5px] text-emerald-900 font-bold mb-0.5">
+                          Active Price (₹/hr) *
+                        </label>
+                        <input
+                          type="number"
+                          required
+                          min={100}
+                          value={editPrice}
+                          onChange={e => setEditPrice(Number(e.target.value))}
+                          className="form-input text-xs py-1 font-bold text-emerald-900 bg-white border-emerald-400"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Weekend Rates */}
+                  <div className="grid grid-cols-2 gap-2">
+                    {/* Saturday */}
+                    <div className="bg-amber-50/50 p-2 rounded-xl border border-amber-300/70 space-y-1">
+                      <div className="flex justify-between items-center text-amber-950 font-bold text-[11px]">
+                        <span>Saturday Rate *</span>
+                        <span className="text-[9.5px] text-amber-800">Weekend</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <div>
+                          <span className="block text-[9.5px] text-on-surface-variant font-semibold mb-0.5">Regular (₹)</span>
+                          <input
+                            type="number"
+                            required
+                            min={100}
+                            value={editSatPrice}
+                            onChange={e => setEditSatPrice(Number(e.target.value))}
+                            className="form-input text-xs py-1 font-bold bg-white border-amber-300"
+                          />
+                        </div>
+                        <div>
+                          <span className="block text-[9.5px] text-emerald-800 font-semibold mb-0.5">Offer (₹)</span>
+                          <input
+                            type="number"
+                            placeholder="Optional"
+                            min={0}
+                            value={editSatOfferPrice}
+                            onChange={e => setEditSatOfferPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                            className="form-input text-xs py-1 font-bold text-emerald-900 bg-white border-emerald-300"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Sunday */}
+                    <div className="bg-amber-50/50 p-2 rounded-xl border border-amber-300/70 space-y-1">
+                      <div className="flex justify-between items-center text-amber-950 font-bold text-[11px]">
+                        <span>Sunday Rate *</span>
+                        <span className="text-[9.5px] text-amber-800">Weekend</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <div>
+                          <span className="block text-[9.5px] text-on-surface-variant font-semibold mb-0.5">Regular (₹)</span>
+                          <input
+                            type="number"
+                            required
+                            min={100}
+                            value={editSunPrice}
+                            onChange={e => setEditSunPrice(Number(e.target.value))}
+                            className="form-input text-xs py-1 font-bold bg-white border-amber-300"
+                          />
+                        </div>
+                        <div>
+                          <span className="block text-[9.5px] text-emerald-800 font-semibold mb-0.5">Offer (₹)</span>
+                          <input
+                            type="number"
+                            placeholder="Optional"
+                            min={0}
+                            value={editSunOfferPrice}
+                            onChange={e => setEditSunOfferPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                            className="form-input text-xs py-1 font-bold text-emerald-900 bg-white border-emerald-300"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Peak Hours Configuration Box */}
+                  <div className="bg-amber-50/60 p-2.5 rounded-xl border border-amber-300/80 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-headline font-bold text-[11px] text-amber-900 flex items-center gap-1 uppercase tracking-wider">
+                        <Zap className="w-3.5 h-3.5 text-amber-600 fill-amber-500" /> Peak Hours Setup
+                      </h4>
+                      <label className="flex items-center gap-1.5 text-[11px] font-bold text-amber-900 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={editPeakEnabled}
+                          onChange={e => setEditPeakEnabled(e.target.checked)}
+                          className="rounded text-amber-600 focus:ring-amber-500 w-3.5 h-3.5"
+                        />
+                        Enable Peak Hours
+                      </label>
+                    </div>
+
+                    {editPeakEnabled && (
+                      <div className="grid grid-cols-4 gap-2 pt-0.5">
+                        <div>
+                          <label className="block text-[9.5px] text-amber-900 font-bold mb-0.5">Peak Start *</label>
+                          <select
+                            value={editPeakStart}
+                            onChange={e => setEditPeakStart(e.target.value)}
+                            className="form-input text-xs py-1 font-bold border-amber-300 bg-white"
+                          >
+                            <option value="16:00">04:00 PM</option>
+                            <option value="17:00">05:00 PM</option>
+                            <option value="18:00">06:00 PM</option>
+                            <option value="19:00">07:00 PM</option>
+                            <option value="20:00">08:00 PM</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[9.5px] text-amber-900 font-bold mb-0.5">Peak End *</label>
+                          <select
+                            value={editPeakEnd}
+                            onChange={e => setEditPeakEnd(e.target.value)}
+                            className="form-input text-xs py-1 font-bold border-amber-300 bg-white"
+                          >
+                            <option value="20:00">08:00 PM</option>
+                            <option value="21:00">09:00 PM</option>
+                            <option value="22:00">10:00 PM</option>
+                            <option value="23:00">11:00 PM</option>
+                            <option value="00:00">12:00 AM</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[9.5px] text-amber-900 font-bold mb-0.5">Peak Rate *</label>
+                          <input
+                            type="number"
+                            required
+                            min={100}
+                            value={editPeakPrice}
+                            onChange={e => setEditPeakPrice(Number(e.target.value))}
+                            className="form-input text-xs py-1 font-bold border-amber-300 bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[9.5px] text-emerald-800 font-bold mb-0.5">Offer (Opt)</label>
+                          <input
+                            type="number"
+                            placeholder="Optional"
+                            min={0}
+                            value={editPeakOfferPrice}
+                            onChange={e => setEditPeakOfferPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                            className="form-input text-xs py-1 font-bold text-emerald-900 border-emerald-400 bg-white"
+                          />
+                        </div>
                       </div>
                     )}
                   </div>
-                )}
-              </div>
 
-              {/* Offer End Date (Optional) */}
-              <div className="bg-emerald-50/70 p-3 rounded-xl border border-emerald-300/80 space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-emerald-950 font-headline font-bold text-xs flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-emerald-700" />
-                    <span>Offer End Date (Optional)</span>
-                  </label>
-                  {editOfferEndDate && (
-                    <button
-                      type="button"
-                      onClick={() => setEditOfferEndDate('')}
-                      className="text-[10px] text-red-600 hover:underline font-bold"
-                    >
-                      Clear End Date
-                    </button>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="date"
-                    min={todayStr}
-                    value={editOfferEndDate}
-                    onChange={e => setEditOfferEndDate(e.target.value)}
-                    className="form-input text-xs font-bold py-1.5 px-3 bg-white border-emerald-400 flex-1"
-                  />
-                  <div className="flex gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setEditOfferEndDate('')}
-                      className={`text-[11px] px-2 py-1 rounded-lg font-bold border transition-all ${!editOfferEndDate ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs' : 'bg-white text-emerald-900 border-emerald-200 hover:bg-emerald-100'}`}
-                    >
-                      Indefinite
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditOfferEndDate(getUpcomingSundayDate())}
-                      className={`text-[11px] px-2 py-1 rounded-lg font-bold border transition-all ${editOfferEndDate === getUpcomingSundayDate() ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs' : 'bg-white text-emerald-900 border-emerald-200 hover:bg-emerald-100'}`}
-                    >
-                      Till Sun
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditOfferEndDate(getFutureDateString(7))}
-                      className={`text-[11px] px-2 py-1 rounded-lg font-bold border transition-all ${editOfferEndDate === getFutureDateString(7) ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs' : 'bg-white text-emerald-900 border-emerald-200 hover:bg-emerald-100'}`}
-                    >
-                      +7 Days
-                    </button>
+                  {/* Offer End Date (Optional) */}
+                  <div className="bg-emerald-50/60 p-2 rounded-xl border border-emerald-300/70 space-y-1">
+                    <div className="flex items-center justify-between text-[10.5px]">
+                      <label className="text-emerald-950 font-bold flex items-center gap-1">
+                        <Calendar className="w-3 h-3 text-emerald-700" />
+                        <span>Offer End Date (Optional)</span>
+                      </label>
+                      {editOfferEndDate && (
+                        <button
+                          type="button"
+                          onClick={() => setEditOfferEndDate('')}
+                          className="text-[9.5px] text-red-600 hover:underline font-bold"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="date"
+                        min={todayStr}
+                        value={editOfferEndDate}
+                        onChange={e => setEditOfferEndDate(e.target.value)}
+                        className="form-input text-xs font-bold py-1 px-2 bg-white border-emerald-400 flex-1"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setEditOfferEndDate('')}
+                        className={`text-[10px] px-2 py-1 rounded font-bold border ${!editOfferEndDate ? 'bg-emerald-700 text-white' : 'bg-white text-emerald-900 border-emerald-200'}`}
+                      >
+                        Indefinite
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditOfferEndDate(getUpcomingSundayDate())}
+                        className={`text-[10px] px-2 py-1 rounded font-bold border ${editOfferEndDate === getUpcomingSundayDate() ? 'bg-emerald-700 text-white' : 'bg-white text-emerald-900 border-emerald-200'}`}
+                      >
+                        Till Sun
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditOfferEndDate(getFutureDateString(7))}
+                        className={`text-[10px] px-2 py-1 rounded font-bold border ${editOfferEndDate === getFutureDateString(7) ? 'bg-emerald-700 text-white' : 'bg-white text-emerald-900 border-emerald-200'}`}
+                      >
+                        +7 Days
+                      </button>
+                    </div>
                   </div>
                 </div>
-                <p className="text-[10px] text-emerald-800">
-                  Optional. If set, promotional rates apply for booking dates up to this day, then automatically revert to regular rates.
-                </p>
               </div>
 
-              <div>
-                <label className="block text-on-surface-variant font-headline font-bold mb-1">Slot Duration *</label>
-                <select
-                  value={editDuration}
-                  onChange={e => setEditDuration(Number(e.target.value))}
-                  className="form-input font-bold"
-                >
-                  <option value={60}>60 Minutes (Standard)</option>
-                  <option value={30}>30 Minutes</option>
-                  <option value={90}>90 Minutes</option>
-                  <option value={120}>120 Minutes</option>
-                </select>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-on-surface-variant font-headline font-bold mb-1">Opening Time *</label>
-                  <select
-                    value={editOpening}
-                    onChange={e => setEditOpening(e.target.value)}
-                    className="form-input font-bold"
-                  >
-                    <option value="05:00">05:00 AM</option>
-                    <option value="05:30">05:30 AM</option>
-                    <option value="06:00">06:00 AM (Standard)</option>
-                    <option value="06:30">06:30 AM</option>
-                    <option value="07:00">07:00 AM</option>
-                    <option value="07:30">07:30 AM</option>
-                    <option value="08:00">08:00 AM</option>
-                    <option value="08:30">08:30 AM</option>
-                    <option value="09:00">09:00 AM</option>
-                    <option value="09:30">09:30 AM</option>
-                    <option value="10:00">10:00 AM</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-on-surface-variant font-headline font-bold mb-1">Closing Time *</label>
-                  <select
-                    value={editClosing}
-                    onChange={e => setEditClosing(e.target.value)}
-                    className="form-input font-bold"
-                  >
-                    <option value="20:00">08:00 PM (20:00)</option>
-                    <option value="21:00">09:00 PM (21:00)</option>
-                    <option value="22:00">10:00 PM (22:00)</option>
-                    <option value="23:00">11:00 PM (23:00 Night)</option>
-                    <option value="23:30">11:30 PM</option>
-                    <option value="00:00">12:00 AM (Midnight)</option>
-                    <option value="01:00">01:00 AM</option>
-                    <option value="02:00">02:00 AM (Late Night)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-on-surface-variant font-headline font-bold mb-1">Buffer (Mins)</label>
-                  <input
-                    type="number"
-                    required
-                    min={0}
-                    value={editBuffer}
-                    onChange={e => setEditBuffer(Number(e.target.value))}
-                    className="form-input"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-on-surface-variant font-headline font-bold mb-1">Status</label>
-                <select
-                  value={editStatus}
-                  onChange={e => setEditStatus(e.target.value as any)}
-                  className="form-input"
-                >
-                  <option value="active">Active (Available for booking)</option>
-                  <option value="maintenance">Maintenance</option>
-                  <option value="inactive">Inactive</option>
-                </select>
-              </div>
-
-              <div className="flex gap-3 pt-3">
+              {/* Action Buttons */}
+              <div className="flex gap-2.5 pt-2 border-t border-outline-variant/30">
                 <button
                   type="button"
                   onClick={() => setEditingCourt(null)}
-                  className="btn-secondary flex-1 py-2.5 font-bold"
+                  className="btn-secondary flex-1 py-2 text-xs font-bold"
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn-primary flex-1 py-2.5 font-headline font-bold">
+                <button type="submit" className="btn-primary flex-1 py-2 text-xs font-headline font-bold">
                   Update Pitch Specs
                 </button>
               </div>
@@ -2139,116 +2061,120 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
       {/* Block Slot Modal */}
       {showBlockModal && (
         <div className="modal-overlay">
-          <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl animate-modalScaleIn text-on-surface max-h-[85vh] overflow-y-auto no-scrollbar">
-            <div className="flex items-center justify-between border-b border-outline-variant/40 pb-3">
+          <div className="bg-white border border-outline-variant rounded-3xl sm:rounded-2xl w-full max-w-2xl lg:max-w-3xl max-h-[92vh] flex flex-col shadow-2xl animate-modalScaleIn text-on-surface overflow-hidden">
+            <div className="p-3 sm:p-3.5 bg-surface-container-low border-b border-outline-variant/40 flex items-center justify-between shrink-0">
               <h3 className="font-headline font-bold text-lg text-primary flex items-center gap-2">
                 <ShieldAlert className="w-5 h-5 text-amber-700" /> Block Pitch for Maintenance / Event
               </h3>
               <button
                 onClick={() => setShowBlockModal(false)}
-                className="p-1 text-on-surface-variant hover:text-on-surface hover:bg-surface-container rounded-lg"
+                className="p-1 text-on-surface-variant hover:text-on-surface hover:bg-surface-container rounded-full transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-1">
-              <p className="font-bold flex items-center gap-1.5">
-                <ShieldAlert className="w-4 h-4 text-amber-700 shrink-0" /> Multi-Day & Time-Windowed Outage Management
-              </p>
-              <p className="text-[11px] text-amber-800 leading-relaxed">
-                Specify the exact start date & time and end date & time. The system will automatically block all overlapping slots across the Customer Website, WhatsApp AI Agent, and Counter booking calendar.
-              </p>
-            </div>
-
-            <form onSubmit={handleCreateBlock} className="space-y-3.5 text-xs">
-              <div>
-                <label className="block text-on-surface-variant font-headline font-bold mb-1">Select Pitch / Arena *</label>
-                <select
-                  value={blockCourtId}
-                  onChange={e => setBlockCourtId(e.target.value)}
-                  className="form-input font-bold"
-                >
-                  {courts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
+            <form onSubmit={handleCreateBlock} className="p-3.5 sm:p-4 space-y-3 text-xs overflow-y-auto overscroll-contain flex-1">
+              <div className="p-2.5 bg-amber-50/80 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 text-amber-700 shrink-0" />
+                <p className="text-[11px] text-amber-800 leading-tight">
+                  Specify start and end schedule. Overlapping slots across the Customer Website, WhatsApp AI Agent, and Counter calendar will be blocked automatically.
+                </p>
               </div>
 
-              {/* Maintenance Start Schedule */}
-              <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl space-y-2">
-                <p className="font-headline font-bold text-gray-800 flex items-center gap-1.5 text-xs">
-                  <Calendar className="w-3.5 h-3.5 text-primary" /> Maintenance Start Schedule *
-                </p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] text-gray-600 font-semibold mb-1">Start Date *</label>
-                    <input
-                      type="date"
-                      required
-                      value={blockStartDate}
-                      onChange={e => {
-                        const newStart = e.target.value;
-                        setBlockStartDate(newStart);
-                        if (blockEndDate < newStart) {
-                          setBlockEndDate(newStart);
-                        }
-                      }}
-                      className="form-input text-xs font-semibold"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] text-gray-600 font-semibold mb-1">Start Time *</label>
-                    <input
-                      type="time"
-                      required
-                      value={blockStartTime}
-                      onChange={e => setBlockStartTime(e.target.value)}
-                      className="form-input text-xs font-bold"
-                    />
-                  </div>
+              {/* Pitch & Reason in 2-Column Row */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-on-surface-variant font-headline font-bold mb-1">Select Pitch / Arena *</label>
+                  <select
+                    value={blockCourtId}
+                    onChange={e => setBlockCourtId(e.target.value)}
+                    className="form-input text-xs py-1.5 font-bold"
+                  >
+                    {courts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-on-surface-variant font-headline font-bold mb-1">Reason for Blocking *</label>
+                  <select
+                    value={blockReason}
+                    onChange={e => setBlockReason(e.target.value as any)}
+                    className="form-input text-xs py-1.5 font-medium"
+                  >
+                    <option value="maintenance">🛠️ Pitch Maintenance & Turf Repairs</option>
+                    <option value="private_event">🏆 Private Tournament / League Match</option>
+                    <option value="owner_block">🔒 Venue Owner Reservation</option>
+                  </select>
                 </div>
               </div>
 
-              {/* Maintenance End Schedule */}
-              <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl space-y-2">
-                <p className="font-headline font-bold text-gray-800 flex items-center gap-1.5 text-xs">
-                  <Clock className="w-3.5 h-3.5 text-amber-700" /> Maintenance End Schedule *
-                </p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] text-gray-600 font-semibold mb-1">End Date *</label>
-                    <input
-                      type="date"
-                      required
-                      min={blockStartDate}
-                      value={blockEndDate}
-                      onChange={e => setBlockEndDate(e.target.value)}
-                      className="form-input text-xs font-semibold"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] text-gray-600 font-semibold mb-1">End Time *</label>
-                    <input
-                      type="time"
-                      required
-                      value={blockEndTime}
-                      onChange={e => setBlockEndTime(e.target.value)}
-                      className="form-input text-xs font-bold"
-                    />
+              {/* Schedules in 2 Columns */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {/* Maintenance Start Schedule */}
+                <div className="p-2.5 bg-gray-50 border border-gray-200 rounded-xl space-y-1.5">
+                  <p className="font-headline font-bold text-gray-800 flex items-center gap-1.5 text-[11px]">
+                    <Calendar className="w-3.5 h-3.5 text-primary" /> Maintenance Start Schedule *
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[10px] text-gray-600 font-semibold mb-0.5">Start Date *</label>
+                      <input
+                        type="date"
+                        required
+                        value={blockStartDate}
+                        onChange={e => {
+                          const newStart = e.target.value;
+                          setBlockStartDate(newStart);
+                          if (blockEndDate < newStart) {
+                            setBlockEndDate(newStart);
+                          }
+                        }}
+                        className="form-input text-xs py-1 font-semibold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-gray-600 font-semibold mb-0.5">Start Time *</label>
+                      <input
+                        type="time"
+                        required
+                        value={blockStartTime}
+                        onChange={e => setBlockStartTime(e.target.value)}
+                        className="form-input text-xs py-1 font-bold"
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-on-surface-variant font-headline font-bold mb-1">Reason for Blocking *</label>
-                <select
-                  value={blockReason}
-                  onChange={e => setBlockReason(e.target.value as any)}
-                  className="form-input font-medium"
-                >
-                  <option value="maintenance">🛠️ Pitch Maintenance, Turf Brushing & Repairs</option>
-                  <option value="private_event">🏆 Private Tournament / League Match</option>
-                  <option value="owner_block">🔒 Venue Owner Personal Reservation</option>
-                </select>
+                {/* Maintenance End Schedule */}
+                <div className="p-2.5 bg-gray-50 border border-gray-200 rounded-xl space-y-1.5">
+                  <p className="font-headline font-bold text-gray-800 flex items-center gap-1.5 text-[11px]">
+                    <Clock className="w-3.5 h-3.5 text-amber-700" /> Maintenance End Schedule *
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[10px] text-gray-600 font-semibold mb-0.5">End Date *</label>
+                      <input
+                        type="date"
+                        required
+                        min={blockStartDate}
+                        value={blockEndDate}
+                        onChange={e => setBlockEndDate(e.target.value)}
+                        className="form-input text-xs py-1 font-semibold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-gray-600 font-semibold mb-0.5">End Time *</label>
+                      <input
+                        type="time"
+                        required
+                        value={blockEndTime}
+                        onChange={e => setBlockEndTime(e.target.value)}
+                        className="form-input text-xs py-1 font-bold"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Live Interval Preview & Validation Banner */}
@@ -2256,7 +2182,7 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
                 const isInvalidSequence = blockEndDate < blockStartDate || (blockEndDate === blockStartDate && blockEndTime <= blockStartTime);
                 if (isInvalidSequence) {
                   return (
-                    <div className="p-2.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
+                    <div className="p-2 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
                       <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
                       <span>End Date & Time must be after Start Date & Time.</span>
                     </div>
@@ -2280,7 +2206,7 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
 
                 if (liveConflict) {
                   return (
-                    <div className="p-2.5 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-900 space-y-1">
+                    <div className="p-2 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-900 space-y-1">
                       <p className="font-bold flex items-center gap-1.5 text-amber-800">
                         <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" /> Active Booking Conflict Detected
                       </p>
@@ -2293,7 +2219,7 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
 
                 const isSingleDay = blockStartDate === blockEndDate;
                 return (
-                  <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 flex items-center gap-2">
+                  <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 flex items-center gap-2">
                     <Check className="w-4 h-4 text-emerald-600 shrink-0" />
                     <span>
                       {isSingleDay
@@ -2304,18 +2230,18 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
                 );
               })()}
 
-              <div className="flex gap-3 pt-3">
+              <div className="flex gap-2.5 pt-2 border-t border-outline-variant/30">
                 <button
                   type="button"
                   onClick={() => setShowBlockModal(false)}
-                  className="btn-secondary flex-1 py-2.5 font-bold"
+                  className="btn-secondary flex-1 py-2 text-xs font-bold"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={blockEndDate < blockStartDate || (blockEndDate === blockStartDate && blockEndTime <= blockStartTime)}
-                  className="btn-primary flex-1 py-2.5 font-headline font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="btn-primary flex-1 py-2 text-xs font-headline font-bold disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Confirm Block
                 </button>
@@ -2328,370 +2254,344 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
       {/* Occasion / Flash Sale Offer Modal */}
       {showOccasionOfferModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50 animate-fadeIn">
-          <div className="bg-white rounded-3xl sm:rounded-2xl max-w-2xl w-full p-4 sm:p-6 shadow-2xl space-y-4 sm:space-y-5 max-h-[92vh] overflow-y-auto border border-outline-variant/30">
+          <div className="bg-white rounded-3xl sm:rounded-2xl max-w-4xl xl:max-w-5xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-outline-variant/30 overflow-hidden text-on-surface">
             {/* Modal Header */}
-            <div className="flex justify-between items-start border-b border-outline-variant/40 pb-4">
-              <div>
-                <h3 className="font-headline font-bold text-lg text-emerald-950 flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-emerald-600" /> Apply Occasion / Flash Sale Offer
-                </h3>
-                <p className="text-xs text-on-surface-variant mt-0.5 font-medium">
-                  Update prices by a discount percentage (e.g. 10% OFF) with 1 click. Automatically updates pitch rates and displays pre-discount MRP strikethroughs across the site.
-                </p>
+            <div className="p-3 sm:p-3.5 bg-surface-container-low border-b border-outline-variant/40 flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-emerald-600" />
+                <div>
+                  <h3 className="font-headline font-bold text-base sm:text-lg text-emerald-950 leading-tight">
+                    Apply Occasion / Flash Sale Offer
+                  </h3>
+                  <p className="text-[11px] text-on-surface-variant font-medium">
+                    1-Click discount percentages with automated pre-discount MRP strikethroughs across the venue site.
+                  </p>
+                </div>
               </div>
               <button
                 onClick={() => setShowOccasionOfferModal(false)}
-                className="text-on-surface-variant hover:text-on-surface p-1 rounded-lg hover:bg-surface-container transition-colors"
+                className="text-on-surface-variant hover:text-on-surface p-1 rounded-full hover:bg-surface-container transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-4">
-              {/* 1. Quick 1-Click Discount Presets */}
-              <div>
-                <label className="block text-on-surface-variant font-headline font-bold text-xs mb-1.5">
-                  Select Discount Percentage (1-Click Presets) *
-                </label>
-                <div className="flex flex-wrap gap-2 items-center">
-                  {[5, 10, 15, 20, 25, 30, 50].map(pct => {
-                    const isSelected = offerPercentage === pct;
-                    return (
-                      <button
-                        key={pct}
-                        type="button"
-                        onClick={() => setOfferPercentage(pct)}
-                        className={`px-3 py-1.5 rounded-xl font-headline font-bold text-xs transition-all ${
-                          isSelected
-                            ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-500 ring-offset-1 scale-105'
-                            : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
-                        }`}
-                      >
-                        {pct}% OFF {pct === 10 && '⭐ (Popular)'}
-                      </button>
-                    );
-                  })}
-                  <div className="flex items-center gap-1.5 ml-auto">
-                    <span className="text-xs font-bold text-on-surface-variant">Custom:</span>
-                    <div className="relative w-24">
+            <div className="p-3.5 sm:p-4 text-xs overflow-y-auto overscroll-contain space-y-3 flex-1">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
+                {/* Left Column: Offer Rules & Target Rates */}
+                <div className="space-y-3 bg-surface-container-lowest p-3 rounded-xl border border-outline-variant/30 flex flex-col justify-between">
+                  <div className="space-y-2.5">
+                    {/* 1. Quick 1-Click Discount Presets */}
+                    <div>
+                      <label className="block text-on-surface-variant font-headline font-bold text-xs mb-1">
+                        Select Discount Percentage *
+                      </label>
+                      <div className="flex flex-wrap gap-1.5 items-center">
+                        {[5, 10, 15, 20, 25, 30, 50].map(pct => {
+                          const isSelected = offerPercentage === pct;
+                          return (
+                            <button
+                              key={pct}
+                              type="button"
+                              onClick={() => setOfferPercentage(pct)}
+                              className={`px-2.5 py-1 rounded-lg font-headline font-bold text-[11px] transition-all ${
+                                isSelected
+                                  ? 'bg-emerald-600 text-white shadow-xs ring-2 ring-emerald-500 ring-offset-1 scale-105'
+                                  : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
+                              }`}
+                            >
+                              {pct}% OFF {pct === 10 && '⭐'}
+                            </button>
+                          );
+                        })}
+                        <div className="flex items-center gap-1 ml-auto">
+                          <span className="text-[11px] font-bold text-on-surface-variant">Custom:</span>
+                          <div className="relative w-16">
+                            <input
+                              type="number"
+                              min="1"
+                              max="99"
+                              value={offerPercentage}
+                              onChange={e => setOfferPercentage(Math.max(1, Math.min(99, Number(e.target.value) || 0)))}
+                              className="form-input text-xs font-extrabold pr-4 py-1 text-center"
+                            />
+                            <Percent className="w-3 h-3 text-on-surface-variant absolute right-1.5 top-2 pointer-events-none" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 2. Occasion Label / Name (Optional) */}
+                    <div>
+                      <label className="block text-on-surface-variant font-headline font-bold text-xs mb-1">
+                        Occasion / Offer Tag (Optional)
+                      </label>
                       <input
-                        type="number"
-                        min="1"
-                        max="99"
-                        value={offerPercentage}
-                        onChange={e => setOfferPercentage(Math.max(1, Math.min(99, Number(e.target.value) || 0)))}
-                        className="form-input text-xs font-extrabold pr-6 text-center"
+                        type="text"
+                        value={offerOccasionName}
+                        onChange={e => setOfferOccasionName(e.target.value)}
+                        placeholder="e.g. Diwali Flash Sale, Weekend Blast, IPL Special"
+                        className="form-input text-xs py-1.5 font-medium"
                       />
-                      <Percent className="w-3.5 h-3.5 text-on-surface-variant absolute right-2 top-2.5 pointer-events-none" />
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {['Diwali Dhamaka', 'Weekend Flash', 'Tournament Special', 'Summer League'].map(preset => (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => setOfferOccasionName(preset)}
+                            className="text-[9.5px] bg-surface-container-low hover:bg-surface-container text-on-surface-variant px-2 py-0.2 rounded-full border border-outline-variant/40 transition-colors"
+                          >
+                            + {preset}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* 3. Offer End Date (Optional) */}
+                    <div className="bg-emerald-50/60 p-2.5 rounded-xl border border-emerald-200/80 space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <label className="text-on-surface-variant font-headline font-bold flex items-center gap-1">
+                          <Calendar className="w-3.5 h-3.5 text-emerald-700" />
+                          <span>Offer End Date (Optional)</span>
+                        </label>
+                        {offerEndDate ? (
+                          <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.2 rounded-full flex items-center gap-1">
+                            Valid till: {formatDateDDMMYYYY(offerEndDate)}
+                            <button
+                              type="button"
+                              onClick={() => setOfferEndDate('')}
+                              className="ml-0.5 text-emerald-900 hover:text-red-600 font-black"
+                              title="Remove end date"
+                            >
+                              ✕
+                            </button>
+                          </span>
+                        ) : (
+                          <span className="text-[9.5px] text-on-surface-variant/70 italic">
+                            Indefinite
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="date"
+                          min={todayStr}
+                          value={offerEndDate}
+                          onChange={e => setOfferEndDate(e.target.value)}
+                          className="form-input text-xs font-bold py-1 px-2 bg-white border-emerald-300 flex-1"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setOfferEndDate('')}
+                          className={`text-[10px] px-2 py-1 rounded-lg font-bold border ${!offerEndDate ? 'bg-emerald-700 text-white' : 'bg-white text-emerald-900 border-emerald-200'}`}
+                        >
+                          Indefinite
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setOfferEndDate(getUpcomingSundayDate())}
+                          className={`text-[10px] px-2 py-1 rounded-lg font-bold border ${offerEndDate === getUpcomingSundayDate() ? 'bg-emerald-700 text-white' : 'bg-white text-emerald-900 border-emerald-200'}`}
+                        >
+                          Till Sun
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setOfferEndDate(getFutureDateString(7))}
+                          className={`text-[10px] px-2 py-1 rounded-lg font-bold border ${offerEndDate === getFutureDateString(7) ? 'bg-emerald-700 text-white' : 'bg-white text-emerald-900 border-emerald-200'}`}
+                        >
+                          +7 Days
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 4. Rates to Discount */}
+                  <div className="pt-2 border-t border-outline-variant/30">
+                    <label className="block text-on-surface-variant font-headline font-bold text-xs mb-1">
+                      Apply {offerPercentage}% Discount To Rates *
+                    </label>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                      <label className={`flex items-center gap-1.5 p-1.5 rounded-lg border text-[11px] cursor-pointer ${
+                        offerRateTypes.weekday ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-bold' : 'bg-surface-container-low border-outline-variant/30 text-on-surface-variant'
+                      }`}>
+                        <input
+                          type="checkbox"
+                          checked={offerRateTypes.weekday}
+                          onChange={e => setOfferRateTypes(prev => ({ ...prev, weekday: e.target.checked }))}
+                          className="rounded text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5"
+                        />
+                        <span>Weekday</span>
+                      </label>
+                      <label className={`flex items-center gap-1.5 p-1.5 rounded-lg border text-[11px] cursor-pointer ${
+                        offerRateTypes.saturday ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-bold' : 'bg-surface-container-low border-outline-variant/30 text-on-surface-variant'
+                      }`}>
+                        <input
+                          type="checkbox"
+                          checked={offerRateTypes.saturday}
+                          onChange={e => setOfferRateTypes(prev => ({ ...prev, saturday: e.target.checked }))}
+                          className="rounded text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5"
+                        />
+                        <span>Saturday</span>
+                      </label>
+                      <label className={`flex items-center gap-1.5 p-1.5 rounded-lg border text-[11px] cursor-pointer ${
+                        offerRateTypes.sunday ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-bold' : 'bg-surface-container-low border-outline-variant/30 text-on-surface-variant'
+                      }`}>
+                        <input
+                          type="checkbox"
+                          checked={offerRateTypes.sunday}
+                          onChange={e => setOfferRateTypes(prev => ({ ...prev, sunday: e.target.checked }))}
+                          className="rounded text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5"
+                        />
+                        <span>Sunday</span>
+                      </label>
+                      <label className={`flex items-center gap-1.5 p-1.5 rounded-lg border text-[11px] cursor-pointer ${
+                        offerRateTypes.peak ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-bold' : 'bg-surface-container-low border-outline-variant/30 text-on-surface-variant'
+                      }`}>
+                        <input
+                          type="checkbox"
+                          checked={offerRateTypes.peak}
+                          onChange={e => setOfferRateTypes(prev => ({ ...prev, peak: e.target.checked }))}
+                          className="rounded text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5"
+                        />
+                        <span>Peak</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Column: Target Pitches & Live Preview */}
+                <div className="space-y-3 bg-surface-container-lowest p-3 rounded-xl border border-outline-variant/30 flex flex-col justify-between">
+                  {/* Target Pitches Selection */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-on-surface-variant font-headline font-bold text-xs">
+                        Target Pitches ({selectedCourtIdsForOffer.length} of {courts.length} Selected) *
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (selectedCourtIdsForOffer.length === courts.length) {
+                            setSelectedCourtIdsForOffer([]);
+                          } else {
+                            setSelectedCourtIdsForOffer(courts.map(c => c.id));
+                          }
+                        }}
+                        className="text-[10.5px] font-bold text-primary hover:underline"
+                      >
+                        {selectedCourtIdsForOffer.length === courts.length ? 'Deselect All' : 'Select All Pitches'}
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-36 overflow-y-auto no-scrollbar">
+                      {courts.map(court => {
+                        const isChecked = selectedCourtIdsForOffer.includes(court.id);
+                        return (
+                          <label
+                            key={court.id}
+                            className={`flex items-center gap-2 p-1.5 rounded-lg border text-xs cursor-pointer transition-colors ${
+                              isChecked
+                                ? 'bg-emerald-50/70 border-emerald-300 text-emerald-950 font-semibold'
+                                : 'bg-white border-outline-variant/50 text-on-surface-variant hover:bg-surface-container-low'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={e => {
+                                if (e.target.checked) {
+                                  setSelectedCourtIdsForOffer(prev => [...prev, court.id]);
+                                } else {
+                                  setSelectedCourtIdsForOffer(prev => prev.filter(id => id !== court.id));
+                                }
+                              }}
+                              className="rounded text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className="truncate font-bold text-on-surface text-[11px]">{court.name}</p>
+                              <p className="text-[9.5px] text-on-surface-variant truncate">
+                                Base: ₹{court.base_price_per_hour} | Sat: ₹{court.saturday_price_per_hour ?? court.base_price_per_hour}
+                              </p>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Live Impact & Preview Table */}
+                  <div className="bg-surface-container-low p-2.5 rounded-xl border border-outline-variant/40 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-headline font-bold text-[11px] text-on-surface flex items-center gap-1">
+                        <Zap className="w-3 h-3 text-emerald-600" /> Live Preview ({offerPercentage}% OFF)
+                      </span>
+                      <span className="text-[10px] text-emerald-700 font-extrabold bg-emerald-100 px-1.5 py-0.2 rounded-full">
+                        {selectedCourtIdsForOffer.length} Pitch(es)
+                      </span>
+                    </div>
+
+                    <div className="overflow-x-auto max-h-32 overflow-y-auto no-scrollbar">
+                      <table className="w-full text-[10.5px] text-left">
+                        <thead>
+                          <tr className="border-b border-outline-variant/40 text-on-surface-variant font-bold">
+                            <th className="py-1 pr-1.5">Pitch</th>
+                            {offerRateTypes.weekday && <th className="py-1 px-1.5">Weekday</th>}
+                            {offerRateTypes.saturday && <th className="py-1 px-1.5">Saturday</th>}
+                            {offerRateTypes.sunday && <th className="py-1 px-1.5">Sunday</th>}
+                            {offerRateTypes.peak && <th className="py-1 px-1.5">Peak</th>}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-outline-variant/20">
+                          {courts.filter(c => selectedCourtIdsForOffer.includes(c.id)).map(court => {
+                            const preview = calculateOfferPricingForCourt(court, offerPercentage, offerRateTypes);
+                            return (
+                              <tr key={court.id} className="hover:bg-white/50">
+                                <td className="py-1 pr-1.5 font-bold text-on-surface truncate max-w-[90px]">{court.name}</td>
+                                {offerRateTypes.weekday && (
+                                  <td className="py-1 px-1.5">
+                                    <span className="line-through text-on-surface-variant/70 mr-0.5">₹{preview.origWeekday}</span>
+                                    <strong className="text-emerald-700">₹{preview.newBasePrice}</strong>
+                                  </td>
+                                )}
+                                {offerRateTypes.saturday && (
+                                  <td className="py-1 px-1.5">
+                                    <span className="line-through text-on-surface-variant/70 mr-0.5">₹{preview.baseSat}</span>
+                                    <strong className="text-emerald-700">₹{preview.newSatOfferPrice}</strong>
+                                  </td>
+                                )}
+                                {offerRateTypes.sunday && (
+                                  <td className="py-1 px-1.5">
+                                    <span className="line-through text-on-surface-variant/70 mr-0.5">₹{preview.baseSun}</span>
+                                    <strong className="text-emerald-700">₹{preview.newSunOfferPrice}</strong>
+                                  </td>
+                                )}
+                                {offerRateTypes.peak && (
+                                  <td className="py-1 px-1.5">
+                                    {court.peak_enabled ? (
+                                      <>
+                                        <span className="line-through text-on-surface-variant/70 mr-0.5">₹{preview.basePeak}</span>
+                                        <strong className="text-emerald-700">₹{preview.newPeakOfferPrice}</strong>
+                                      </>
+                                    ) : (
+                                      <span className="text-on-surface-variant/60 italic text-[9.5px]">N/A</span>
+                                    )}
+                                  </td>
+                                )}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* 2. Occasion Label / Name (Optional) */}
-              <div>
-                <label className="block text-on-surface-variant font-headline font-bold text-xs mb-1.5">
-                  Occasion / Offer Tag (Optional)
-                </label>
-                <input
-                  type="text"
-                  value={offerOccasionName}
-                  onChange={e => setOfferOccasionName(e.target.value)}
-                  placeholder="e.g. Diwali Flash Sale, Weekend Blast, IPL Special"
-                  className="form-input text-xs font-medium"
-                />
-                <div className="flex flex-wrap gap-1.5 mt-1.5">
-                  {['Diwali Dhamaka', 'Weekend Flash Deal', 'Tournament Special', 'Summer League', 'Monsoon Offer'].map(preset => (
-                    <button
-                      key={preset}
-                      type="button"
-                      onClick={() => setOfferOccasionName(preset)}
-                      className="text-[10px] bg-surface-container-low hover:bg-surface-container text-on-surface-variant px-2 py-0.5 rounded-full border border-outline-variant/40 transition-colors"
-                    >
-                      + {preset}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* 3. Offer End Date (Optional) */}
-              <div className="bg-emerald-50/60 p-3 rounded-xl border border-emerald-200/80 space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-on-surface-variant font-headline font-bold text-xs flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-emerald-700" />
-                    <span>Offer End Date (Optional)</span>
-                  </label>
-                  {offerEndDate ? (
-                    <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full flex items-center gap-1">
-                      Valid till: {formatDateDDMMYYYY(offerEndDate)}
-                      <button
-                        type="button"
-                        onClick={() => setOfferEndDate('')}
-                        className="ml-1 text-emerald-900 hover:text-red-600 font-black"
-                        title="Remove end date"
-                      >
-                        ✕
-                      </button>
-                    </span>
-                  ) : (
-                    <span className="text-[10px] text-on-surface-variant/70 italic">
-                      Applies indefinitely until reset
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                  <input
-                    type="date"
-                    min={todayStr}
-                    value={offerEndDate}
-                    onChange={e => setOfferEndDate(e.target.value)}
-                    className="form-input text-xs font-bold py-1.5 px-3 bg-white border-emerald-300 flex-1"
-                  />
-                  <div className="flex flex-wrap gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setOfferEndDate('')}
-                      className={`text-[11px] px-2.5 py-1 rounded-lg font-bold border transition-all ${
-                        !offerEndDate
-                          ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs'
-                          : 'bg-white text-emerald-900 border-emerald-200 hover:bg-emerald-100'
-                      }`}
-                    >
-                      Indefinite
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setOfferEndDate(todayStr)}
-                      className={`text-[11px] px-2.5 py-1 rounded-lg font-bold border transition-all ${
-                        offerEndDate === todayStr
-                          ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs'
-                          : 'bg-white text-emerald-900 border-emerald-200 hover:bg-emerald-100'
-                      }`}
-                    >
-                      Today Only
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setOfferEndDate(getUpcomingSundayDate())}
-                      className={`text-[11px] px-2.5 py-1 rounded-lg font-bold border transition-all ${
-                        offerEndDate === getUpcomingSundayDate()
-                          ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs'
-                          : 'bg-white text-emerald-900 border-emerald-200 hover:bg-emerald-100'
-                      }`}
-                    >
-                      Till Sunday
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setOfferEndDate(getFutureDateString(7))}
-                      className={`text-[11px] px-2.5 py-1 rounded-lg font-bold border transition-all ${
-                        offerEndDate === getFutureDateString(7)
-                          ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs'
-                          : 'bg-white text-emerald-900 border-emerald-200 hover:bg-emerald-100'
-                      }`}
-                    >
-                      +7 Days
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setOfferEndDate(getFutureDateString(14))}
-                      className={`text-[11px] px-2.5 py-1 rounded-lg font-bold border transition-all ${
-                        offerEndDate === getFutureDateString(14)
-                          ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs'
-                          : 'bg-white text-emerald-900 border-emerald-200 hover:bg-emerald-100'
-                      }`}
-                    >
-                      +14 Days
-                    </button>
-                  </div>
-                </div>
-                <p className="text-[10px] text-on-surface-variant">
-                  Slots on or before this end date will receive the discount. After this date, slots automatically revert to standard regular rates.
-                </p>
-              </div>
-
-              {/* 4. Target Pitches Selection */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-on-surface-variant font-headline font-bold text-xs">
-                    Target Pitches ({selectedCourtIdsForOffer.length} of {courts.length} Selected) *
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (selectedCourtIdsForOffer.length === courts.length) {
-                        setSelectedCourtIdsForOffer([]);
-                      } else {
-                        setSelectedCourtIdsForOffer(courts.map(c => c.id));
-                      }
-                    }}
-                    className="text-[11px] font-bold text-primary hover:underline"
-                  >
-                    {selectedCourtIdsForOffer.length === courts.length ? 'Deselect All' : 'Select All Pitches'}
-                  </button>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {courts.map(court => {
-                    const isChecked = selectedCourtIdsForOffer.includes(court.id);
-                    return (
-                      <label
-                        key={court.id}
-                        className={`flex items-center gap-2.5 p-2 rounded-xl border text-xs cursor-pointer transition-colors ${
-                          isChecked
-                            ? 'bg-emerald-50/70 border-emerald-300 text-emerald-950 font-semibold'
-                            : 'bg-white border-outline-variant/50 text-on-surface-variant hover:bg-surface-container-low'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={e => {
-                            if (e.target.checked) {
-                              setSelectedCourtIdsForOffer(prev => [...prev, court.id]);
-                            } else {
-                              setSelectedCourtIdsForOffer(prev => prev.filter(id => id !== court.id));
-                            }
-                          }}
-                          className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="truncate font-bold text-on-surface">{court.name}</p>
-                          <p className="text-[10px] text-on-surface-variant truncate">
-                            Base: ₹{court.base_price_per_hour}/hr | Sat: ₹{court.saturday_price_per_hour ?? court.base_price_per_hour} | Sun: ₹{court.sunday_price_per_hour ?? court.base_price_per_hour}
-                          </p>
-                        </div>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* 5. Rates to Discount */}
-              <div>
-                <label className="block text-on-surface-variant font-headline font-bold text-xs mb-1.5">
-                  Apply {offerPercentage}% Discount To Rates *
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  <label className={`flex items-center gap-2 p-2 rounded-xl border text-xs cursor-pointer ${
-                    offerRateTypes.weekday ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-bold' : 'bg-surface-container-low border-outline-variant/30 text-on-surface-variant'
-                  }`}>
-                    <input
-                      type="checkbox"
-                      checked={offerRateTypes.weekday}
-                      onChange={e => setOfferRateTypes(prev => ({ ...prev, weekday: e.target.checked }))}
-                      className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
-                    />
-                    <span>Weekday (Mon-Fri)</span>
-                  </label>
-                  <label className={`flex items-center gap-2 p-2 rounded-xl border text-xs cursor-pointer ${
-                    offerRateTypes.saturday ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-bold' : 'bg-surface-container-low border-outline-variant/30 text-on-surface-variant'
-                  }`}>
-                    <input
-                      type="checkbox"
-                      checked={offerRateTypes.saturday}
-                      onChange={e => setOfferRateTypes(prev => ({ ...prev, saturday: e.target.checked }))}
-                      className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
-                    />
-                    <span>Saturday</span>
-                  </label>
-                  <label className={`flex items-center gap-2 p-2 rounded-xl border text-xs cursor-pointer ${
-                    offerRateTypes.sunday ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-bold' : 'bg-surface-container-low border-outline-variant/30 text-on-surface-variant'
-                  }`}>
-                    <input
-                      type="checkbox"
-                      checked={offerRateTypes.sunday}
-                      onChange={e => setOfferRateTypes(prev => ({ ...prev, sunday: e.target.checked }))}
-                      className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
-                    />
-                    <span>Sunday</span>
-                  </label>
-                  <label className={`flex items-center gap-2 p-2 rounded-xl border text-xs cursor-pointer ${
-                    offerRateTypes.peak ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-bold' : 'bg-surface-container-low border-outline-variant/30 text-on-surface-variant'
-                  }`}>
-                    <input
-                      type="checkbox"
-                      checked={offerRateTypes.peak}
-                      onChange={e => setOfferRateTypes(prev => ({ ...prev, peak: e.target.checked }))}
-                      className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
-                    />
-                    <span>Peak Hours</span>
-                  </label>
-                </div>
-              </div>
-
-              {/* 6. Live Real-Time Impact & Preview Table */}
-              <div className="bg-surface-container-low p-3.5 rounded-xl border border-outline-variant/40 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-headline font-bold text-xs text-on-surface flex items-center gap-1.5">
-                    <Zap className="w-3.5 h-3.5 text-emerald-600" /> Live Rate Preview ({offerPercentage}% OFF)
-                  </span>
-                  <span className="text-[11px] text-emerald-700 font-extrabold bg-emerald-100 px-2 py-0.5 rounded-full">
-                    {selectedCourtIdsForOffer.length} Pitch(es) Selected
-                  </span>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-[11px] text-left">
-                    <thead>
-                      <tr className="border-b border-outline-variant/40 text-on-surface-variant font-bold">
-                        <th className="py-1.5 pr-2">Pitch</th>
-                        {offerRateTypes.weekday && <th className="py-1.5 px-2">Weekday</th>}
-                        {offerRateTypes.saturday && <th className="py-1.5 px-2">Saturday</th>}
-                        {offerRateTypes.sunday && <th className="py-1.5 px-2">Sunday</th>}
-                        {offerRateTypes.peak && <th className="py-1.5 px-2">Peak Hours</th>}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-outline-variant/20">
-                      {courts.filter(c => selectedCourtIdsForOffer.includes(c.id)).map(court => {
-                        const preview = calculateOfferPricingForCourt(court, offerPercentage, offerRateTypes);
-                        return (
-                          <tr key={court.id} className="hover:bg-white/50">
-                            <td className="py-1.5 pr-2 font-bold text-on-surface">{court.name}</td>
-                            {offerRateTypes.weekday && (
-                              <td className="py-1.5 px-2">
-                                <span className="line-through text-on-surface-variant/70 mr-1">₹{preview.origWeekday}</span>
-                                <strong className="text-emerald-700">₹{preview.newBasePrice}</strong>
-                              </td>
-                            )}
-                            {offerRateTypes.saturday && (
-                              <td className="py-1.5 px-2">
-                                <span className="line-through text-on-surface-variant/70 mr-1">₹{preview.baseSat}</span>
-                                <strong className="text-emerald-700">₹{preview.newSatOfferPrice}</strong>
-                              </td>
-                            )}
-                            {offerRateTypes.sunday && (
-                              <td className="py-1.5 px-2">
-                                <span className="line-through text-on-surface-variant/70 mr-1">₹{preview.baseSun}</span>
-                                <strong className="text-emerald-700">₹{preview.newSunOfferPrice}</strong>
-                              </td>
-                            )}
-                            {offerRateTypes.peak && (
-                              <td className="py-1.5 px-2">
-                                {court.peak_enabled ? (
-                                  <>
-                                    <span className="line-through text-on-surface-variant/70 mr-1">₹{preview.basePeak}</span>
-                                    <strong className="text-emerald-700">₹{preview.newPeakOfferPrice}</strong>
-                                  </>
-                                ) : (
-                                  <span className="text-on-surface-variant/60 italic">N/A</span>
-                                )}
-                              </td>
-                            )}
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
               {/* Action Buttons */}
-              <div className="flex gap-3 pt-2 border-t border-outline-variant/40">
+              <div className="flex gap-2.5 pt-2 border-t border-outline-variant/40">
                 <button
                   type="button"
                   onClick={() => setShowOccasionOfferModal(false)}
-                  className="btn-secondary flex-1 py-2.5 font-bold text-xs"
+                  className="btn-secondary flex-1 py-2 font-bold text-xs"
                 >
                   Cancel
                 </button>
@@ -2699,7 +2599,7 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
                   type="button"
                   disabled={selectedCourtIdsForOffer.length === 0 || isApplyingOffer}
                   onClick={handleApplyOccasionOffer}
-                  className="btn-primary flex-1 py-2.5 font-headline font-bold text-xs flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="btn-primary flex-1 py-2 font-headline font-bold text-xs flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isApplyingOffer ? (
                     <span>Applying {offerPercentage}% Offer...</span>

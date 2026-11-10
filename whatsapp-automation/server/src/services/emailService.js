@@ -3,7 +3,7 @@ import { store } from '../data/store.js';
 import { WhatsAppFormatter } from '../utils/whatsappFormatter.js';
 
 export class EmailService {
-  static DEFAULT_SENDER = 'TurfFlow Arena <onboarding@resend.dev>';
+  static DEFAULT_SENDER = 'TurfFlow Arena <rajupainter84688@gmail.com>';
 
   /**
    * Helper to format YYYY-MM-DD to DD/MM/YYYY
@@ -31,9 +31,11 @@ export class EmailService {
   /**
    * Send email using Resend REST API
    */
-  static async sendEmail({ to, subject, html, text, from }) {
+  static async sendEmail({ to, subject, html, text, from, reply_to, attachments }) {
     const apiKey = process.env.RESEND_API_KEY || process.env.VITE_RESEND_API_KEY;
-    const fromAddress = from || process.env.RESEND_FROM_EMAIL || 'TurfFlow Arena <onboarding@resend.dev>';
+    const rawSender = from || process.env.RESEND_FROM_EMAIL || 'rajupainter84688@gmail.com';
+    const fromAddress = rawSender.includes('<') ? rawSender : `TurfFlow Arena <${rawSender}>`;
+    const replyTo = reply_to || process.env.RESEND_REPLY_TO_EMAIL || 'rajupainter84688@gmail.com';
     const cleanTo = (to || '').trim();
 
     if (!cleanTo) {
@@ -41,7 +43,7 @@ export class EmailService {
     }
 
     if (!apiKey || apiKey === 're_your_resend_api_key' || !apiKey.startsWith('re_')) {
-      console.log(`[Resend Backend Mock Email] To: ${cleanTo} | Subject: "${subject}"`);
+      console.log(`[Resend Backend Mock Email] From: ${fromAddress} | To: ${cleanTo} | Subject: "${subject}" | Attachments: ${attachments ? attachments.length : 0}`);
       return {
         success: true,
         simulated: true,
@@ -50,7 +52,7 @@ export class EmailService {
     }
 
     try {
-      const response = await fetch('https://api.resend.com/emails', {
+      let response = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${apiKey}`,
@@ -58,14 +60,39 @@ export class EmailService {
         },
         body: JSON.stringify({
           from: fromAddress,
+          reply_to: replyTo,
           to: Array.isArray(cleanTo) ? cleanTo : [cleanTo],
           subject,
           html,
-          text
+          text,
+          attachments: attachments || undefined
         })
       });
 
-      const resJson = await response.json();
+      let resJson = await response.json();
+
+      // Auto-fallback if gmail/custom domain is not verified on Resend
+      if (!response.ok && (resJson?.message?.includes('not verified') || resJson?.message?.includes('domain'))) {
+        const fallbackFrom = `rajupainter84688@gmail.com <onboarding@resend.dev>`;
+        console.warn(`[Backend Resend Fallback] Retrying via "${fallbackFrom}" with reply_to: "${replyTo}"`);
+        response = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            from: fallbackFrom,
+            reply_to: replyTo,
+            to: Array.isArray(cleanTo) ? cleanTo : [cleanTo],
+            subject,
+            html,
+            text,
+            attachments: attachments || undefined
+          })
+        });
+        resJson = await response.json();
+      }
       if (!response.ok) {
         console.warn(`[Resend Server Error] ${response.status}:`, resJson);
         return {

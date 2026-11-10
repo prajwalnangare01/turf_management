@@ -1,15 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import QRCode from 'qrcode';
 import { store } from '../../services/store';
 import { PostgresEngine } from '../../services/postgresEngine';
 import { Customer, Booking } from '../../types/schema';
-import { formatTimeRange12h, formatTime12hPlain, formatDateDDMMYYYY, formatPhoneNumber, getBookingGatePassOtp, getBookingGroupRef } from '../../utils/formatters';
+import { formatTimeRange12h, formatTime12hPlain, formatTimeRange12hPlain, formatDateDDMMYYYY, formatPhoneNumber, getBookingGatePassOtp, getBookingGroupRef } from '../../utils/formatters';
 import { TimeOfDayIcon } from '../common/TimeOfDayIcon';
 import { CancelBookingConfirmModal } from './CancelBookingConfirmModal';
 import { 
   User, Phone, Mail, Calendar, ArrowLeft, ShieldCheck, Ticket, 
   XCircle, CheckCircle2, Clock, Award, LogOut, Edit2, Save, X, KeyRound, RotateCcw,
   Download, Printer, AlertCircle, Sparkles, Trophy, CreditCard, Tag, AlertTriangle, FileDown,
-  Sun, Moon, MapPin
+  Sun, Moon, MapPin, Layers, CloudRain, QrCode, ExternalLink
 } from 'lucide-react';
 import { EmailVerificationService } from '../../services/emailVerificationService';
 import { CustomerAuthService } from '../../services/customerAuthService';
@@ -20,15 +21,17 @@ interface CustomerProfilePageProps {
   onBackToBooking: () => void;
   onLogout: () => void;
   onUpdateCustomer: (updated: Customer) => void;
+  onNavigateToPolicies?: (section?: any) => void;
 }
 
 export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
   currentCustomer,
   onBackToBooking,
   onLogout,
-  onUpdateCustomer
+  onUpdateCustomer,
+  onNavigateToPolicies
 }) => {
-  const [activeTab, setActiveTab] = useState<'upcoming' | 'completed' | 'cancelled'>('upcoming');
+  const [activeTab, setActiveTab] = useState<'all' | 'upcoming' | 'completed' | 'cancelled'>('all');
   const [isEditing, setIsEditing] = useState(false);
 
   // Edit form state
@@ -46,7 +49,15 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
   // Selected booking for Entry Pass Modal
   const [passModalBooking, setPassModalBooking] = useState<Booking | null>(null);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const [passLocationQrDataUrl, setPassLocationQrDataUrl] = useState<string>('');
   const venue = store.getVenue();
+  const venueLocationUrl = venue.location_url || venue.google_maps_link || `https://maps.google.com/?q=${encodeURIComponent(venue.name + ', ' + venue.address)}`;
+
+  useEffect(() => {
+    QRCode.toDataURL(venueLocationUrl, { margin: 1, width: 160 })
+      .then(url => setPassLocationQrDataUrl(url))
+      .catch(() => setPassLocationQrDataUrl(''));
+  }, [venueLocationUrl]);
   // Selected booking for Cancellation & Refund Confirmation Popup
   const [cancelModalBooking, setCancelModalBooking] = useState<Booking | null>(null);
 
@@ -60,9 +71,29 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
   );
   customerIds.add(currentCustomer.id);
 
+  // Helper to sort bookings by latest date & time first
+  const sortBookingsDesc = (list: Booking[]) => {
+    return [...list].sort((a, b) => {
+      const timeA = new Date(`${a.booking_date}T${a.start_time}:00`).getTime() || 0;
+      const timeB = new Date(`${b.booking_date}T${b.start_time}:00`).getTime() || 0;
+      return timeB - timeA;
+    });
+  };
+
   const [bookingsList, setBookingsList] = useState<Booking[]>(() => 
-    store.getBookings().filter(b => customerIds.has(b.customer_id))
+    sortBookingsDesc(store.getBookings().filter(b => customerIds.has(b.customer_id)))
   );
+
+  // Subscribe to real-time store changes (e.g. cancellation, new booking, updates)
+  useEffect(() => {
+    const refresh = () => {
+      const allB = store.getBookings();
+      setBookingsList(sortBookingsDesc(allB.filter(b => customerIds.has(b.customer_id))));
+    };
+    const unsubscribe = store.subscribe(refresh);
+    return () => unsubscribe();
+  }, [currentCustomer.id, currentDigits]);
+
   const courts = store.getCourts();
   const sports = store.getSports();
 
@@ -70,8 +101,13 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const day = String(now.getDate()).padStart(2, '0');
-  const todayStr = `${year}-${month}-${day}`; // Local YYYY-MM-DD string
+  // Local YYYY-MM-DD string
+  const todayStr = `${year}-${month}-${day}`;
   const currentMins = now.getHours() * 60 + now.getMinutes();
+
+  // User Mode Site: Show last 30 days data only for past matches & cancelled bookings (lightweight customer experience)
+  const thirtyDaysAgoDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const thirtyDaysAgoStr = `${thirtyDaysAgoDate.getFullYear()}-${String(thirtyDaysAgoDate.getMonth() + 1).padStart(2, '0')}-${String(thirtyDaysAgoDate.getDate()).padStart(2, '0')}`;
 
   // Categorize bookings
   const upcomingBookings = bookingsList.filter(b => {
@@ -86,6 +122,8 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
 
   const completedBookings = bookingsList.filter(b => {
     if (b.status === 'cancelled' || b.status === 'refunded') return false;
+    // Constrain past matches to last 30 days
+    if (b.booking_date < thirtyDaysAgoStr) return false;
     if (b.status === 'completed') return true;
     if (b.booking_date < todayStr) return true;
     if (b.booking_date === todayStr) {
@@ -95,9 +133,14 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
     return false;
   });
 
-  const cancelledBookings = bookingsList.filter(b => b.status === 'cancelled' || b.status === 'refunded');
+  const cancelledBookings = bookingsList.filter(b => {
+    if (b.status !== 'cancelled' && b.status !== 'refunded') return false;
+    // Constrain cancelled bookings to last 30 days
+    return b.booking_date >= thirtyDaysAgoStr;
+  });
 
   const displayedBookings = 
+    activeTab === 'all' ? bookingsList :
     activeTab === 'upcoming' ? upcomingBookings :
     activeTab === 'completed' ? completedBookings :
     cancelledBookings;
@@ -132,9 +175,9 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
     metTerms: boolean, 
     noticeHours: number
   ) => {
-    if (!cancelModalBooking) return;
+    if (!cancelModalBooking) return { success: false, message: 'No reservation selected' };
     const targetBooking = cancelModalBooking;
-    const nextStatus = refundAmount > 0 ? 'refunded' : 'cancelled';
+    const nextStatus: 'refunded' | 'cancelled' = refundAmount > 0 ? 'refunded' : 'cancelled';
 
     const result = PostgresEngine.updateBookingStatus(targetBooking.id, nextStatus, {
       refundAmount,
@@ -145,25 +188,51 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
     });
 
     if (result.success) {
-      const businessDays = store.getCancellationSettings().processing_business_days || '5-7';
-      if (refundAmount > 0) {
-        alert(`Booking ${targetBooking.booking_ref} cancelled successfully!\n\nA refund of ₹${refundAmount} has been initiated and will reach your original payment method within ${businessDays} business days.`);
-      } else {
-        alert(`Booking ${targetBooking.booking_ref} cancelled.\n\nUnder venue terms, cancellations made within ${store.getCancellationSettings().cutoff_hours} hours of booking time are non-refundable (₹0 refund).`);
-      }
+      setBookingsList(prev => {
+        const groupRef = getBookingGroupRef(targetBooking);
+        const updated = prev.map(b => b.id === targetBooking.id ? { 
+          ...b, 
+          status: nextStatus,
+          refund_amount: refundAmount,
+          refund_reason: refundReason,
+          cancelled_by: 'customer' as const,
+          cancellation_notice_hours: noticeHours,
+          cancellation_met_terms: metTerms,
+          all_slots: [{ start_time: b.start_time, end_time: b.end_time, price: b.total_amount }],
+          formatted_slots: formatTimeRange12hPlain(b.start_time, b.end_time),
+          total_order_amount: b.total_amount
+        } : b);
 
-      setBookingsList(prev => prev.map(b => b.id === targetBooking.id ? { 
-        ...b, 
-        status: nextStatus,
-        refund_amount: refundAmount,
-        refund_reason: refundReason,
-        cancelled_by: 'customer',
-        cancellation_notice_hours: noticeHours,
-        cancellation_met_terms: metTerms
-      } : b));
-      setCancelModalBooking(null);
+        const activeSiblings = updated.filter(b => 
+          b.id !== targetBooking.id &&
+          b.status !== 'cancelled' && b.status !== 'refunded' &&
+          (getBookingGroupRef(b) === groupRef || b.group_ref === groupRef || (targetBooking.gateway_payment_id && b.gateway_payment_id === targetBooking.gateway_payment_id))
+        );
+
+        const activeSlots = activeSiblings.map(s => ({
+          start_time: s.start_time,
+          end_time: s.end_time,
+          price: s.total_amount
+        })).sort((a, b) => a.start_time.localeCompare(b.start_time));
+
+        const activeGrandTotal = activeSiblings.reduce((sum, s) => sum + (s.total_amount || 0), 0);
+        const activeFormattedSlots = activeSlots.map(s => formatTimeRange12hPlain(s.start_time, s.end_time)).join(', ');
+
+        return updated.map(b => {
+          if (activeSiblings.some(s => s.id === b.id)) {
+            return {
+              ...b,
+              all_slots: activeSlots,
+              total_order_amount: activeGrandTotal,
+              formatted_slots: activeFormattedSlots
+            };
+          }
+          return b;
+        });
+      });
+      return { success: true };
     } else {
-      alert(result.message);
+      return { success: false, message: result.message };
     }
   };
 
@@ -283,21 +352,22 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
         b.booking_ref === groupRef || 
         (booking.gateway_payment_id && booking.gateway_payment_id !== '' && b.gateway_payment_id === booking.gateway_payment_id)
       );
-      const allSlots = (booking.all_slots && booking.all_slots.length > 0)
-        ? booking.all_slots
-        : Array.from(new Map(siblingBookings.map(b => [`${b.start_time}-${b.end_time}`, {
-            start_time: b.start_time,
-            end_time: b.end_time,
-            price: b.total_amount
-          }])).values()).sort((a, b) => a.start_time.localeCompare(b.start_time));
+      const isActiveBooking = booking.status !== 'cancelled' && booking.status !== 'refunded';
+      const validSiblings = isActiveBooking
+        ? siblingBookings.filter(b => b.status !== 'cancelled' && b.status !== 'refunded')
+        : siblingBookings.filter(b => b.id === booking.id);
 
-      const grandTotal = booking.total_order_amount ?? (
-        siblingBookings.length > 0 
-          ? siblingBookings.reduce((sum, b) => sum + (b.total_amount || 0), 0)
-          : booking.total_amount
-      );
-      const formattedSlots = booking.formatted_slots || 
-        allSlots.map(s => formatTimeRange12h(s.start_time, s.end_time)).join(', ');
+      const allSlots = Array.from(new Map(validSiblings.map(b => [`${b.start_time}-${b.end_time}`, {
+        start_time: b.start_time,
+        end_time: b.end_time,
+        price: b.total_amount
+      }])).values()).sort((a, b) => a.start_time.localeCompare(b.start_time));
+
+      const grandTotal = validSiblings.length > 0 
+        ? validSiblings.reduce((sum, b) => sum + (b.total_amount || 0), 0)
+        : booking.total_amount;
+
+      const formattedSlots = allSlots.map(s => formatTimeRange12hPlain(s.start_time, s.end_time)).join(', ');
       const otpCode = getBookingGatePassOtp(booking);
       const court = courts.find(c => c.id === booking.court_id);
 
@@ -368,12 +438,22 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
           </button>
 
           <div className="flex items-center gap-2">
+            {onNavigateToPolicies && (
+              <button
+                onClick={() => onNavigateToPolicies('cancellation')}
+                className="px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-headline font-bold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                title="Cancellation Policy & Owner Helpline"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-red-600" />
+                <span className="hidden sm:inline">Cancellation Policy & Helpline</span>
+              </button>
+            )}
             <span className="text-xs font-headline font-bold text-primary flex items-center gap-1.5 bg-surface-container-low px-3 py-1.5 rounded-full border border-outline-variant/40">
               <ShieldCheck className="w-4 h-4 text-emerald-600" /> Account Dashboard
             </span>
             <button
               onClick={onLogout}
-              className="btn-secondary text-xs px-3 py-1.5 text-error hover:bg-error/10 border-error/20 flex items-center gap-1 font-bold"
+              className="btn-secondary text-xs px-3 py-1.5 text-error hover:bg-error/10 border-error/20 flex items-center gap-1 font-bold cursor-pointer"
             >
               <LogOut className="w-3.5 h-3.5" /> Sign Out
             </button>
@@ -495,9 +575,10 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
 
         {/* Tab Navigation for Bookings */}
         <section className="space-y-4">
-          <div className="flex items-center justify-between border-b border-outline-variant/40 pb-2">
-            <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-outline-variant/40 pb-2 gap-2">
+            <div className="flex gap-2 flex-wrap">
               {[
+                { id: 'all', label: `All Bookings (${bookingsList.length})`, icon: Layers },
                 { id: 'upcoming', label: `Upcoming (${upcomingBookings.length})`, icon: Calendar },
                 { id: 'completed', label: `Past Matches (${completedBookings.length})`, icon: CheckCircle2 },
                 { id: 'cancelled', label: `Cancelled (${cancelledBookings.length})`, icon: XCircle }
@@ -508,7 +589,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id as any)}
-                    className={`px-4 py-2.5 rounded-2xl text-xs font-headline font-bold flex items-center gap-2 transition-all ${
+                    className={`px-4 py-2.5 rounded-2xl text-xs font-headline font-bold flex items-center gap-2 transition-all cursor-pointer ${
                       isActive
                         ? 'bg-primary text-white shadow-md'
                         : 'bg-white text-on-surface-variant hover:text-on-surface border border-outline-variant/40'
@@ -520,6 +601,13 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
                 );
               })}
             </div>
+
+            {activeTab !== 'upcoming' && (
+              <div className="flex items-center gap-1.5 text-[11px] text-on-surface-variant font-medium px-1">
+                <Clock className="w-3.5 h-3.5 text-primary" />
+                <span>Showing history for the last 30 days. Full records are safely archived in venue backups.</span>
+              </div>
+            )}
           </div>
 
           {/* Booking Directory Cards List */}
@@ -528,16 +616,18 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
               <div className="w-16 h-16 bg-surface-container-low text-on-surface-variant/40 rounded-full flex items-center justify-center mx-auto text-3xl">
                 🎟️
               </div>
-              <h3 className="font-headline font-bold text-lg text-on-surface">No {activeTab} bookings found</h3>
+              <h3 className="font-headline font-bold text-lg text-on-surface">No {activeTab === 'all' ? 'booking' : activeTab} records found</h3>
               <p className="text-xs text-on-surface-variant max-w-sm mx-auto">
                 {activeTab === 'upcoming' 
                   ? "You don't have any active upcoming pitch reservations. Book a court to get started!"
+                  : activeTab === 'all'
+                  ? "You don't have any bookings yet. Book your first match now!"
                   : `There are no ${activeTab} reservations logged under your account.`}
               </p>
-              {activeTab === 'upcoming' && (
+              {(activeTab === 'upcoming' || activeTab === 'all') && (
                 <button
                   onClick={onBackToBooking}
-                  className="btn-cta text-xs px-6 py-2.5 font-headline font-bold uppercase tracking-wider inline-flex items-center gap-1.5 shadow-md mt-2"
+                  className="btn-cta text-xs px-6 py-2.5 font-headline font-bold uppercase tracking-wider inline-flex items-center gap-1.5 shadow-md mt-2 cursor-pointer"
                 >
                   + Book Pitch Now
                 </button>
@@ -550,6 +640,19 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
                 const sport = sports.find(s => s.id === b.sport_id);
                 const { refundPct, refundAmount } = calculateRefund(b);
                 const isUpcoming = upcomingBookings.some(ub => ub.id === b.id);
+                const isRainout = Boolean(
+                  (b.refund_reason && (
+                    b.refund_reason.toLowerCase().includes('rain') ||
+                    b.refund_reason.toLowerCase().includes('weather') ||
+                    b.refund_reason.includes('Emergency Rainout')
+                  )) ||
+                  (b.cancellation_reason && (
+                    b.cancellation_reason.toLowerCase().includes('rain') ||
+                    b.cancellation_reason.toLowerCase().includes('weather') ||
+                    b.cancellation_reason.includes('Emergency Rainout')
+                  )) ||
+                  (b.cancelled_by === 'admin' && (b.refund_reason?.toLowerCase().includes('rain') || b.notes?.toLowerCase().includes('rain')))
+                );
 
                 return (
                   <div
@@ -567,12 +670,14 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
                                 ? 'badge-online'
                                 : b.status === 'completed'
                                 ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                                : isRainout
+                                ? 'bg-sky-100 text-sky-900 border-sky-300 font-bold'
                                 : b.status === 'cancelled' || b.status === 'refunded'
                                 ? 'badge-danger'
                                 : 'badge-warning'
                             }`}
                           >
-                            {b.status.replace('_', ' ').toUpperCase()}
+                            {isRainout ? '🌧️ RAINOUT (OWNER CANCEL)' : b.status.replace('_', ' ').toUpperCase()}
                           </span>
                           {b.all_slots && b.all_slots.length > 1 && (
                             <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
@@ -630,21 +735,108 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
                       </div>
                     </div>
 
+                    {/* Cancellation & Refund Status Strip (When cancelled or refunded) */}
+                    {(b.status === 'cancelled' || b.status === 'refunded') && (
+                      isRainout ? (
+                        <div className="bg-sky-50/90 border border-sky-200 rounded-2xl p-3.5 space-y-2 text-sky-950">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div className="flex items-center gap-2">
+                              <span className="p-1.5 bg-sky-200 text-sky-800 rounded-xl inline-flex items-center justify-center shadow-xs">
+                                <CloudRain className="w-4 h-4 text-sky-700 animate-pulse" />
+                              </span>
+                              <div>
+                                <h5 className="font-headline font-bold text-xs text-sky-950 leading-tight">
+                                  Cancelled by Turf Owner / Management
+                                </h5>
+                                <span className="text-[10px] text-sky-700 font-semibold">Proactively cancelled due to rain & waterlogging</span>
+                              </div>
+                            </div>
+                            <span className="font-headline font-extrabold text-emerald-800 bg-white px-2.5 py-1 rounded-xl border border-emerald-300 text-xs shadow-xs">
+                              100% Refund: ₹{b.refund_amount || b.total_amount}
+                            </span>
+                          </div>
+
+                          <p className="text-[11.5px] text-sky-900 leading-relaxed font-medium">
+                            This slot was proactively cancelled by the turf owner due to torrential rain and unplayable pitch conditions. A 100% full refund of ₹{b.refund_amount || b.total_amount} has been initiated back to your original payment method.
+                          </p>
+
+                          {(b.refund_reason || b.cancellation_reason) && (
+                            <div className="text-[10px] text-sky-850 font-mono bg-white/80 p-2 rounded-xl border border-sky-200 flex items-start gap-1.5">
+                              <span className="font-bold shrink-0">Owner Note:</span>
+                              <span className="leading-tight">{(b.refund_reason || b.cancellation_reason || '').replace('[Emergency Rainout]', '').trim()}</span>
+                            </div>
+                          )}
+
+                          <div className="flex items-center justify-between text-[10px] text-sky-700 pt-1 border-t border-sky-200 font-medium">
+                            <span>Cancelled by: <strong>Venue Owner (Rainout)</strong></span>
+                            {b.cancelled_at && (
+                              <span>
+                                {new Date(b.cancelled_at).toLocaleString('en-IN', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  hour12: true
+                                })}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="bg-red-50/80 border border-red-200 rounded-2xl p-3 text-xs space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="font-headline font-bold text-red-900 flex items-center gap-1.5 text-xs">
+                              <XCircle className="w-4 h-4 text-red-600 shrink-0" />
+                              {b.status === 'refunded' ? 'Reservation Cancelled & Refunded' : 'Reservation Cancelled'}
+                            </span>
+                            {b.refund_amount !== undefined && b.refund_amount > 0 && (
+                              <span className="font-headline font-extrabold text-emerald-800 bg-white px-2 py-0.5 rounded-lg border border-emerald-300 text-[11px] shadow-2xs">
+                                Refund: ₹{b.refund_amount}
+                              </span>
+                            )}
+                          </div>
+                          {(b.refund_reason || b.cancellation_reason) && (
+                            <p className="text-[11px] text-red-800 font-medium leading-relaxed">
+                              <span className="font-bold">Reason:</span> {(b.refund_reason || b.cancellation_reason || '').replace('$\\ge$', '≥').replace('$\\le$', '≤').replace('\\ge', '≥').replace('\\le', '≤')}
+                            </p>
+                          )}
+                          <div className="flex items-center justify-between text-[10px] text-red-700/80 pt-1 border-t border-red-200/60 font-medium">
+                            <span>
+                              {b.cancelled_by === 'customer' ? 'Cancelled by you' : 'Cancelled by turf management'}
+                            </span>
+                            {b.cancelled_at && (
+                              <span>
+                                {new Date(b.cancelled_at).toLocaleString('en-IN', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  hour12: true
+                                })}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    )}
+
                     {/* Actions Bar */}
                     <div className="pt-2 border-t border-outline-variant/30 flex flex-wrap items-center justify-between gap-2 text-xs">
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => setPassModalBooking(b)}
-                          className="btn-secondary text-[11px] px-3.5 py-1.5 font-bold flex items-center gap-1.5"
+                          className="btn-secondary text-[11px] px-3.5 py-1.5 font-bold flex items-center gap-1.5 cursor-pointer"
                         >
-                          <Ticket className="w-3.5 h-3.5 text-primary" /> View Entry Pass
+                          <Ticket className="w-3.5 h-3.5 text-primary" /> {b.status === 'cancelled' || b.status === 'refunded' ? 'View Cancellation Receipt' : 'View Entry Pass'}
                         </button>
                       </div>
 
-                      {isUpcoming && (
+                      {isUpcoming && b.status === 'confirmed' && (
                         <button
                           onClick={() => handleCancelBooking(b)}
-                          className="px-3 py-1.5 rounded-xl bg-error/10 text-error hover:bg-error/20 font-headline font-bold text-[11px] flex items-center gap-1 transition"
+                          className="px-3 py-1.5 rounded-xl bg-error/10 text-error hover:bg-error/20 font-headline font-bold text-[11px] flex items-center gap-1 transition cursor-pointer"
                         >
                           <XCircle className="w-3.5 h-3.5" /> Cancel Reservation
                         </button>
@@ -670,20 +862,36 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
           (passModalBooking.gateway_payment_id && passModalBooking.gateway_payment_id !== '' && b.gateway_payment_id === passModalBooking.gateway_payment_id)
         );
 
-        const passSlots: Array<{ start_time: string; end_time: string; price?: number }> = 
-          (passModalBooking.all_slots && passModalBooking.all_slots.length > 0)
-            ? passModalBooking.all_slots
-            : Array.from(new Map(passSiblingBookings.map(b => [`${b.start_time}-${b.end_time}`, {
-                start_time: b.start_time,
-                end_time: b.end_time,
-                price: b.total_amount
-              }])).values()).sort((a, b) => a.start_time.localeCompare(b.start_time));
-
-        const passGrandTotal = passModalBooking.total_order_amount ?? (
-          passSiblingBookings.length > 0 
-            ? passSiblingBookings.reduce((sum, b) => sum + (b.total_amount || 0), 0)
-            : passModalBooking.total_amount
+        const isViewingActivePass = passModalBooking.status !== 'cancelled' && passModalBooking.status !== 'refunded';
+        const isPassRainout = Boolean(
+          (passModalBooking.refund_reason && (
+            passModalBooking.refund_reason.toLowerCase().includes('rain') ||
+            passModalBooking.refund_reason.toLowerCase().includes('weather') ||
+            passModalBooking.refund_reason.includes('Emergency Rainout')
+          )) ||
+          (passModalBooking.cancellation_reason && (
+            passModalBooking.cancellation_reason.toLowerCase().includes('rain') ||
+            passModalBooking.cancellation_reason.toLowerCase().includes('weather') ||
+            passModalBooking.cancellation_reason.includes('Emergency Rainout')
+          )) ||
+          (passModalBooking.cancelled_by === 'admin' && (passModalBooking.refund_reason?.toLowerCase().includes('rain') || passModalBooking.notes?.toLowerCase().includes('rain')))
         );
+
+        // When viewing an active pass, NEVER include cancelled or refunded sibling slots
+        const activeSiblingBookings = isViewingActivePass
+          ? passSiblingBookings.filter(b => b.status !== 'cancelled' && b.status !== 'refunded')
+          : passSiblingBookings.filter(b => b.id === passModalBooking.id);
+
+        const passSlots: Array<{ start_time: string; end_time: string; price?: number }> = 
+          Array.from(new Map(activeSiblingBookings.map(b => [`${b.start_time}-${b.end_time}`, {
+            start_time: b.start_time,
+            end_time: b.end_time,
+            price: b.total_amount
+          }])).values()).sort((a, b) => a.start_time.localeCompare(b.start_time));
+
+        const passGrandTotal = activeSiblingBookings.length > 0 
+          ? activeSiblingBookings.reduce((sum, b) => sum + (b.total_amount || 0), 0)
+          : passModalBooking.total_amount;
 
         const passOtpCode = getBookingGatePassOtp(passModalBooking);
 
@@ -694,19 +902,28 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
             <div className="bg-white rounded-3xl max-w-md w-full border border-outline-variant/60 shadow-2xl overflow-hidden animate-in zoom-in-95 my-auto">
               
               {/* Header with Title & Close Button */}
-              <div className="bg-[#006b30] text-white px-3.5 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between">
+              <div className={`${isViewingActivePass ? 'bg-[#006b30]' : isPassRainout ? 'bg-sky-900' : 'bg-red-800'} text-white px-3.5 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between transition-colors`}>
                 <div className="flex items-center gap-2">
                   <div className="w-8 h-8 rounded-xl bg-white/15 flex items-center justify-center text-white">
-                    <Ticket className="w-4 h-4 text-white" />
+                    {isPassRainout ? <CloudRain className="w-4 h-4 text-white" /> : <Ticket className="w-4 h-4 text-white" />}
                   </div>
                   <div>
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <h3 className="font-headline font-bold text-sm sm:text-base text-white leading-tight">
-                        Entry Pass & Receipt
+                        {isViewingActivePass 
+                          ? 'Entry Pass & Receipt' 
+                          : isPassRainout 
+                          ? 'Cancelled by Owner (Rainout)' 
+                          : 'Cancelled Reservation'}
                       </h3>
-                      {passSlots.length > 1 && (
+                      {isViewingActivePass && passSlots.length > 1 && (
                         <span className="bg-white/20 text-white text-[9.5px] font-bold px-1.5 py-0.2 rounded-full">
                           {passSlots.length} Slots
+                        </span>
+                      )}
+                      {isPassRainout && (
+                        <span className="bg-sky-400/30 text-white border border-sky-300/40 text-[9.5px] font-bold px-1.5 py-0.2 rounded-full">
+                          100% Refunded
                         </span>
                       )}
                     </div>
@@ -729,21 +946,59 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
               <div className="p-3 sm:p-4 space-y-2.5 text-xs overflow-hidden">
                 
                 {/* 4-Digit Gate Check-in OTP Box */}
-                <div className="bg-[#fffbeb] border-2 border-dashed border-[#f59e0b] rounded-xl p-2.5 text-center">
-                  <span className="text-[9.5px] font-headline font-extrabold text-[#92400e] uppercase tracking-wider flex items-center justify-center gap-1">
-                    <KeyRound className="w-3 h-3 text-[#b45309]" />
-                    <span>4-Digit Common Gate Pass</span>
-                    <Ticket className="w-3 h-3 text-[#b45309]" />
-                  </span>
-                  <div className="text-2xl sm:text-3xl font-mono font-black tracking-[6px] text-[#b45309] my-0.5">
-                    {passOtpCode}
+                {isViewingActivePass ? (
+                  <div className="bg-[#fffbeb] border-2 border-dashed border-[#f59e0b] rounded-xl p-2.5 text-center">
+                    <span className="text-[9.5px] font-headline font-extrabold text-[#92400e] uppercase tracking-wider flex items-center justify-center gap-1">
+                      <KeyRound className="w-3 h-3 text-[#b45309]" />
+                      <span>4-Digit Common Gate Pass</span>
+                      <Ticket className="w-3 h-3 text-[#b45309]" />
+                    </span>
+                    <div className="text-2xl sm:text-3xl font-mono font-black tracking-[6px] text-[#b45309] my-0.5">
+                      {passOtpCode}
+                    </div>
+                    <p className="text-[10px] text-[#92400e] font-medium leading-tight">
+                      {passSlots.length > 1
+                        ? `Single pass valid for all ${passSlots.length} reserved sessions`
+                        : 'Show this 4-digit code or your PDF pass at the gate.'}
+                    </p>
                   </div>
-                  <p className="text-[10px] text-[#92400e] font-medium leading-tight">
-                    {passSlots.length > 1
-                      ? `Single pass valid for all ${passSlots.length} reserved sessions`
-                      : 'Show this 4-digit code or your PDF pass at the gate.'}
-                  </p>
-                </div>
+                ) : isPassRainout ? (
+                  <div className="bg-sky-50 border-2 border-dashed border-sky-300 rounded-xl p-3 text-center space-y-1">
+                    <span className="text-[10px] font-headline font-extrabold text-sky-900 uppercase tracking-wider flex items-center justify-center gap-1.5">
+                      <CloudRain className="w-4 h-4 text-sky-600 animate-bounce" />
+                      <span>Cancelled by Venue Owner — Rainout</span>
+                    </span>
+                    <div className="text-xl sm:text-2xl font-mono font-black tracking-widest text-sky-300 my-0.5 line-through">
+                      {passOtpCode}
+                    </div>
+                    <p className="text-xs text-sky-900 font-bold leading-tight">
+                      Proactively cancelled by turf owner due to torrential rain & unplayable pitch.
+                    </p>
+                    <p className="text-[10.5px] text-sky-700 font-semibold">
+                      100% full refund of ₹{passModalBooking.refund_amount || passModalBooking.total_amount} initiated to original payment method.
+                    </p>
+                    {passModalBooking.refund_reason && (
+                      <p className="text-[9.5px] text-sky-700 font-mono italic mt-0.5">
+                        Owner Note: {passModalBooking.refund_reason.replace('[Emergency Rainout]', '').trim()}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="bg-red-50 border-2 border-dashed border-red-300 rounded-xl p-2.5 text-center">
+                    <span className="text-[10px] font-headline font-extrabold text-red-800 uppercase tracking-wider flex items-center justify-center gap-1">
+                      <XCircle className="w-3.5 h-3.5 text-red-600" />
+                      <span>Session Cancelled — Invalid for Entry</span>
+                    </span>
+                    <div className="text-xl sm:text-2xl font-mono font-black tracking-widest text-red-400 my-0.5 line-through">
+                      {passOtpCode}
+                    </div>
+                    <p className="text-[10px] text-red-700 font-medium leading-tight">
+                      {passModalBooking.status === 'refunded'
+                        ? `Refund of ₹${passModalBooking.refund_amount || 0} initiated.`
+                        : 'This session is cancelled and no longer active.'}
+                    </p>
+                  </div>
+                )}
 
                 {/* Details Grid */}
                 <div className="bg-surface-container-low rounded-xl p-2.5 border border-outline-variant/40 grid grid-cols-2 gap-2 text-left text-xs">
@@ -776,10 +1031,10 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
 
                   <div>
                     <span className="text-[9.5px] font-bold text-on-surface-variant uppercase tracking-wider flex items-center gap-1">
-                      <CreditCard className="w-3 h-3 text-primary" /> Total Paid
+                      <CreditCard className="w-3 h-3 text-primary" /> {isViewingActivePass ? 'Total Paid' : 'Amount'}
                     </span>
-                    <span className="font-headline font-extrabold text-[#006b30] text-xs sm:text-sm block mt-0.5">
-                      ₹{passGrandTotal} (PAID)
+                    <span className={`font-headline font-extrabold text-xs sm:text-sm block mt-0.5 ${isViewingActivePass ? 'text-[#006b30]' : 'text-red-700'}`}>
+                      ₹{passGrandTotal} {isViewingActivePass ? '(PAID)' : (passModalBooking.status === 'refunded' ? '(REFUNDED)' : '(CANCELLED)')}
                     </span>
                   </div>
                 </div>
@@ -789,7 +1044,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
                   <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/80 space-y-1.5 text-left">
                     <div className="flex items-center justify-between text-[10px] font-headline font-bold text-slate-600 uppercase tracking-wider">
                       <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3 text-[#006b30]" /> All Reserved Sessions ({passSlots.length})
+                        <Clock className="w-3 h-3 text-[#006b30]" /> Active Reserved Sessions ({passSlots.length})
                       </span>
                       <span className="text-[#006b30] font-black">Valid with Single OTP</span>
                     </div>
@@ -809,10 +1064,45 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
                   </div>
                 )}
 
-                {/* Venue Location Line */}
-                <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-200 text-left text-[10.5px] text-slate-600">
-                  <MapPin className="w-3 h-3 text-primary shrink-0" />
-                  <span className="truncate">{venue.name} • {venue.address}</span>
+                {/* Venue Location & Scannable Location QR Code Card */}
+                <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/90 flex items-center justify-between gap-3 text-left">
+                  {/* Scannable Location QR code */}
+                  <div className="text-center shrink-0 bg-white p-1 rounded-lg border border-slate-300 shadow-2xs">
+                    {passLocationQrDataUrl ? (
+                      <img 
+                        src={passLocationQrDataUrl} 
+                        alt="Turf Location QR Code" 
+                        className="w-16 h-16 sm:w-18 sm:h-18 object-contain rounded"
+                      />
+                    ) : (
+                      <div className="w-16 h-16 bg-slate-100 flex items-center justify-center">
+                        <QrCode className="w-6 h-6 text-slate-400 animate-pulse" />
+                      </div>
+                    )}
+                    <span className="block text-[8px] font-black text-[#006b30] uppercase tracking-wider mt-0.5">
+                      Map QR
+                    </span>
+                  </div>
+
+                  {/* Address & Direct Google Maps Navigation Link */}
+                  <div className="flex-1 min-w-0 space-y-1">
+                    <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                      <MapPin className="w-3 h-3 text-[#006b30] shrink-0" />
+                      <span>{venue.name}</span>
+                    </div>
+                    <p className="text-[11px] font-semibold text-slate-800 leading-snug line-clamp-2">
+                      {venue.address}
+                    </p>
+                    <a
+                      href={venueLocationUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[10.5px] font-bold text-[#006b30] hover:underline bg-[#006b30]/10 px-2 py-0.5 rounded-md border border-[#006b30]/20"
+                    >
+                      <span>Open in Google Maps</span>
+                      <ExternalLink className="w-2.5 h-2.5 shrink-0" />
+                    </a>
+                  </div>
                 </div>
 
                 {/* Actions: Download PDF, Print & Close Buttons */}
@@ -938,6 +1228,11 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
         isOpen={!!cancelModalBooking}
         onClose={() => setCancelModalBooking(null)}
         onConfirmed={handleExecuteCancellation}
+        onSuccessDone={() => {
+          setCancelModalBooking(null);
+          // If on 'all', stay on 'all' so the customer sees their freshly cancelled booking right at the top
+          setActiveTab(prev => (prev === 'all' ? 'all' : 'cancelled'));
+        }}
       />
 
     </div>

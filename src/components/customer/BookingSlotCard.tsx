@@ -75,18 +75,23 @@ export const BookingSlotCard: React.FC<BookingSlotCardProps> = ({
   const isHeld = slot.status === 'locked' && !isSelected;
   const isBooked = slot.status === 'booked_online' || slot.status === 'booked_offline';
   const isBlocked = slot.status === 'blocked';
-  const isInteractive = isAvailable || isHeldByCurrent;
-  const isDisabled = !isInteractive;
+  const isPast = slot.status === 'past';
+  // Allow clicking on available, held by current, OR held by others (to view hold status & timer modal)
+  const isInteractive = isAvailable || isHeldByCurrent || isHeld;
+  const isDisabled = isBooked || isBlocked || isPast;
 
   // Dynamic interactive container state classes matching design specifications:
-  // - Default Available: bg-white border-gray-200 hover:border-emerald-400 hover:shadow-md
-  // - Selected: bg-emerald-50/50 border-emerald-500 ring-2 ring-emerald-500/20 shadow-sm
-  // - Held / Locked / Disabled: bg-gray-50/70 border-gray-200 opacity-60 cursor-not-allowed
+  // - Default Available: bg-white border-gray-200 hover:border-emerald-400 hover:shadow-md cursor-pointer
+  // - Selected: bg-emerald-50/50 border-emerald-500 ring-2 ring-emerald-500/20 shadow-sm cursor-pointer
+  // - Held by other customer: Distinct warm amber gradient with dashed border, active feel, fully clickable
+  // - Booked / Past / Blocked (Disabled): bg-gray-50/70 border-gray-200 opacity-60 cursor-not-allowed
   let stateClasses = 'bg-white border-gray-200 hover:border-emerald-400 hover:shadow-md cursor-pointer';
-  if (isDisabled) {
-    stateClasses = 'bg-gray-50/70 border-gray-200 opacity-60 cursor-not-allowed';
-  } else if (isSelected) {
+  if (isSelected) {
     stateClasses = 'bg-emerald-50/50 border-emerald-500 ring-2 ring-emerald-500/20 shadow-sm cursor-pointer';
+  } else if (isHeld) {
+    stateClasses = 'bg-gradient-to-b from-amber-50/95 via-amber-50/60 to-white border-2 border-dashed border-amber-400/90 hover:border-amber-500 hover:shadow-md cursor-pointer shadow-2xs';
+  } else if (isDisabled) {
+    stateClasses = 'bg-gray-50/70 border-gray-200 opacity-60 cursor-not-allowed';
   }
 
   const handleClick = () => {
@@ -102,6 +107,7 @@ export const BookingSlotCard: React.FC<BookingSlotCardProps> = ({
       tabIndex={isInteractive ? 0 : -1}
       aria-pressed={isSelected}
       aria-disabled={isDisabled}
+      title={isHeld ? 'Temporarily held in checkout by another customer — click to view countdown timer' : undefined}
       onKeyDown={(e) => {
         if (isInteractive && (e.key === 'Enter' || e.key === ' ')) {
           e.preventDefault();
@@ -112,27 +118,36 @@ export const BookingSlotCard: React.FC<BookingSlotCardProps> = ({
     >
       {/* 1. Card Header: Left Icon & Top-Right Badges */}
       <div className="flex items-start justify-between w-full gap-1.5 sm:gap-2">
-        {/* Left Icon: Lucide Sun in soft squircle for day, Moon in soft indigo for night */}
+        {/* Left Icon: Lucide Sun in soft squircle for day, Moon in soft indigo for night, Clock for Held */}
         <div
           className={`p-1.5 sm:p-2 rounded-xl shrink-0 flex items-center justify-center ${
-            isNight
+            isHeld
+              ? 'bg-amber-100 text-amber-700 ring-1 ring-amber-300/80 shadow-2xs'
+              : isNight
               ? 'bg-indigo-50 text-indigo-500'
               : 'bg-amber-50 text-amber-500'
           }`}
         >
-          {isNight ? (
+          {isHeld ? (
+            <Clock className="w-4 h-4 text-amber-700" />
+          ) : isNight ? (
             <Moon className="w-4 h-4" />
           ) : (
             <Sun className="w-4 h-4" />
           )}
         </div>
 
-        {/* Top-Right Badges: Stacked cleanly so PEAK never bleeds outside card */}
+        {/* Top-Right Badges: Stacked cleanly */}
         <div className="flex flex-col items-end gap-1 shrink-0 ml-auto">
           {isSelected ? (
             <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-xs shrink-0">
               <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5 stroke-[2.5]" />
             </div>
+          ) : isHeld ? (
+            <span className="bg-amber-100 text-amber-950 border border-amber-300 font-extrabold text-[9.5px] sm:text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0 shadow-2xs whitespace-nowrap animate-pulse">
+              <Zap className="w-2.5 h-2.5 text-amber-600 fill-amber-500" />
+              <span>ON HOLD</span>
+            </span>
           ) : (
             <>
               {hasDiscount && isAvailable && (
@@ -155,41 +170,51 @@ export const BookingSlotCard: React.FC<BookingSlotCardProps> = ({
 
       {/* 2. Middle Section: Slot Time in Bold & Duration Directly Below */}
       <div className="mt-3">
-        <div className="text-base font-bold text-gray-900 leading-tight">
-          {time} <span className="text-sm font-bold text-gray-700">{period}</span>
+        <div className="text-base font-bold text-gray-900 leading-tight flex items-baseline justify-between">
+          <span>{time} <span className="text-sm font-bold text-gray-700">{period}</span></span>
         </div>
         <div className="text-xs text-gray-500 flex items-center gap-1 font-medium mt-1">
           <Clock className="w-3 h-3 text-gray-400 shrink-0" />
           <span>{duration} mins</span>
+          {isHeld && (
+            <span className="text-[10px] text-amber-800 font-bold ml-1 bg-amber-100/80 px-1.5 py-0.5 rounded border border-amber-200/60">
+              Pending Checkout
+            </span>
+          )}
         </div>
       </div>
 
-      {/* 3. Bottom Section: Price Alignment (flex items-baseline gap-2) & Subtle Status */}
+      {/* 3. Bottom Section: Price Alignment (flex items-baseline gap-2) & Distinct Status */}
       <div className="flex items-baseline justify-between w-full pt-3 mt-3 border-t border-gray-100">
         <div className="flex items-baseline gap-2 min-w-0">
           <span
             className={`text-lg font-bold leading-none ${
-              isDisabled ? 'text-gray-400' : 'text-emerald-600'
+              isHeld
+                ? 'text-gray-900'
+                : isDisabled
+                ? 'text-gray-400'
+                : 'text-emerald-600'
             }`}
           >
             ₹{slot.price.toLocaleString('en-IN')}
           </span>
-          {hasDiscount && (
+          {hasDiscount && isAvailable && (
             <span className="text-xs line-through text-gray-400 font-medium leading-none">
               ₹{slot.original_price?.toLocaleString('en-IN')}
             </span>
           )}
         </div>
 
-        {/* Subtle Non-Available Status Indicators */}
+        {/* Distinct Status Indicators */}
         {isHeld && (
-          <span className="inline-flex items-center gap-1 text-xs text-gray-400 font-medium shrink-0 leading-none">
-            <Lock className="w-3 h-3" /> Held
+          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-900 bg-amber-100 border border-amber-300/80 px-2 py-0.5 rounded-full shrink-0 leading-none shadow-2xs">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-ping shrink-0" />
+            <span>In Checkout</span>
           </span>
         )}
-        {isBooked && (
+        {(isBooked || slot.status === 'past') && (
           <span className="text-xs text-gray-400 font-medium shrink-0 leading-none">
-            Passed
+            Booked
           </span>
         )}
         {isBlocked && (
