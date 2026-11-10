@@ -2,6 +2,7 @@
 import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
 import { store } from '../data/store.js';
+import { WhatsAppFormatter } from '../utils/whatsappFormatter.js';
 
 export class GatePassService {
   /**
@@ -92,9 +93,9 @@ export class GatePassService {
         drawField('Reserved Pitch', courtName, 310, y + 15);
 
         drawField('Sport', sportName, 70, y + 55);
-        drawField('Match Date', booking.booking_date, 310, y + 55);
+        drawField('Match Date', WhatsAppFormatter.formatDate(booking.booking_date), 310, y + 55);
 
-        drawField('Slot Time', `${booking.start_time} — ${booking.end_time}`, 70, y + 95);
+        drawField('Slot Time', `${WhatsAppFormatter.formatTime(booking.start_time)} — ${WhatsAppFormatter.formatTime(booking.end_time)}`, 70, y + 95);
         drawField('Customer Name', customer.name, 310, y + 95);
 
         drawField('Customer Phone', `+91 ${customer.phone || booking.customer_phone}`, 70, y + 135);
