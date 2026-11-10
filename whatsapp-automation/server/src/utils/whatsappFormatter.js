@@ -168,7 +168,10 @@ export class WhatsAppFormatter {
       const origText = (c.original_price_per_hour && c.original_price_per_hour > c.base_price_per_hour)
         ? ` ~₹${c.original_price_per_hour}~`
         : '';
-      out += `  • *${c.name}:*${origText} ₹${c.base_price_per_hour}/hr (Weekday) | ₹${c.peak_price_per_hour || c.base_price_per_hour}/hr (Peak 6:00 PM - 11:00 PM)\n`;
+      const effectivePeak = (c.peak_offer_price_per_hour && c.peak_offer_price_per_hour !== c.peak_price_per_hour)
+        ? `~₹${Math.max(c.peak_price_per_hour, c.peak_offer_price_per_hour)}~ ₹${Math.min(c.peak_price_per_hour, c.peak_offer_price_per_hour)}`
+        : `₹${c.peak_price_per_hour || c.base_price_per_hour}`;
+      out += `  • *${c.name}:*${origText} ₹${c.base_price_per_hour}/hr (Weekday) | ${effectivePeak}/hr (Peak 6:00 PM - 11:00 PM)\n`;
     }
 
     out += `\n🔄 *Cancellation Policy:*\n` +

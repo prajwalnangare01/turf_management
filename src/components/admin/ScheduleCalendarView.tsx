@@ -6,7 +6,7 @@ import { SlotEngine } from '../../services/slotEngine';
 import { RedisLockService } from '../../services/redisLockService';
 import { SupabaseSyncService } from '../../services/supabaseSyncService';
 import { Booking, AdminUser, Court, BlockedSlot } from '../../types/schema';
-import { formatTime12h, formatTimeRange12h } from '../../utils/formatters';
+import { formatTime12h, formatTimeRange12h, formatTime12hPlain, formatDateDDMMYYYY } from '../../utils/formatters';
 import { getVenueDateString, getVenueNow } from '../../utils/venueTime';
 import { OfflineBookingModal } from './OfflineBookingModal';
 import { AdminRefundModal } from './AdminRefundModal';
@@ -95,7 +95,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
     );
 
     if (conflict) {
-      alert(`⚠️ [Court Block Conflict Guard (CC-D03)] Cannot block court:\n\nActive booking ${conflict.booking_ref} (${conflict.customer_name}) exists on ${conflict.booking_date} (${conflict.start_time} - ${conflict.end_time}).\n\nPlease reschedule or cancel the booking first before scheduling pitch maintenance.`);
+      alert(`⚠️ [Court Block Conflict Guard (CC-D03)] Cannot block court:\n\nActive booking ${conflict.booking_ref} (${conflict.customer_name}) exists on ${formatDateDDMMYYYY(conflict.booking_date)} (${formatTime12hPlain(conflict.start_time)} – ${formatTime12hPlain(conflict.end_time)}).\n\nPlease reschedule or cancel the booking first before scheduling pitch maintenance.`);
       return;
     }
 
@@ -725,7 +725,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
                       <span className="font-bold flex items-center gap-1 text-amber-800">
                         <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" /> Conflict:
                       </span>
-                      <span>Booking {conflict.booking_ref} on {conflict.booking_date} ({conflict.start_time} - {conflict.end_time}) exists in this window.</span>
+                      <span>Booking {conflict.booking_ref} on {formatDateDDMMYYYY(conflict.booking_date)} ({formatTime12hPlain(conflict.start_time)} – ${formatTime12hPlain(conflict.end_time)}) exists in this window.</span>
                     </div>
                   );
                 }
@@ -735,8 +735,8 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
                     <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                     <span>
                       {blockModalState.startDate === blockModalState.endDate
-                        ? `Pitch will be blocked on ${blockModalState.startDate} (${blockModalState.startTime} - ${blockModalState.endTime})`
-                        : `Pitch will be blocked from ${blockModalState.startDate} ${blockModalState.startTime} to ${blockModalState.endDate} ${blockModalState.endTime}`}
+                        ? `Pitch will be blocked on ${formatDateDDMMYYYY(blockModalState.startDate)} (${formatTime12hPlain(blockModalState.startTime)} – ${formatTime12hPlain(blockModalState.endTime)})`
+                        : `Pitch will be blocked from ${formatDateDDMMYYYY(blockModalState.startDate)} (${formatTime12hPlain(blockModalState.startTime)}) to ${formatDateDDMMYYYY(blockModalState.endDate)} (${formatTime12hPlain(blockModalState.endTime)})`}
                     </span>
                   </div>
                 );

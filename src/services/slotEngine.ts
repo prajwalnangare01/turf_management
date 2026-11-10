@@ -89,12 +89,33 @@ export class SlotEngine {
     const dayOfWeek = slotDate.getDay(); // 0 = Sunday, 6 = Saturday
 
     let baseRate = court.base_price_per_hour;
+    let baseOriginalRate: number | undefined = (court.original_price_per_hour && court.original_price_per_hour > court.base_price_per_hour)
+      ? court.original_price_per_hour
+      : undefined;
+
     if (dayOfWeek === 6 && court.saturday_price_per_hour !== undefined) {
-      baseRate = court.saturday_price_per_hour;
+      const satRate = court.saturday_price_per_hour;
+      const satOffer = court.saturday_offer_price_per_hour;
+      if (satOffer !== undefined && satOffer > 0 && satOffer !== satRate) {
+        baseRate = Math.min(satRate, satOffer);
+        baseOriginalRate = Math.max(satRate, satOffer);
+      } else {
+        baseRate = satRate;
+        baseOriginalRate = undefined;
+      }
     } else if (dayOfWeek === 0 && court.sunday_price_per_hour !== undefined) {
-      baseRate = court.sunday_price_per_hour;
+      const sunRate = court.sunday_price_per_hour;
+      const sunOffer = court.sunday_offer_price_per_hour;
+      if (sunOffer !== undefined && sunOffer > 0 && sunOffer !== sunRate) {
+        baseRate = Math.min(sunRate, sunOffer);
+        baseOriginalRate = Math.max(sunRate, sunOffer);
+      } else {
+        baseRate = sunRate;
+        baseOriginalRate = undefined;
+      }
     } else if ((dayOfWeek === 0 || dayOfWeek === 6) && court.weekend_price_per_hour !== undefined) {
       baseRate = court.weekend_price_per_hour;
+      baseOriginalRate = undefined;
     }
 
     let cursor = openMins;
@@ -107,6 +128,7 @@ export class SlotEngine {
       const isPast = isPastDate || (isToday && (cursor <= (currentMins + (venue.min_notice_minutes || 0))));
 
       let slotPrice = baseRate;
+      let slotOriginalPrice = baseOriginalRate;
       let isPeak = false;
 
       // 1. Check Pitch Peak Hours Configuration
@@ -115,7 +137,15 @@ export class SlotEngine {
         let pEnd = this.timeToMinutes(court.peak_end_time);
         if (pEnd <= pStart) pEnd += 1440;
         if (cursor >= pStart && cursor < pEnd) {
-          slotPrice = court.peak_price_per_hour;
+          const pkRate = court.peak_price_per_hour;
+          const pkOffer = court.peak_offer_price_per_hour;
+          if (pkOffer !== undefined && pkOffer > 0 && pkOffer !== pkRate) {
+            slotPrice = Math.min(pkRate, pkOffer);
+            slotOriginalPrice = Math.max(pkRate, pkOffer);
+          } else {
+            slotPrice = pkRate;
+            slotOriginalPrice = undefined;
+          }
           isPeak = true;
         }
       }
@@ -212,9 +242,9 @@ export class SlotEngine {
         ? (pendingHold.source === 'offline_whatsapp' ? 'WhatsApp Hold (5m)' : 'Customer Hold (5m)')
         : redisLock?.locked_by;
 
-      // Compute pre-discount original price if pitch has an original regular price higher than slotPrice
-      const originalPrice = court.original_price_per_hour && court.original_price_per_hour > slotPrice
-        ? court.original_price_per_hour
+      // Compute pre-discount original price if slot has an original regular price higher than slotPrice
+      const originalPrice = (slotOriginalPrice && slotOriginalPrice > slotPrice)
+        ? slotOriginalPrice
         : undefined;
 
       slots.push({

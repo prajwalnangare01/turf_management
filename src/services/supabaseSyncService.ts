@@ -90,12 +90,15 @@ export class SupabaseSyncService {
             base_price_per_hour: Number(c.base_price_per_hour) || 1200,
             original_price_per_hour: c.original_price_per_hour ? Number(c.original_price_per_hour) : undefined,
             saturday_price_per_hour: Number(c.saturday_price_per_hour) || 1600,
+            saturday_offer_price_per_hour: c.saturday_offer_price_per_hour ? Number(c.saturday_offer_price_per_hour) : undefined,
             sunday_price_per_hour: Number(c.sunday_price_per_hour) || 1600,
+            sunday_offer_price_per_hour: c.sunday_offer_price_per_hour ? Number(c.sunday_offer_price_per_hour) : undefined,
             weekend_price_per_hour: Number(c.weekend_price_per_hour) || 1600,
             peak_enabled: Boolean(c.peak_enabled),
             peak_start_time: typeof c.peak_start_time === 'string' ? c.peak_start_time.slice(0, 5) : '18:00',
             peak_end_time: typeof c.peak_end_time === 'string' ? c.peak_end_time.slice(0, 5) : '23:00',
             peak_price_per_hour: Number(c.peak_price_per_hour) || 1800,
+            peak_offer_price_per_hour: c.peak_offer_price_per_hour ? Number(c.peak_offer_price_per_hour) : undefined,
             sport_ids: matchingSports.length > 0 ? matchingSports : ['sp-football']
           };
         });
@@ -731,12 +734,15 @@ export class SupabaseSyncService {
         base_price_per_hour: court.base_price_per_hour,
         original_price_per_hour: court.original_price_per_hour || null,
         saturday_price_per_hour: court.saturday_price_per_hour || court.base_price_per_hour,
+        saturday_offer_price_per_hour: court.saturday_offer_price_per_hour || null,
         sunday_price_per_hour: court.sunday_price_per_hour || court.base_price_per_hour,
+        sunday_offer_price_per_hour: court.sunday_offer_price_per_hour || null,
         weekend_price_per_hour: court.weekend_price_per_hour || court.base_price_per_hour,
         peak_enabled: Boolean(court.peak_enabled),
         peak_start_time: court.peak_start_time ? (court.peak_start_time.length === 5 ? `${court.peak_start_time}:00` : court.peak_start_time) : '18:00:00',
         peak_end_time: court.peak_end_time ? (court.peak_end_time.length === 5 ? `${court.peak_end_time}:00` : court.peak_end_time) : '23:00:00',
-        peak_price_per_hour: court.peak_price_per_hour || 1800
+        peak_price_per_hour: court.peak_price_per_hour || 1800,
+        peak_offer_price_per_hour: court.peak_offer_price_per_hour || null
       };
 
       const { error } = await supabase.from('courts').upsert([payload], { onConflict: 'id' });

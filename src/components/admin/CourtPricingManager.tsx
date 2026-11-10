@@ -6,6 +6,7 @@ import { SupabaseSyncService } from '../../services/supabaseSyncService';
 import { AdminUser, Court, BlockedSlot, Sport } from '../../types/schema';
 import { ConfirmModal } from '../common/ConfirmModal';
 import { Settings, ShieldAlert, Trash2, PlusCircle, Edit3, X, Check, Calendar, Zap, Clock, AlertTriangle, Tag } from 'lucide-react';
+import { formatTime12hPlain, formatDateDDMMYYYY } from '../../utils/formatters';
 
 interface CourtPricingManagerProps {
   currentAdmin: AdminUser;
@@ -497,13 +498,13 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
     );
 
     if (conflict) {
-      alert(`⚠️ [Pitch Block Conflict Guard (CC-D03)]\n\nCannot block court: An active booking exists during this timeframe:\n• Booking Ref: ${conflict.booking_ref}\n• Customer: ${conflict.customer_name}\n• Scheduled: ${conflict.booking_date} (${conflict.start_time} - ${conflict.end_time})\n\nPlease reschedule or cancel the booking first before scheduling pitch maintenance.`);
+      alert(`⚠️ [Pitch Block Conflict Guard (CC-D03)]\n\nCannot block court: An active booking exists during this timeframe:\n• Booking Ref: ${conflict.booking_ref}\n• Customer: ${conflict.customer_name}\n• Scheduled: ${formatDateDDMMYYYY(conflict.booking_date)} (${formatTime12hPlain(conflict.start_time)} – ${formatTime12hPlain(conflict.end_time)})\n\nPlease reschedule or cancel the booking first before scheduling pitch maintenance.`);
       return;
     }
 
     const scheduleDesc = blockStartDate === blockEndDate
-      ? `${blockStartDate} from ${blockStartTime} to ${blockEndTime}`
-      : `${blockStartDate} (${blockStartTime}) to ${blockEndDate} (${blockEndTime})`;
+      ? `${formatDateDDMMYYYY(blockStartDate)} from ${formatTime12hPlain(blockStartTime)} to ${formatTime12hPlain(blockEndTime)}`
+      : `${formatDateDDMMYYYY(blockStartDate)} (${formatTime12hPlain(blockStartTime)}) to ${formatDateDDMMYYYY(blockEndDate)} (${formatTime12hPlain(blockEndTime)})`;
 
     setConfirmState({
       isOpen: true,
@@ -644,7 +645,7 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
                     </span>
                     {court.peak_enabled ? (
                       <span className="bg-amber-600 text-white font-extrabold px-2 py-0.5 rounded text-[10px] tracking-wide uppercase">
-                        {court.peak_start_time} - {court.peak_end_time} ({
+                        {formatTime12hPlain(court.peak_start_time || '18:00')} – {formatTime12hPlain(court.peak_end_time || '23:00')} ({
                           court.peak_offer_price_per_hour && court.peak_offer_price_per_hour !== court.peak_price_per_hour ? (
                             <>
                               <span className="line-through opacity-75 mr-1 font-semibold">₹{Math.max(court.peak_price_per_hour || 0, court.peak_offer_price_per_hour || 0)}</span>
@@ -732,17 +733,17 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
                       {isSingleDay ? (
                         <p className="flex items-center gap-1.5 text-gray-700">
                           <Calendar className="w-3.5 h-3.5 text-primary" />
-                          <span className="font-semibold">{blk.date}</span>
+                          <span className="font-semibold">{formatDateDDMMYYYY(blk.date)}</span>
                           <span className="text-gray-400">•</span>
                           <Clock className="w-3.5 h-3.5 text-amber-700" />
-                          <span>{blk.start_time} – {blk.end_time || 'End of Day'}</span>
+                          <span>{formatTime12hPlain(blk.start_time)} – {blk.end_time ? formatTime12hPlain(blk.end_time) : 'End of Day'}</span>
                         </p>
                       ) : (
                         <p className="flex items-center gap-1 text-gray-700">
                           <Calendar className="w-3.5 h-3.5 text-primary" />
-                          <span>{blk.date} <strong className="text-gray-900">({blk.start_time})</strong></span>
+                          <span>{formatDateDDMMYYYY(blk.date)} <strong className="text-gray-900">({formatTime12hPlain(blk.start_time)})</strong></span>
                           <span className="text-amber-700 font-bold mx-1">➔</span>
-                          <span>{blk.end_date} <strong className="text-gray-900">({blk.end_time || 'End of Day'})</strong></span>
+                          <span>{formatDateDDMMYYYY(blk.end_date || blk.date)} <strong className="text-gray-900">({blk.end_time ? formatTime12hPlain(blk.end_time) : 'End of Day'})</strong></span>
                         </p>
                       )}
                     </div>
@@ -1852,7 +1853,7 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
                         <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" /> Active Booking Conflict Detected
                       </p>
                       <p className="text-[11px] text-amber-800">
-                        Booking <strong className="font-mono">{liveConflict.booking_ref}</strong> ({liveConflict.customer_name}) is scheduled on {liveConflict.booking_date} ({liveConflict.start_time} - {liveConflict.end_time}). Please reschedule or cancel it first.
+                        Booking <strong className="font-mono">{liveConflict.booking_ref}</strong> ({liveConflict.customer_name}) is scheduled on {formatDateDDMMYYYY(liveConflict.booking_date)} ({formatTime12hPlain(liveConflict.start_time)} – ${formatTime12hPlain(liveConflict.end_time)}). Please reschedule or cancel it first.
                       </p>
                     </div>
                   );
@@ -1864,8 +1865,8 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
                     <Check className="w-4 h-4 text-emerald-600 shrink-0" />
                     <span>
                       {isSingleDay
-                        ? `Pitch will be blocked on ${blockStartDate} from ${blockStartTime} to ${blockEndTime}.`
-                        : `Pitch will be blocked from ${blockStartDate} (${blockStartTime}) to ${blockEndDate} (${blockEndTime}).`}
+                        ? `Pitch will be blocked on ${formatDateDDMMYYYY(blockStartDate)} from ${formatTime12hPlain(blockStartTime)} to ${formatTime12hPlain(blockEndTime)}.`
+                        : `Pitch will be blocked from ${formatDateDDMMYYYY(blockStartDate)} (${formatTime12hPlain(blockStartTime)}) to ${formatDateDDMMYYYY(blockEndDate)} (${formatTime12hPlain(blockEndTime)}).`}
                     </span>
                   </div>
                 );

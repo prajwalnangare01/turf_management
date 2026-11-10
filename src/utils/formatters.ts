@@ -62,3 +62,8 @@ export const formatTimeRange12h = (startTime24: string, endTime24: string): stri
   if (!startTime24 || !endTime24) return '';
   return `${formatTime12h(startTime24)} – ${formatTime12h(endTime24)}`;
 };
+
+export const formatTimeRange12hPlain = (startTime24: string, endTime24: string): string => {
+  if (!startTime24 || !endTime24) return '';
+  return `${formatTime12hPlain(startTime24)} – ${formatTime12hPlain(endTime24)}`;
+};

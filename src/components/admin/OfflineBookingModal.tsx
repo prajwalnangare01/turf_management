@@ -8,6 +8,7 @@ import { SlotEngine } from '../../services/slotEngine';
 import { AdminUser, BookingSource, PaymentMethod, Payment } from '../../types/schema';
 import { normalizeIndianPhone, getVenueDateString } from '../../utils/venueTime';
 import { AlertTriangle, ShieldAlert, PlusCircle, X, Split, KeyRound, Clock } from 'lucide-react';
+import { formatTime12hPlain } from '../../utils/formatters';
 
 interface OfflineBookingModalProps {
   initialCourtId?: string;
@@ -394,7 +395,7 @@ export const OfflineBookingModal: React.FC<OfflineBookingModalProps> = ({
                   const statusLabel = s.status === 'available' ? 'Available' : s.status.toUpperCase();
                   return (
                     <option key={s.start_time} value={s.start_time}>
-                      {s.start_time} - {s.end_time} ({statusLabel} - ₹{s.price})
+                      {formatTime12hPlain(s.start_time)} – {formatTime12hPlain(s.end_time)} ({statusLabel} - ₹{s.price})
                     </option>
                   );
                 })}

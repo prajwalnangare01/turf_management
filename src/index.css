@@ -165,7 +165,7 @@ div[class*="fixed"][class*="inset-0"] *::-webkit-scrollbar {
 /* Dynamic Slot Grid Cards */
 .slot-grid-container {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(136px, 1fr));
   gap: 12px;
 }
 
@@ -178,8 +178,8 @@ div[class*="fixed"][class*="inset-0"] *::-webkit-scrollbar {
 
 .slot-item {
   position: relative;
-  padding: 12px;
-  border-radius: 8px;
+  padding: 11px 12px;
+  border-radius: 12px;
   background: #ffffff;
   border: 1.5px solid var(--outline-variant);
   transition: all 0.2s ease;
@@ -188,7 +188,7 @@ div[class*="fixed"][class*="inset-0"] *::-webkit-scrollbar {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  min-height: 84px;
+  min-height: 88px;
 }
 
 .slot-item:hover:not(.disabled) {

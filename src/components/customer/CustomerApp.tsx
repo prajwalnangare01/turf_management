@@ -11,7 +11,7 @@ import { CheckoutModal } from './CheckoutModal';
 import { BookingConfirmationModal } from './BookingConfirmationModal';
 import { BookingLookupModal } from './BookingLookupModal';
 import { ActiveCustomerHoldModal } from '../common/ActiveCustomerHoldModal';
-import { formatTimeRange12h } from '../../utils/formatters';
+import { formatTimeRange12h, formatTime12hPlain } from '../../utils/formatters';
 import { ChevronRight, Search, UserCheck, User, LogOut, ShieldCheck } from 'lucide-react';
 
 interface CustomerAppProps {
@@ -508,40 +508,40 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
                       ⏰ {c.opening_time} - {c.closing_time}
                     </span>
                     <div className="flex items-center gap-1.5">
+                      <span className="font-headline font-extrabold text-primary text-sm">
+                        ₹{c.base_price_per_hour} <span className="text-[10px] font-normal text-on-surface-variant">/hr</span>
+                      </span>
                       {c.original_price_per_hour && c.original_price_per_hour > c.base_price_per_hour && (
                         <div className="flex items-center gap-1">
-                          <span className="line-through text-on-surface-variant/70 text-xs font-semibold">
+                          <span className="line-through text-slate-400 text-xs font-semibold">
                             ₹{c.original_price_per_hour}
                           </span>
-                          <span className="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0.5 rounded-full font-bold">
+                          <span className="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0.5 rounded-full font-extrabold">
                             {Math.round(((c.original_price_per_hour - c.base_price_per_hour) / c.original_price_per_hour) * 100)}% OFF
                           </span>
                         </div>
                       )}
-                      <span className="font-headline font-extrabold text-primary text-sm">
-                        ₹{c.base_price_per_hour} <span className="text-[10px] font-normal text-on-surface-variant">/hr</span>
-                      </span>
                     </div>
                   </div>
 
                   {c.peak_enabled && (
                     <div className="text-[11px] text-amber-900 bg-amber-50 px-2.5 py-1 rounded-xl border border-amber-200/80 flex items-center justify-between font-medium">
-                      <span>🔥 Evening Peak ({c.peak_start_time}-{c.peak_end_time})</span>
+                      <span>🔥 Evening Peak ({formatTime12hPlain(c.peak_start_time || '18:00')} – {formatTime12hPlain(c.peak_end_time || '23:00')})</span>
                       <div className="flex items-center gap-1.5">
-                        {c.peak_offer_price_per_hour && c.peak_offer_price_per_hour !== c.peak_price_per_hour ? (
+                        {c.peak_offer_price_per_hour && c.peak_offer_price_per_hour !== (c.peak_price_per_hour || 1800) ? (
                           <>
                             <span className="line-through text-amber-900/60 font-semibold text-xs">
-                              ₹{Math.max(c.peak_price_per_hour, c.peak_offer_price_per_hour)}
+                              ₹{Math.max(c.peak_price_per_hour || 1800, c.peak_offer_price_per_hour)}
                             </span>
                             <span className="bg-emerald-100 text-emerald-800 text-[9px] px-1.5 py-0.2 rounded font-black">
-                              {Math.round((Math.abs(c.peak_price_per_hour - c.peak_offer_price_per_hour) / Math.max(c.peak_price_per_hour, c.peak_offer_price_per_hour)) * 100)}% OFF
+                              {Math.round((Math.abs((c.peak_price_per_hour || 1800) - c.peak_offer_price_per_hour) / Math.max(c.peak_price_per_hour || 1800, c.peak_offer_price_per_hour)) * 100)}% OFF
                             </span>
                             <strong className="font-extrabold text-amber-950">
-                              ₹{Math.min(c.peak_price_per_hour, c.peak_offer_price_per_hour)}/hr
+                              ₹{Math.min(c.peak_price_per_hour || 1800, c.peak_offer_price_per_hour)}/hr
                             </strong>
                           </>
                         ) : (
-                          <strong className="font-extrabold">₹{c.peak_price_per_hour}/hr</strong>
+                          <strong className="font-extrabold">₹{c.peak_price_per_hour || 1800}/hr</strong>
                         )}
                       </div>
                     </div>

@@ -50,11 +50,14 @@ export class SupabaseService {
             original_price_per_hour: c.original_price_per_hour ? Number(c.original_price_per_hour) : undefined,
             base_price_per_hour: Number(c.base_price_per_hour) || 1200,
             saturday_price_per_hour: Number(c.saturday_price_per_hour) || 1600,
+            saturday_offer_price_per_hour: c.saturday_offer_price_per_hour ? Number(c.saturday_offer_price_per_hour) : undefined,
             sunday_price_per_hour: Number(c.sunday_price_per_hour) || 1600,
+            sunday_offer_price_per_hour: c.sunday_offer_price_per_hour ? Number(c.sunday_offer_price_per_hour) : undefined,
             peak_enabled: Boolean(c.peak_enabled),
             peak_start_time: typeof c.peak_start_time === 'string' ? c.peak_start_time.slice(0, 5) : '18:00',
             peak_end_time: typeof c.peak_end_time === 'string' ? c.peak_end_time.slice(0, 5) : '23:00',
             peak_price_per_hour: Number(c.peak_price_per_hour) || 1800,
+            peak_offer_price_per_hour: c.peak_offer_price_per_hour ? Number(c.peak_offer_price_per_hour) : undefined,
             sport_ids: matchingSports.length > 0 ? matchingSports : ['sp-football']
           };
         });

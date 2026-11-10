@@ -8,7 +8,7 @@ import { CouponService } from '../../services/couponService';
 import { SupabaseSyncService } from '../../services/supabaseSyncService';
 import { normalizeIndianPhone } from '../../utils/venueTime';
 import { ShieldCheck, Tag, CreditCard, Smartphone, AlertTriangle, X, Timer, PersonStanding, Clock, RefreshCw } from 'lucide-react';
-import { formatTimeRange12h, formatDateDDMMYYYY } from '../../utils/formatters';
+import { formatTimeRange12h, formatTime12hPlain, formatTimeRange12hPlain, formatDateDDMMYYYY } from '../../utils/formatters';
 
 interface CheckoutModalProps {
   court: Court;
@@ -239,7 +239,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
         if (hasConflict) {
           setIsProcessingPayment(false);
-          setPaymentError(`Slot interval ${block.start_time} - ${block.end_time} is no longer available. Please select another slot.`);
+          setPaymentError(`Slot interval ${formatTimeRange12hPlain(block.start_time, block.end_time)} is no longer available. Please select another slot.`);
           return;
         }
       }
@@ -249,7 +249,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         const lock = RedisLockService.getLock(court.id, dateStr, slot.start_time);
         if (lock && lock.locked_by !== sessionId && (!currentCustomer || lock.locked_by !== currentCustomer.id)) {
           setIsProcessingPayment(false);
-          setPaymentError(`Slot ${slot.start_time} reservation hold expired. Please return to grid and select again.`);
+          setPaymentError(`Slot ${formatTime12hPlain(slot.start_time)} reservation hold expired. Please return to grid and select again.`);
           return;
         }
       }
