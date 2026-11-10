@@ -5,7 +5,7 @@ import { PostgresEngine } from '../../services/postgresEngine';
 import { SupabaseSyncService } from '../../services/supabaseSyncService';
 import { AdminUser, Court, BlockedSlot, Sport } from '../../types/schema';
 import { ConfirmModal } from '../common/ConfirmModal';
-import { Settings, ShieldAlert, Trash2, PlusCircle, Edit3, X, Check, Calendar, Zap, Clock, AlertTriangle } from 'lucide-react';
+import { Settings, ShieldAlert, Trash2, PlusCircle, Edit3, X, Check, Calendar, Zap, Clock, AlertTriangle, Tag } from 'lucide-react';
 
 interface CourtPricingManagerProps {
   currentAdmin: AdminUser;
@@ -149,6 +149,7 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
   const [showAddCourtModal, setShowAddCourtModal] = useState(false);
   const [newCourtName, setNewCourtName] = useState('');
   const [selectedSportIds, setSelectedSportIds] = useState<string[]>([sports[0]?.id || 'sp-football']);
+  const [newOriginalPrice, setNewOriginalPrice] = useState<number | ''>('');
   const [newPrice, setNewPrice] = useState(1200);
   const [newSatPrice, setNewSatPrice] = useState(1600);
   const [newSunPrice, setNewSunPrice] = useState(1600);
@@ -166,6 +167,7 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
   const [editingCourt, setEditingCourt] = useState<Court | null>(null);
   const [editName, setEditName] = useState('');
   const [editSportIds, setEditSportIds] = useState<string[]>([]);
+  const [editOriginalPrice, setEditOriginalPrice] = useState<number | ''>('');
   const [editPrice, setEditPrice] = useState(1200);
   const [editSatPrice, setEditSatPrice] = useState(1600);
   const [editSunPrice, setEditSunPrice] = useState(1600);
@@ -191,12 +193,14 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
   const canEdit = true; // Add, Edit, and Delete features enabled for Admin Panel
 
   const executeAddCourt = () => {
+    const origPriceNum = newOriginalPrice !== '' ? Number(newOriginalPrice) : undefined;
     const newCourt: Court = {
       id: `crt-${Date.now()}`,
       venue_id: store.getVenue().id,
       name: newCourtName.trim(),
       sport_ids: selectedSportIds,
       base_price_per_hour: Number(newPrice) || 1000,
+      original_price_per_hour: origPriceNum && origPriceNum > 0 ? origPriceNum : undefined,
       saturday_price_per_hour: Number(newSatPrice) || Number(newPrice) || 1200,
       sunday_price_per_hour: Number(newSunPrice) || Number(newPrice) || 1200,
       peak_enabled: newPeakEnabled,
@@ -213,10 +217,14 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
     const updatedCourts = [...courts, newCourt];
     store.setCourts(updatedCourts);
     setCourts(updatedCourts);
+    SupabaseSyncService.syncCourtToSupabase(newCourt).catch(err => {
+      console.warn('❌ [CourtPricingManager] Error syncing new court to Supabase:', err);
+    });
 
     AuditLogger.log(currentAdmin.id, 'CREATE_COURT', 'Court', newCourt.id, null, newCourt);
 
     setNewCourtName('');
+    setNewOriginalPrice('');
     setNewPrice(1200);
     setNewSatPrice(1600);
     setNewSunPrice(1600);
@@ -275,6 +283,7 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
     setEditingCourt(court);
     setEditName(court.name);
     setEditSportIds(court.sport_ids);
+    setEditOriginalPrice(court.original_price_per_hour ?? '');
     setEditPrice(court.base_price_per_hour);
     setEditSatPrice(court.saturday_price_per_hour ?? court.base_price_per_hour);
     setEditSunPrice(court.sunday_price_per_hour ?? court.base_price_per_hour);
@@ -291,11 +300,13 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
 
   const executeUpdateCourt = () => {
     if (!editingCourt) return;
+    const origPriceNum = editOriginalPrice !== '' ? Number(editOriginalPrice) : undefined;
     const updatedCourt: Court = {
       ...editingCourt,
       name: editName.trim(),
       sport_ids: editSportIds,
       base_price_per_hour: Number(editPrice),
+      original_price_per_hour: origPriceNum && origPriceNum > 0 ? origPriceNum : undefined,
       saturday_price_per_hour: Number(editSatPrice),
       sunday_price_per_hour: Number(editSunPrice),
       peak_enabled: editPeakEnabled,
@@ -312,6 +323,9 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
     const updatedCourts = courts.map(c => (c.id === editingCourt.id ? updatedCourt : c));
     store.setCourts(updatedCourts);
     setCourts(updatedCourts);
+    SupabaseSyncService.syncCourtToSupabase(updatedCourt).catch(err => {
+      console.warn('❌ [CourtPricingManager] Error syncing updated court to Supabase:', err);
+    });
 
     AuditLogger.log(currentAdmin.id, 'UPDATE_COURT', 'Court', editingCourt.id, editingCourt, updatedCourt);
     setEditingCourt(null);
@@ -551,9 +565,21 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
                       ))}
                     </div>
                   </div>
-                  <span className="text-xs font-headline font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-lg shrink-0">
-                    Mon-Fri: ₹{court.base_price_per_hour}/hr
-                  </span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {court.original_price_per_hour && court.original_price_per_hour > court.base_price_per_hour && (
+                      <span className="text-[11px] line-through text-on-surface-variant/70 font-semibold">
+                        ₹{court.original_price_per_hour}
+                      </span>
+                    )}
+                    <span className="text-xs font-headline font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-lg flex items-center gap-1">
+                      Mon-Fri: ₹{court.base_price_per_hour}/hr
+                      {court.original_price_per_hour && court.original_price_per_hour > court.base_price_per_hour && (
+                        <span className="ml-1 text-[10px] text-emerald-800 bg-emerald-100 font-extrabold px-1.5 py-0.5 rounded-full">
+                          {Math.round(((court.original_price_per_hour - court.base_price_per_hour) / court.original_price_per_hour) * 100)}% OFF
+                        </span>
+                      )}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Pricing Rules Overview Badges */}
@@ -835,22 +861,70 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
               </div>
 
               {/* Day-based Pricing Configuration Box */}
-              <div className="bg-surface-container-low p-3.5 rounded-xl border border-outline-variant/40 space-y-2.5">
-                <h4 className="font-headline font-bold text-xs text-primary flex items-center gap-1.5 uppercase tracking-wider">
-                  <Calendar className="w-4 h-4 text-primary" /> Weekday & Weekend Base Rates
-                </h4>
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-on-surface-variant font-headline font-bold mb-1">Weekday (Mon-Fri) *</label>
-                    <input
-                      type="number"
-                      required
-                      min={100}
-                      value={newPrice}
-                      onChange={e => setNewPrice(Number(e.target.value))}
-                      className="form-input font-bold text-primary"
-                    />
+              <div className="bg-surface-container-low p-3.5 rounded-xl border border-outline-variant/40 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-headline font-bold text-xs text-primary flex items-center gap-1.5 uppercase tracking-wider">
+                    <Calendar className="w-4 h-4 text-primary" /> Weekday & Weekend Base Rates
+                  </h4>
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
+                    Discount UI Enabled
+                  </span>
+                </div>
+
+                {/* Original vs Discounted Rate inputs */}
+                <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl space-y-2">
+                  <span className="text-[11px] font-bold text-emerald-950 flex items-center gap-1.5">
+                    🏷️ Pitch Base Pricing & UI Discount Strike-through
+                  </span>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-on-surface-variant font-headline font-bold text-[11px] mb-1">
+                        Original Price / MRP (₹/hr)
+                      </label>
+                      <input
+                        type="number"
+                        placeholder="e.g. 1500"
+                        min={0}
+                        value={newOriginalPrice}
+                        onChange={e => setNewOriginalPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                        className="form-input font-bold text-on-surface-variant bg-white"
+                      />
+                      <span className="text-[10px] text-on-surface-variant/70 block mt-0.5">
+                        Will show as strikethrough (cut out) on the website
+                      </span>
+                    </div>
+
+                    <div>
+                      <label className="block text-emerald-900 font-headline font-bold text-[11px] mb-1">
+                        Discounted / Active Price (₹/hr) *
+                      </label>
+                      <input
+                        type="number"
+                        required
+                        min={100}
+                        value={newPrice}
+                        onChange={e => setNewPrice(Number(e.target.value))}
+                        className="form-input font-bold text-emerald-900 bg-white border-emerald-400"
+                      />
+                      <span className="text-[10px] text-emerald-700 block mt-0.5">
+                        Actual booking price charged to customers
+                      </span>
+                    </div>
                   </div>
+
+                  {Number(newOriginalPrice) > Number(newPrice) && (
+                    <div className="flex items-center gap-2 pt-1 text-xs font-bold text-emerald-800 border-t border-emerald-200/60">
+                      <span>UI Preview:</span>
+                      <span className="line-through text-on-surface-variant">₹{newOriginalPrice}</span>
+                      <span className="text-emerald-900 font-extrabold text-sm">₹{newPrice}/hr</span>
+                      <span className="bg-emerald-200/70 text-emerald-900 text-[10px] px-2 py-0.5 rounded-full font-black">
+                        {Math.round(((Number(newOriginalPrice) - Number(newPrice)) / Number(newOriginalPrice)) * 100)}% OFF (Save ₹{Number(newOriginalPrice) - Number(newPrice)})
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-1">
                   <div>
                     <label className="block text-on-surface-variant font-headline font-bold mb-1">Saturday (Sat) *</label>
                     <input
@@ -1173,18 +1247,62 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
                 <h4 className="font-headline font-bold text-xs text-primary flex items-center gap-1.5 uppercase tracking-wider">
                   <Calendar className="w-4 h-4 text-primary" /> Weekday & Weekend Base Rates
                 </h4>
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-on-surface-variant font-headline font-bold mb-1">Weekday (Mon-Fri) *</label>
-                    <input
-                      type="number"
-                      required
-                      min={100}
-                      value={editPrice}
-                      onChange={e => setEditPrice(Number(e.target.value))}
-                      className="form-input font-bold text-primary"
-                    />
+
+                {/* Strikethrough Discount Configuration */}
+                <div className="bg-emerald-50/70 border border-emerald-300/70 rounded-lg p-3 space-y-2">
+                  <div className="flex items-center gap-1.5 text-emerald-950 font-bold text-xs">
+                    <Tag className="w-4 h-4 text-emerald-700" />
+                    <span>Customer Discount & Strikethrough Pricing</span>
                   </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-on-surface-variant font-headline font-bold text-[11px] mb-1">
+                        Original Price / MRP (₹/hr)
+                      </label>
+                      <input
+                        type="number"
+                        placeholder="e.g. 1500"
+                        min={0}
+                        value={editOriginalPrice}
+                        onChange={e => setEditOriginalPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                        className="form-input font-bold text-on-surface-variant bg-white"
+                      />
+                      <span className="text-[10px] text-on-surface-variant/70 block mt-0.5">
+                        Will show as strikethrough (cut out) on the website
+                      </span>
+                    </div>
+
+                    <div>
+                      <label className="block text-emerald-900 font-headline font-bold text-[11px] mb-1">
+                        Discounted / Active Price (₹/hr) *
+                      </label>
+                      <input
+                        type="number"
+                        required
+                        min={100}
+                        value={editPrice}
+                        onChange={e => setEditPrice(Number(e.target.value))}
+                        className="form-input font-bold text-emerald-900 bg-white border-emerald-400"
+                      />
+                      <span className="text-[10px] text-emerald-700 block mt-0.5">
+                        Actual booking price charged to customers
+                      </span>
+                    </div>
+                  </div>
+
+                  {Number(editOriginalPrice) > Number(editPrice) && (
+                    <div className="flex items-center gap-2 pt-1 text-xs font-bold text-emerald-800 border-t border-emerald-200/60">
+                      <span>UI Preview:</span>
+                      <span className="line-through text-on-surface-variant">₹{editOriginalPrice}</span>
+                      <span className="text-emerald-900 font-extrabold text-sm">₹{editPrice}/hr</span>
+                      <span className="bg-emerald-200/70 text-emerald-900 text-[10px] px-2 py-0.5 rounded-full font-black">
+                        {Math.round(((Number(editOriginalPrice) - Number(editPrice)) / Number(editOriginalPrice)) * 100)}% OFF (Save ₹{Number(editOriginalPrice) - Number(editPrice)})
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-1">
                   <div>
                     <label className="block text-on-surface-variant font-headline font-bold mb-1">Saturday (Sat) *</label>
                     <input

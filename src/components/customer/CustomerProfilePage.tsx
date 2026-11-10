@@ -7,11 +7,10 @@ import { CancelBookingConfirmModal } from './CancelBookingConfirmModal';
 import { 
   User, Phone, Mail, Calendar, ArrowLeft, ShieldCheck, Ticket, 
   XCircle, CheckCircle2, Clock, Award, LogOut, Edit2, Save, X, KeyRound, RotateCcw,
-  Download, Printer, AlertCircle, Send, Sparkles
+  Download, Printer, AlertCircle, Sparkles
 } from 'lucide-react';
 import { EmailVerificationService } from '../../services/emailVerificationService';
 import { CustomerAuthService } from '../../services/customerAuthService';
-import { EmailService } from '../../services/emailService';
 import { SupabaseSyncService } from '../../services/supabaseSyncService';
 
 interface CustomerProfilePageProps {
@@ -41,7 +40,6 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
   const [emailOtpError, setEmailOtpError] = useState<string | null>(null);
   const [isSendingEmailOtp, setIsSendingEmailOtp] = useState(false);
   const [isConfirmingEmailOtp, setIsConfirmingEmailOtp] = useState(false);
-  const [isResendingPassEmail, setIsResendingPassEmail] = useState(false);
 
   // Selected booking for Entry Pass Modal
   const [passModalBooking, setPassModalBooking] = useState<Booking | null>(null);
@@ -269,37 +267,6 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
       if (res.code) setEmailOtpCode(res.code);
     } else {
       setEmailOtpError(res.message || 'Could not resend email verification code.');
-    }
-  };
-
-  const handleResendPassEmail = async (booking: Booking) => {
-    const custEmail = currentCustomer.email || booking.customer_id;
-    if (!currentCustomer.email) {
-      alert('Please add and verify your email address in your profile first to receive email passes.');
-      return;
-    }
-
-    setIsResendingPassEmail(true);
-    const court = courts.find(c => c.id === booking.court_id);
-    const courtName = court?.name || 'Main Pitch';
-
-    try {
-      const res = await EmailService.sendBookingConfirmation({
-        booking,
-        customer: currentCustomer,
-        courtName,
-        venue
-      });
-
-      setIsResendingPassEmail(false);
-      if (res.success) {
-        alert(`Booking confirmation & Gate Pass email sent via Resend to ${currentCustomer.email}!`);
-      } else {
-        alert(`Notice: ${res.error || 'Email dispatch completed.'}`);
-      }
-    } catch (err: any) {
-      setIsResendingPassEmail(false);
-      alert('Error sending email pass: ' + err.message);
     }
   };
 
@@ -776,16 +743,6 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
                   <Printer className="w-4 h-4 text-slate-700" /> Print Pass
                 </button>
 
-                {/* Email Gate Pass via Resend */}
-                <button
-                  onClick={() => handleResendPassEmail(passModalBooking)}
-                  disabled={isResendingPassEmail}
-                  className="btn-secondary text-xs px-3.5 py-2.5 font-headline font-bold flex items-center gap-1.5 border-slate-300 cursor-pointer"
-                  title="Resend official Gate Pass & Confirmation email via Resend"
-                >
-                  <Send className={`w-3.5 h-3.5 ${isResendingPassEmail ? 'animate-spin' : 'text-primary'}`} />
-                  {isResendingPassEmail ? 'Sending...' : 'Email Gate Pass'}
-                </button>
               </div>
 
               <button
