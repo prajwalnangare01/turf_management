@@ -223,7 +223,7 @@ export class EmailService {
     }
 
     const timeRangeStr = `${this.formatTime12h(booking.start_time)} - ${this.formatTime12h(booking.end_time)}`;
-    const subject = `⏰ Kickoff in 1 Hour: ${court?.name || 'Pitch'} at ${booking.start_time} (${venue.name})`;
+    const subject = `⏰ Kickoff in 1 Hour: ${court?.name || 'Pitch'} at ${this.formatTime12h(booking.start_time)} (${venue.name})`;
 
     const text = [
       `TURFFLOW - MATCHDAY REMINDER (1 HOUR TO KICKOFF)`,
@@ -231,7 +231,7 @@ export class EmailService {
       `Your pitch slot at ${venue.name} starts in 1 hour!`,
       ``,
       `Court: ${court?.name || 'Main Pitch'}`,
-      `Date: ${booking.booking_date} (${timeRangeStr})`,
+      `Date: ${this.formatDate(booking.booking_date)} (${timeRangeStr})`,
       `Gate OTP Pass: ${otpCode}`,
       `Address: ${venue.address}`,
       ``,
@@ -281,7 +281,7 @@ export class EmailService {
           </tr>
           <tr>
             <td style="padding: 12px 16px; font-size: 13px; color: #64748b; border-bottom: 1px solid #f1f5f9;">Date & Time</td>
-            <td style="padding: 12px 16px; font-size: 13px; font-weight: 700; color: #1e40af; border-bottom: 1px solid #f1f5f9;">${booking.booking_date} &bull; ${timeRangeStr}</td>
+            <td style="padding: 12px 16px; font-size: 13px; font-weight: 700; color: #1e40af; border-bottom: 1px solid #f1f5f9;">${this.formatDate(booking.booking_date)} &bull; ${timeRangeStr}</td>
           </tr>
           <tr>
             <td style="padding: 12px 16px; font-size: 13px; color: #64748b;">Venue Location</td>

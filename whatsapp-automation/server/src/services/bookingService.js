@@ -7,6 +7,7 @@ import { EmailService } from './emailService.js';
 import { SmsService } from './smsService.js';
 import { SlotEngine } from './slotEngine.js';
 import { SupabaseService } from './supabaseService.js';
+import { WhatsAppFormatter } from '../utils/whatsappFormatter.js';
 import { getVenueDateString, getVenueMinutesFromMidnight } from '../utils/venueTime.js';
 
 export class BookingService {
@@ -478,7 +479,7 @@ export class BookingService {
     return {
       success: true,
       booking,
-      message: `Rescheduled successfully to ${newDate} at ${newStartTime}!`
+      message: `Rescheduled successfully to ${WhatsAppFormatter.formatDate(newDate)} at ${WhatsAppFormatter.formatTime(newStartTime)}!`
     };
   }
 
@@ -498,7 +499,7 @@ export class BookingService {
         // Trigger at minute 5 to 15 (1 min after hold expires)
         if (ageMinutes >= 5 && ageMinutes <= 15) {
           b.nudge_sent = true;
-          const nudgeMsg = `👋 Hey ${b.customer_name || 'Captain'}! Your 5-minute reservation hold on ${b.court_name} (${b.start_time}) just expired. Would you like us to hold it for another 5 minutes, or check a different time? ⚽`;
+          const nudgeMsg = `👋 Hey ${b.customer_name || 'Captain'}! Your 5-minute reservation hold on ${b.court_name} (${WhatsAppFormatter.formatTime(b.start_time)}) just expired. Would you like us to hold it for another 5 minutes, or check a different time? ⚽`;
           NotificationService.sendWhatsAppMessage(b.customer_phone, nudgeMsg);
           nudgesSent.push({ bookingRef: b.booking_ref, phone: b.customer_phone, message: nudgeMsg });
         }
