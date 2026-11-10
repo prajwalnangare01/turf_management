@@ -1,6 +1,7 @@
 // SMS Service for TurfFlow Backend Server
 // Supports Fast2SMS (India), MSG91, Twilio, and Dev Simulation
 import { store } from '../data/store.js';
+import { WhatsAppFormatter } from '../utils/whatsappFormatter.js';
 
 export class SmsService {
   static DEFAULT_SENDER_ID = 'TRFFLW';
@@ -164,7 +165,7 @@ export class SmsService {
     const message =
       `🎉 Booking Confirmed! Ref: ${booking.booking_ref}\n` +
       `Pitch: ${courtName} (${venue.name})\n` +
-      `Date: ${booking.booking_date} @ ${booking.start_time} - ${booking.end_time}\n` +
+      `Date: ${WhatsAppFormatter.formatDate(booking.booking_date)} @ ${WhatsAppFormatter.formatTime(booking.start_time)} – ${WhatsAppFormatter.formatTime(booking.end_time)}\n` +
       `Gate Pass OTP: ${otpCode}\n` +
       `Paid: ₹${booking.total_amount}\n` +
       `Rubber sole turf shoes only. See you on the turf!`;

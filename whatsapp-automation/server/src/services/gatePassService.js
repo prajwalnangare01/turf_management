@@ -239,11 +239,11 @@ export class GatePassService {
         </div>
         <div class="info-item">
           <span class="info-label">Booking Date</span>
-          <span class="info-value">${booking.booking_date}</span>
+          <span class="info-value">${WhatsAppFormatter.formatDate(booking.booking_date)}</span>
         </div>
         <div class="info-item">
           <span class="info-label">Slot Time</span>
-          <span class="info-value">${booking.start_time} — ${booking.end_time}</span>
+          <span class="info-value">${WhatsAppFormatter.formatTime(booking.start_time)} — ${WhatsAppFormatter.formatTime(booking.end_time)}</span>
         </div>
         <div class="info-item">
           <span class="info-label">Customer Name</span>
