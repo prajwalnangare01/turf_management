@@ -7,8 +7,9 @@ import { SupabaseSyncService } from './services/supabaseSyncService';
 
 export const App: React.FC = () => {
   const checkIsAdminRoute = () => {
+    const params = new URLSearchParams(window.location.search);
     return (
-      window.location.search.includes('admin') ||
+      params.get('admin') === 'true' ||
       window.location.hash.includes('admin') ||
       window.location.pathname.startsWith('/admin')
     );
