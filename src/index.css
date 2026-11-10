@@ -95,14 +95,35 @@ h1, h2, h3, h4, h5, h6 {
   background: var(--primary);
 }
 
-.no-scrollbar::-webkit-scrollbar {
+/* Universal scrollbar suppression for modals, popups, dialogs, drawers, and elements with .no-scrollbar */
+.no-scrollbar,
+.no-scrollbar *,
+.modal-overlay,
+.modal-overlay *,
+[role="dialog"],
+[role="dialog"] *,
+.animate-modalScaleIn,
+.animate-modalScaleIn *,
+div[class*="fixed"][class*="inset-0"],
+div[class*="fixed"][class*="inset-0"] * {
+  -ms-overflow-style: none !important; /* IE and Edge */
+  scrollbar-width: none !important; /* Firefox */
+}
+
+.no-scrollbar::-webkit-scrollbar,
+.no-scrollbar *::-webkit-scrollbar,
+.modal-overlay::-webkit-scrollbar,
+.modal-overlay *::-webkit-scrollbar,
+[role="dialog"]::-webkit-scrollbar,
+[role="dialog"] *::-webkit-scrollbar,
+.animate-modalScaleIn::-webkit-scrollbar,
+.animate-modalScaleIn *::-webkit-scrollbar,
+div[class*="fixed"][class*="inset-0"]::-webkit-scrollbar,
+div[class*="fixed"][class*="inset-0"] *::-webkit-scrollbar {
   display: none !important;
   width: 0 !important;
   height: 0 !important;
-}
-.no-scrollbar {
-  -ms-overflow-style: none !important;
-  scrollbar-width: none !important;
+  background: transparent !important;
 }
 
 /* Glassmorphism Panel */
