@@ -152,11 +152,14 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
   const [newOriginalPrice, setNewOriginalPrice] = useState<number | ''>('');
   const [newPrice, setNewPrice] = useState(1200);
   const [newSatPrice, setNewSatPrice] = useState(1600);
+  const [newSatOfferPrice, setNewSatOfferPrice] = useState<number | ''>('');
   const [newSunPrice, setNewSunPrice] = useState(1600);
+  const [newSunOfferPrice, setNewSunOfferPrice] = useState<number | ''>('');
   const [newPeakEnabled, setNewPeakEnabled] = useState(true);
   const [newPeakStart, setNewPeakStart] = useState('18:00');
   const [newPeakEnd, setNewPeakEnd] = useState('23:00');
   const [newPeakPrice, setNewPeakPrice] = useState(1800);
+  const [newPeakOfferPrice, setNewPeakOfferPrice] = useState<number | ''>('');
   const [newDuration, setNewDuration] = useState(60);
   const [newOpening, setNewOpening] = useState('06:00');
   const [newClosing, setNewClosing] = useState('23:00');
@@ -170,11 +173,14 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
   const [editOriginalPrice, setEditOriginalPrice] = useState<number | ''>('');
   const [editPrice, setEditPrice] = useState(1200);
   const [editSatPrice, setEditSatPrice] = useState(1600);
+  const [editSatOfferPrice, setEditSatOfferPrice] = useState<number | ''>('');
   const [editSunPrice, setEditSunPrice] = useState(1600);
+  const [editSunOfferPrice, setEditSunOfferPrice] = useState<number | ''>('');
   const [editPeakEnabled, setEditPeakEnabled] = useState(true);
   const [editPeakStart, setEditPeakStart] = useState('18:00');
   const [editPeakEnd, setEditPeakEnd] = useState('23:00');
   const [editPeakPrice, setEditPeakPrice] = useState(1800);
+  const [editPeakOfferPrice, setEditPeakOfferPrice] = useState<number | ''>('');
   const [editDuration, setEditDuration] = useState(60);
   const [editOpening, setEditOpening] = useState('06:00');
   const [editClosing, setEditClosing] = useState('23:00');
@@ -194,6 +200,9 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
 
   const executeAddCourt = () => {
     const origPriceNum = newOriginalPrice !== '' ? Number(newOriginalPrice) : undefined;
+    const satOfferNum = newSatOfferPrice !== '' ? Number(newSatOfferPrice) : undefined;
+    const sunOfferNum = newSunOfferPrice !== '' ? Number(newSunOfferPrice) : undefined;
+    const peakOfferNum = newPeakOfferPrice !== '' ? Number(newPeakOfferPrice) : undefined;
     const newCourt: Court = {
       id: `crt-${Date.now()}`,
       venue_id: store.getVenue().id,
@@ -202,11 +211,14 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
       base_price_per_hour: Number(newPrice) || 1000,
       original_price_per_hour: origPriceNum && origPriceNum > 0 ? origPriceNum : undefined,
       saturday_price_per_hour: Number(newSatPrice) || Number(newPrice) || 1200,
+      saturday_offer_price_per_hour: satOfferNum && satOfferNum > 0 ? satOfferNum : undefined,
       sunday_price_per_hour: Number(newSunPrice) || Number(newPrice) || 1200,
+      sunday_offer_price_per_hour: sunOfferNum && sunOfferNum > 0 ? sunOfferNum : undefined,
       peak_enabled: newPeakEnabled,
       peak_start_time: newPeakStart,
       peak_end_time: newPeakEnd,
       peak_price_per_hour: Number(newPeakPrice) || 1800,
+      peak_offer_price_per_hour: peakOfferNum && peakOfferNum > 0 ? peakOfferNum : undefined,
       slot_duration_minutes: Number(newDuration) || 60,
       opening_time: newOpening || '06:00',
       closing_time: newClosing || '23:00',
@@ -227,7 +239,11 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
     setNewOriginalPrice('');
     setNewPrice(1200);
     setNewSatPrice(1600);
+    setNewSatOfferPrice('');
     setNewSunPrice(1600);
+    setNewSunOfferPrice('');
+    setNewPeakPrice(1800);
+    setNewPeakOfferPrice('');
     setShowAddCourtModal(false);
     closeConfirm();
   };
@@ -286,11 +302,14 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
     setEditOriginalPrice(court.original_price_per_hour ?? '');
     setEditPrice(court.base_price_per_hour);
     setEditSatPrice(court.saturday_price_per_hour ?? court.base_price_per_hour);
+    setEditSatOfferPrice(court.saturday_offer_price_per_hour ?? '');
     setEditSunPrice(court.sunday_price_per_hour ?? court.base_price_per_hour);
+    setEditSunOfferPrice(court.sunday_offer_price_per_hour ?? '');
     setEditPeakEnabled(court.peak_enabled ?? true);
     setEditPeakStart(court.peak_start_time || '18:00');
     setEditPeakEnd(court.peak_end_time || '23:00');
     setEditPeakPrice(court.peak_price_per_hour || 1800);
+    setEditPeakOfferPrice(court.peak_offer_price_per_hour ?? '');
     setEditDuration(court.slot_duration_minutes);
     setEditOpening(court.opening_time);
     setEditClosing(court.closing_time);
@@ -301,6 +320,9 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
   const executeUpdateCourt = () => {
     if (!editingCourt) return;
     const origPriceNum = editOriginalPrice !== '' ? Number(editOriginalPrice) : undefined;
+    const satOfferNum = editSatOfferPrice !== '' ? Number(editSatOfferPrice) : undefined;
+    const sunOfferNum = editSunOfferPrice !== '' ? Number(editSunOfferPrice) : undefined;
+    const peakOfferNum = editPeakOfferPrice !== '' ? Number(editPeakOfferPrice) : undefined;
     const updatedCourt: Court = {
       ...editingCourt,
       name: editName.trim(),
@@ -308,11 +330,14 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
       base_price_per_hour: Number(editPrice),
       original_price_per_hour: origPriceNum && origPriceNum > 0 ? origPriceNum : undefined,
       saturday_price_per_hour: Number(editSatPrice),
+      saturday_offer_price_per_hour: satOfferNum && satOfferNum > 0 ? satOfferNum : undefined,
       sunday_price_per_hour: Number(editSunPrice),
+      sunday_offer_price_per_hour: sunOfferNum && sunOfferNum > 0 ? sunOfferNum : undefined,
       peak_enabled: editPeakEnabled,
       peak_start_time: editPeakStart,
       peak_end_time: editPeakEnd,
       peak_price_per_hour: Number(editPeakPrice),
+      peak_offer_price_per_hour: peakOfferNum && peakOfferNum > 0 ? peakOfferNum : undefined,
       slot_duration_minutes: Number(editDuration),
       opening_time: editOpening,
       closing_time: editClosing,
@@ -590,10 +615,24 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
                     </span>
                     <div className="flex items-center gap-2">
                       <span className="bg-amber-100 text-amber-900 font-extrabold px-2 py-0.5 rounded text-[11px]">
-                        Sat: ₹{satPrice}/hr
+                        Sat: {court.saturday_offer_price_per_hour && court.saturday_offer_price_per_hour !== satPrice ? (
+                          <>
+                            <span className="line-through text-amber-700/70 mr-1 font-semibold">₹{Math.max(satPrice, court.saturday_offer_price_per_hour)}</span>
+                            ₹{Math.min(satPrice, court.saturday_offer_price_per_hour)}/hr
+                          </>
+                        ) : (
+                          `₹${satPrice}/hr`
+                        )}
                       </span>
                       <span className="bg-amber-100 text-amber-900 font-extrabold px-2 py-0.5 rounded text-[11px]">
-                        Sun: ₹{sunPrice}/hr
+                        Sun: {court.sunday_offer_price_per_hour && court.sunday_offer_price_per_hour !== sunPrice ? (
+                          <>
+                            <span className="line-through text-amber-700/70 mr-1 font-semibold">₹{Math.max(sunPrice, court.sunday_offer_price_per_hour)}</span>
+                            ₹{Math.min(sunPrice, court.sunday_offer_price_per_hour)}/hr
+                          </>
+                        ) : (
+                          `₹${sunPrice}/hr`
+                        )}
                       </span>
                     </div>
                   </div>
@@ -605,7 +644,16 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
                     </span>
                     {court.peak_enabled ? (
                       <span className="bg-amber-600 text-white font-extrabold px-2 py-0.5 rounded text-[10px] tracking-wide uppercase">
-                        {court.peak_start_time} - {court.peak_end_time} (₹{court.peak_price_per_hour}/hr)
+                        {court.peak_start_time} - {court.peak_end_time} ({
+                          court.peak_offer_price_per_hour && court.peak_offer_price_per_hour !== court.peak_price_per_hour ? (
+                            <>
+                              <span className="line-through opacity-75 mr-1 font-semibold">₹{Math.max(court.peak_price_per_hour || 0, court.peak_offer_price_per_hour || 0)}</span>
+                              ₹{Math.min(court.peak_price_per_hour || 0, court.peak_offer_price_per_hour || 0)}/hr
+                            </>
+                          ) : (
+                            `₹${court.peak_price_per_hour}/hr`
+                          )
+                        })
                       </span>
                     ) : (
                       <span className="text-on-surface-variant/70 italic text-[11px]">Standard Rates</span>
@@ -924,28 +972,87 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 pt-1">
-                  <div>
-                    <label className="block text-on-surface-variant font-headline font-bold mb-1">Saturday (Sat) *</label>
-                    <input
-                      type="number"
-                      required
-                      min={100}
-                      value={newSatPrice}
-                      onChange={e => setNewSatPrice(Number(e.target.value))}
-                      className="form-input font-bold text-amber-900 bg-amber-50/50 border-amber-300"
-                    />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  {/* Saturday */}
+                  <div className="bg-white p-3 rounded-xl border border-amber-300/70 shadow-xs space-y-1.5">
+                    <label className="block text-amber-950 font-headline font-bold text-xs flex items-center justify-between">
+                      <span>Saturday (Sat) Rate *</span>
+                      <span className="text-[10px] text-amber-800 font-normal">Weekend</span>
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <span className="block text-[10px] text-on-surface-variant font-semibold mb-0.5">Regular (₹/hr)</span>
+                        <input
+                          type="number"
+                          required
+                          min={100}
+                          value={newSatPrice}
+                          onChange={e => setNewSatPrice(Number(e.target.value))}
+                          className="form-input font-bold text-amber-900 bg-amber-50/50 border-amber-300 py-1"
+                        />
+                      </div>
+                      <div>
+                        <span className="block text-[10px] text-emerald-800 font-semibold mb-0.5">Offer Price (Optional)</span>
+                        <input
+                          type="number"
+                          placeholder="e.g. 1400"
+                          min={0}
+                          value={newSatOfferPrice}
+                          onChange={e => setNewSatOfferPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                          className="form-input font-bold text-emerald-900 bg-white border-emerald-300 py-1"
+                        />
+                      </div>
+                    </div>
+                    {newSatOfferPrice !== '' && Number(newSatOfferPrice) > 0 && Number(newSatOfferPrice) !== Number(newSatPrice) && (
+                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-800 pt-0.5 border-t border-emerald-100">
+                        <span className="line-through text-on-surface-variant/70">₹{Math.max(Number(newSatPrice), Number(newSatOfferPrice))}</span>
+                        <span className="text-emerald-900 font-extrabold">₹{Math.min(Number(newSatPrice), Number(newSatOfferPrice))}/hr</span>
+                        <span className="bg-emerald-200/70 text-emerald-900 px-1.5 py-0.2 rounded-full font-black">
+                          {Math.round(((Math.abs(Number(newSatPrice) - Number(newSatOfferPrice))) / Math.max(Number(newSatPrice), Number(newSatOfferPrice))) * 100)}% OFF
+                        </span>
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <label className="block text-on-surface-variant font-headline font-bold mb-1">Sunday (Sun) *</label>
-                    <input
-                      type="number"
-                      required
-                      min={100}
-                      value={newSunPrice}
-                      onChange={e => setNewSunPrice(Number(e.target.value))}
-                      className="form-input font-bold text-amber-900 bg-amber-50/50 border-amber-300"
-                    />
+
+                  {/* Sunday */}
+                  <div className="bg-white p-3 rounded-xl border border-amber-300/70 shadow-xs space-y-1.5">
+                    <label className="block text-amber-950 font-headline font-bold text-xs flex items-center justify-between">
+                      <span>Sunday (Sun) Rate *</span>
+                      <span className="text-[10px] text-amber-800 font-normal">Weekend</span>
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <span className="block text-[10px] text-on-surface-variant font-semibold mb-0.5">Regular (₹/hr)</span>
+                        <input
+                          type="number"
+                          required
+                          min={100}
+                          value={newSunPrice}
+                          onChange={e => setNewSunPrice(Number(e.target.value))}
+                          className="form-input font-bold text-amber-900 bg-amber-50/50 border-amber-300 py-1"
+                        />
+                      </div>
+                      <div>
+                        <span className="block text-[10px] text-emerald-800 font-semibold mb-0.5">Offer Price (Optional)</span>
+                        <input
+                          type="number"
+                          placeholder="e.g. 1400"
+                          min={0}
+                          value={newSunOfferPrice}
+                          onChange={e => setNewSunOfferPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                          className="form-input font-bold text-emerald-900 bg-white border-emerald-300 py-1"
+                        />
+                      </div>
+                    </div>
+                    {newSunOfferPrice !== '' && Number(newSunOfferPrice) > 0 && Number(newSunOfferPrice) !== Number(newSunPrice) && (
+                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-800 pt-0.5 border-t border-emerald-100">
+                        <span className="line-through text-on-surface-variant/70">₹{Math.max(Number(newSunPrice), Number(newSunOfferPrice))}</span>
+                        <span className="text-emerald-900 font-extrabold">₹{Math.min(Number(newSunPrice), Number(newSunOfferPrice))}/hr</span>
+                        <span className="bg-emerald-200/70 text-emerald-900 px-1.5 py-0.2 rounded-full font-black">
+                          {Math.round(((Math.abs(Number(newSunPrice) - Number(newSunOfferPrice))) / Math.max(Number(newSunPrice), Number(newSunOfferPrice))) * 100)}% OFF
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -968,48 +1075,73 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
                 </div>
 
                 {newPeakEnabled && (
-                  <div className="grid grid-cols-3 gap-3 pt-1">
-                    <div>
-                      <label className="block text-amber-900 font-headline font-bold mb-1">Peak Start *</label>
-                      <select
-                        value={newPeakStart}
-                        onChange={e => setNewPeakStart(e.target.value)}
-                        className="form-input font-bold text-amber-950 border-amber-300"
-                      >
-                        <option value="16:00">04:00 PM</option>
-                        <option value="17:00">05:00 PM</option>
-                        <option value="18:00">06:00 PM (Standard Evening)</option>
-                        <option value="19:00">07:00 PM</option>
-                        <option value="20:00">08:00 PM</option>
-                      </select>
+                  <div className="space-y-2 pt-1">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div>
+                        <label className="block text-amber-900 font-headline font-bold mb-1">Peak Start *</label>
+                        <select
+                          value={newPeakStart}
+                          onChange={e => setNewPeakStart(e.target.value)}
+                          className="form-input font-bold text-amber-950 border-amber-300"
+                        >
+                          <option value="16:00">04:00 PM</option>
+                          <option value="17:00">05:00 PM</option>
+                          <option value="18:00">06:00 PM (Standard Evening)</option>
+                          <option value="19:00">07:00 PM</option>
+                          <option value="20:00">08:00 PM</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-amber-900 font-headline font-bold mb-1">Peak End *</label>
+                        <select
+                          value={newPeakEnd}
+                          onChange={e => setNewPeakEnd(e.target.value)}
+                          className="form-input font-bold text-amber-950 border-amber-300"
+                        >
+                          <option value="20:00">08:00 PM</option>
+                          <option value="21:00">09:00 PM</option>
+                          <option value="22:00">10:00 PM</option>
+                          <option value="23:00">11:00 PM (Night Closing)</option>
+                          <option value="00:00">12:00 AM (Midnight)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-amber-900 font-headline font-bold mb-1">Peak Rate (₹/hr) *</label>
+                        <input
+                          type="number"
+                          required
+                          min={100}
+                          value={newPeakPrice}
+                          onChange={e => setNewPeakPrice(Number(e.target.value))}
+                          className="form-input font-bold text-amber-950 border-amber-300 bg-white"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-emerald-800 font-headline font-bold mb-1">Offer Price (Optional)</label>
+                        <input
+                          type="number"
+                          placeholder="e.g. 1500"
+                          min={0}
+                          value={newPeakOfferPrice}
+                          onChange={e => setNewPeakOfferPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                          className="form-input font-bold text-emerald-900 border-emerald-400 bg-white"
+                        />
+                      </div>
                     </div>
 
-                    <div>
-                      <label className="block text-amber-900 font-headline font-bold mb-1">Peak End *</label>
-                      <select
-                        value={newPeakEnd}
-                        onChange={e => setNewPeakEnd(e.target.value)}
-                        className="form-input font-bold text-amber-950 border-amber-300"
-                      >
-                        <option value="20:00">08:00 PM</option>
-                        <option value="21:00">09:00 PM</option>
-                        <option value="22:00">10:00 PM</option>
-                        <option value="23:00">11:00 PM (Night Closing)</option>
-                        <option value="00:00">12:00 AM (Midnight)</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-amber-900 font-headline font-bold mb-1">Peak Rate (₹/hr) *</label>
-                      <input
-                        type="number"
-                        required
-                        min={100}
-                        value={newPeakPrice}
-                        onChange={e => setNewPeakPrice(Number(e.target.value))}
-                        className="form-input font-bold text-amber-950 border-amber-300 bg-white"
-                      />
-                    </div>
+                    {newPeakOfferPrice !== '' && Number(newPeakOfferPrice) > 0 && Number(newPeakOfferPrice) !== Number(newPeakPrice) && (
+                      <div className="flex items-center gap-2 pt-1 text-xs font-bold text-emerald-800 border-t border-amber-200">
+                        <span>Peak UI Preview:</span>
+                        <span className="line-through text-on-surface-variant">₹{Math.max(Number(newPeakPrice), Number(newPeakOfferPrice))}</span>
+                        <span className="text-emerald-900 font-extrabold text-sm">₹{Math.min(Number(newPeakPrice), Number(newPeakOfferPrice))}/hr</span>
+                        <span className="bg-emerald-200/70 text-emerald-900 text-[10px] px-2 py-0.5 rounded-full font-black">
+                          {Math.round(((Math.abs(Number(newPeakPrice) - Number(newPeakOfferPrice))) / Math.max(Number(newPeakPrice), Number(newPeakOfferPrice))) * 100)}% OFF (Save ₹{Math.abs(Number(newPeakPrice) - Number(newPeakOfferPrice))})
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1302,28 +1434,87 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 pt-1">
-                  <div>
-                    <label className="block text-on-surface-variant font-headline font-bold mb-1">Saturday (Sat) *</label>
-                    <input
-                      type="number"
-                      required
-                      min={100}
-                      value={editSatPrice}
-                      onChange={e => setEditSatPrice(Number(e.target.value))}
-                      className="form-input font-bold text-amber-900 bg-amber-50/50 border-amber-300"
-                    />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  {/* Saturday */}
+                  <div className="bg-white p-3 rounded-xl border border-amber-300/70 shadow-xs space-y-1.5">
+                    <label className="block text-amber-950 font-headline font-bold text-xs flex items-center justify-between">
+                      <span>Saturday (Sat) Rate *</span>
+                      <span className="text-[10px] text-amber-800 font-normal">Weekend</span>
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <span className="block text-[10px] text-on-surface-variant font-semibold mb-0.5">Regular (₹/hr)</span>
+                        <input
+                          type="number"
+                          required
+                          min={100}
+                          value={editSatPrice}
+                          onChange={e => setEditSatPrice(Number(e.target.value))}
+                          className="form-input font-bold text-amber-900 bg-amber-50/50 border-amber-300 py-1"
+                        />
+                      </div>
+                      <div>
+                        <span className="block text-[10px] text-emerald-800 font-semibold mb-0.5">Offer Price (Optional)</span>
+                        <input
+                          type="number"
+                          placeholder="e.g. 1400"
+                          min={0}
+                          value={editSatOfferPrice}
+                          onChange={e => setEditSatOfferPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                          className="form-input font-bold text-emerald-900 bg-white border-emerald-300 py-1"
+                        />
+                      </div>
+                    </div>
+                    {editSatOfferPrice !== '' && Number(editSatOfferPrice) > 0 && Number(editSatOfferPrice) !== Number(editSatPrice) && (
+                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-800 pt-0.5 border-t border-emerald-100">
+                        <span className="line-through text-on-surface-variant/70">₹{Math.max(Number(editSatPrice), Number(editSatOfferPrice))}</span>
+                        <span className="text-emerald-900 font-extrabold">₹{Math.min(Number(editSatPrice), Number(editSatOfferPrice))}/hr</span>
+                        <span className="bg-emerald-200/70 text-emerald-900 px-1.5 py-0.2 rounded-full font-black">
+                          {Math.round(((Math.abs(Number(editSatPrice) - Number(editSatOfferPrice))) / Math.max(Number(editSatPrice), Number(editSatOfferPrice))) * 100)}% OFF
+                        </span>
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <label className="block text-on-surface-variant font-headline font-bold mb-1">Sunday (Sun) *</label>
-                    <input
-                      type="number"
-                      required
-                      min={100}
-                      value={editSunPrice}
-                      onChange={e => setEditSunPrice(Number(e.target.value))}
-                      className="form-input font-bold text-amber-900 bg-amber-50/50 border-amber-300"
-                    />
+
+                  {/* Sunday */}
+                  <div className="bg-white p-3 rounded-xl border border-amber-300/70 shadow-xs space-y-1.5">
+                    <label className="block text-amber-950 font-headline font-bold text-xs flex items-center justify-between">
+                      <span>Sunday (Sun) Rate *</span>
+                      <span className="text-[10px] text-amber-800 font-normal">Weekend</span>
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <span className="block text-[10px] text-on-surface-variant font-semibold mb-0.5">Regular (₹/hr)</span>
+                        <input
+                          type="number"
+                          required
+                          min={100}
+                          value={editSunPrice}
+                          onChange={e => setEditSunPrice(Number(e.target.value))}
+                          className="form-input font-bold text-amber-900 bg-amber-50/50 border-amber-300 py-1"
+                        />
+                      </div>
+                      <div>
+                        <span className="block text-[10px] text-emerald-800 font-semibold mb-0.5">Offer Price (Optional)</span>
+                        <input
+                          type="number"
+                          placeholder="e.g. 1400"
+                          min={0}
+                          value={editSunOfferPrice}
+                          onChange={e => setEditSunOfferPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                          className="form-input font-bold text-emerald-900 bg-white border-emerald-300 py-1"
+                        />
+                      </div>
+                    </div>
+                    {editSunOfferPrice !== '' && Number(editSunOfferPrice) > 0 && Number(editSunOfferPrice) !== Number(editSunPrice) && (
+                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-800 pt-0.5 border-t border-emerald-100">
+                        <span className="line-through text-on-surface-variant/70">₹{Math.max(Number(editSunPrice), Number(editSunOfferPrice))}</span>
+                        <span className="text-emerald-900 font-extrabold">₹{Math.min(Number(editSunPrice), Number(editSunOfferPrice))}/hr</span>
+                        <span className="bg-emerald-200/70 text-emerald-900 px-1.5 py-0.2 rounded-full font-black">
+                          {Math.round(((Math.abs(Number(editSunPrice) - Number(editSunOfferPrice))) / Math.max(Number(editSunPrice), Number(editSunOfferPrice))) * 100)}% OFF
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1346,48 +1537,73 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
                 </div>
 
                 {editPeakEnabled && (
-                  <div className="grid grid-cols-3 gap-3 pt-1">
-                    <div>
-                      <label className="block text-amber-900 font-headline font-bold mb-1">Peak Start *</label>
-                      <select
-                        value={editPeakStart}
-                        onChange={e => setEditPeakStart(e.target.value)}
-                        className="form-input font-bold text-amber-950 border-amber-300"
-                      >
-                        <option value="16:00">04:00 PM</option>
-                        <option value="17:00">05:00 PM</option>
-                        <option value="18:00">06:00 PM (Standard Evening)</option>
-                        <option value="19:00">07:00 PM</option>
-                        <option value="20:00">08:00 PM</option>
-                      </select>
+                  <div className="space-y-2 pt-1">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div>
+                        <label className="block text-amber-900 font-headline font-bold mb-1">Peak Start *</label>
+                        <select
+                          value={editPeakStart}
+                          onChange={e => setEditPeakStart(e.target.value)}
+                          className="form-input font-bold text-amber-950 border-amber-300"
+                        >
+                          <option value="16:00">04:00 PM</option>
+                          <option value="17:00">05:00 PM</option>
+                          <option value="18:00">06:00 PM (Standard Evening)</option>
+                          <option value="19:00">07:00 PM</option>
+                          <option value="20:00">08:00 PM</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-amber-900 font-headline font-bold mb-1">Peak End *</label>
+                        <select
+                          value={editPeakEnd}
+                          onChange={e => setEditPeakEnd(e.target.value)}
+                          className="form-input font-bold text-amber-950 border-amber-300"
+                        >
+                          <option value="20:00">08:00 PM</option>
+                          <option value="21:00">09:00 PM</option>
+                          <option value="22:00">10:00 PM</option>
+                          <option value="23:00">11:00 PM (Night Closing)</option>
+                          <option value="00:00">12:00 AM (Midnight)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-amber-900 font-headline font-bold mb-1">Peak Rate (₹/hr) *</label>
+                        <input
+                          type="number"
+                          required
+                          min={100}
+                          value={editPeakPrice}
+                          onChange={e => setEditPeakPrice(Number(e.target.value))}
+                          className="form-input font-bold text-amber-950 border-amber-300 bg-white"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-emerald-800 font-headline font-bold mb-1">Offer Price (Optional)</label>
+                        <input
+                          type="number"
+                          placeholder="e.g. 1500"
+                          min={0}
+                          value={editPeakOfferPrice}
+                          onChange={e => setEditPeakOfferPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                          className="form-input font-bold text-emerald-900 border-emerald-400 bg-white"
+                        />
+                      </div>
                     </div>
 
-                    <div>
-                      <label className="block text-amber-900 font-headline font-bold mb-1">Peak End *</label>
-                      <select
-                        value={editPeakEnd}
-                        onChange={e => setEditPeakEnd(e.target.value)}
-                        className="form-input font-bold text-amber-950 border-amber-300"
-                      >
-                        <option value="20:00">08:00 PM</option>
-                        <option value="21:00">09:00 PM</option>
-                        <option value="22:00">10:00 PM</option>
-                        <option value="23:00">11:00 PM (Night Closing)</option>
-                        <option value="00:00">12:00 AM (Midnight)</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-amber-900 font-headline font-bold mb-1">Peak Rate (₹/hr) *</label>
-                      <input
-                        type="number"
-                        required
-                        min={100}
-                        value={editPeakPrice}
-                        onChange={e => setEditPeakPrice(Number(e.target.value))}
-                        className="form-input font-bold text-amber-950 border-amber-300 bg-white"
-                      />
-                    </div>
+                    {editPeakOfferPrice !== '' && Number(editPeakOfferPrice) > 0 && Number(editPeakOfferPrice) !== Number(editPeakPrice) && (
+                      <div className="flex items-center gap-2 pt-1 text-xs font-bold text-emerald-800 border-t border-amber-200">
+                        <span>Peak UI Preview:</span>
+                        <span className="line-through text-on-surface-variant">₹{Math.max(Number(editPeakPrice), Number(editPeakOfferPrice))}</span>
+                        <span className="text-emerald-900 font-extrabold text-sm">₹{Math.min(Number(editPeakPrice), Number(editPeakOfferPrice))}/hr</span>
+                        <span className="bg-emerald-200/70 text-emerald-900 text-[10px] px-2 py-0.5 rounded-full font-black">
+                          {Math.round(((Math.abs(Number(editPeakPrice) - Number(editPeakOfferPrice))) / Math.max(Number(editPeakPrice), Number(editPeakOfferPrice))) * 100)}% OFF (Save ₹{Math.abs(Number(editPeakPrice) - Number(editPeakOfferPrice))})
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

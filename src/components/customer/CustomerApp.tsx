@@ -12,7 +12,7 @@ import { BookingConfirmationModal } from './BookingConfirmationModal';
 import { BookingLookupModal } from './BookingLookupModal';
 import { ActiveCustomerHoldModal } from '../common/ActiveCustomerHoldModal';
 import { formatTimeRange12h } from '../../utils/formatters';
-import { ChevronRight, Search, UserCheck, User, LogOut, ShieldCheck, Ticket } from 'lucide-react';
+import { ChevronRight, Search, UserCheck, User, LogOut, ShieldCheck } from 'lucide-react';
 
 interface CustomerAppProps {
   onSwitchToAdmin: () => void;
@@ -305,19 +305,34 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
           {currentCustomer ? (
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setCustomerView('profile')}
-                className="btn-primary px-3 sm:px-4 py-1.5 sm:py-2 text-xs font-headline font-bold flex items-center gap-1.5 shadow-sm"
-                title="View Profile & Bookings Dashboard"
+                onClick={() => setCustomerView(customerView === 'profile' ? 'booking' : 'profile')}
+                className={`flex items-center gap-2.5 p-1 pr-3 sm:pr-4 rounded-full border transition-all duration-200 shadow-xs hover:shadow-md cursor-pointer group ${
+                  customerView === 'profile'
+                    ? 'bg-primary/10 border-primary text-primary'
+                    : 'bg-white hover:bg-surface-container-low border-outline-variant/60 text-on-surface hover:border-primary/60'
+                }`}
+                title="Account Profile & My Bookings"
               >
-                <Ticket className="w-4 h-4 text-white shrink-0" />
-                <span>{currentCustomer.name}</span>
-                <span className="opacity-80 text-[10px] hidden sm:inline">(My Bookings)</span>
+                {/* Circular Profile Avatar Option */}
+                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-primary text-white flex items-center justify-center font-bold shadow-xs ring-2 ring-primary/20 group-hover:ring-primary/40 group-hover:scale-105 transition-all shrink-0">
+                  <User className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-white" />
+                </div>
+
+                <div className="text-left flex flex-col justify-center pr-0.5">
+                  <span className="font-headline font-bold text-xs sm:text-sm text-on-surface group-hover:text-primary transition-colors leading-tight truncate max-w-[120px] sm:max-w-[150px]">
+                    {currentCustomer.name}
+                  </span>
+                  <span className="text-[10px] text-on-surface-variant font-medium leading-none mt-0.5 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block" />
+                    Profile & Bookings
+                  </span>
+                </div>
               </button>
 
               <button
                 onClick={handleCustomerLogout}
                 title="Sign Out"
-                className="p-1.5 sm:p-2 rounded-xl text-on-surface-variant hover:text-error hover:bg-error/10 transition border border-outline-variant/40"
+                className="w-9 h-9 rounded-full text-on-surface-variant hover:text-error hover:bg-error/10 transition border border-outline-variant/40 flex items-center justify-center cursor-pointer shadow-xs shrink-0"
               >
                 <LogOut className="w-4 h-4" />
               </button>
@@ -325,9 +340,12 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
           ) : (
             <button
               onClick={() => setShowAuthModal(true)}
-              className="btn-cta px-3.5 sm:px-4 py-1.5 sm:py-2 text-xs font-headline font-bold flex items-center gap-1.5 shadow-sm"
+              className="btn-cta px-3.5 sm:px-4 py-1.5 sm:py-2 text-xs font-headline font-bold flex items-center gap-2 shadow-sm rounded-full cursor-pointer hover:shadow-md transition-all"
             >
-              <User className="w-4 h-4" /> Sign In / My Bookings
+              <div className="w-6 h-6 rounded-full bg-black/10 flex items-center justify-center">
+                <User className="w-3.5 h-3.5" />
+              </div>
+              <span>Sign In / My Bookings</span>
             </button>
           )}
         </div>
@@ -489,15 +507,43 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
                     <span className="flex items-center gap-1 font-medium">
                       ⏰ {c.opening_time} - {c.closing_time}
                     </span>
-                    <span className="font-headline font-extrabold text-primary text-sm">
-                      ₹{c.base_price_per_hour} <span className="text-[10px] font-normal text-on-surface-variant">/hr</span>
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      {c.original_price_per_hour && c.original_price_per_hour > c.base_price_per_hour && (
+                        <div className="flex items-center gap-1">
+                          <span className="line-through text-on-surface-variant/70 text-xs font-semibold">
+                            ₹{c.original_price_per_hour}
+                          </span>
+                          <span className="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0.5 rounded-full font-bold">
+                            {Math.round(((c.original_price_per_hour - c.base_price_per_hour) / c.original_price_per_hour) * 100)}% OFF
+                          </span>
+                        </div>
+                      )}
+                      <span className="font-headline font-extrabold text-primary text-sm">
+                        ₹{c.base_price_per_hour} <span className="text-[10px] font-normal text-on-surface-variant">/hr</span>
+                      </span>
+                    </div>
                   </div>
 
                   {c.peak_enabled && (
                     <div className="text-[11px] text-amber-900 bg-amber-50 px-2.5 py-1 rounded-xl border border-amber-200/80 flex items-center justify-between font-medium">
                       <span>🔥 Evening Peak ({c.peak_start_time}-{c.peak_end_time})</span>
-                      <strong className="font-extrabold">₹{c.peak_price_per_hour}/hr</strong>
+                      <div className="flex items-center gap-1.5">
+                        {c.peak_offer_price_per_hour && c.peak_offer_price_per_hour !== c.peak_price_per_hour ? (
+                          <>
+                            <span className="line-through text-amber-900/60 font-semibold text-xs">
+                              ₹{Math.max(c.peak_price_per_hour, c.peak_offer_price_per_hour)}
+                            </span>
+                            <span className="bg-emerald-100 text-emerald-800 text-[9px] px-1.5 py-0.2 rounded font-black">
+                              {Math.round((Math.abs(c.peak_price_per_hour - c.peak_offer_price_per_hour) / Math.max(c.peak_price_per_hour, c.peak_offer_price_per_hour)) * 100)}% OFF
+                            </span>
+                            <strong className="font-extrabold text-amber-950">
+                              ₹{Math.min(c.peak_price_per_hour, c.peak_offer_price_per_hour)}/hr
+                            </strong>
+                          </>
+                        ) : (
+                          <strong className="font-extrabold">₹{c.peak_price_per_hour}/hr</strong>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>

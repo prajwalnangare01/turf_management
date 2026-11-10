@@ -343,7 +343,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
         <section className="bg-white rounded-3xl p-6 md:p-8 border border-outline-variant/50 shadow-sm space-y-6">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-2xl bg-primary text-white flex items-center justify-center font-headline font-extrabold text-2xl shadow-md">
+              <div className="w-16 h-16 rounded-full bg-primary text-white flex items-center justify-center font-headline font-extrabold text-2xl shadow-md ring-4 ring-primary/10">
                 {currentCustomer.name.charAt(0).toUpperCase()}
               </div>
               <div>
