@@ -469,7 +469,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-headline font-bold text-on-surface-variant mb-1">Email (For e-receipt & calendar invite)</label>
+                <label className="block text-xs font-headline font-bold text-on-surface-variant mb-1">Email (For booking confirmation & e-receipt)</label>
                 <input
                   type="email"
                   placeholder="rahul@example.com"

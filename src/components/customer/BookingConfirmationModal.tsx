@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { store } from '../../services/store';
 import { formatTimeRange12h, formatDateDDMMYYYY } from '../../utils/formatters';
-import { CheckCircle2, MapPin, MessageSquare, Download, X, KeyRound, Calendar, Printer } from 'lucide-react';
+import { CheckCircle2, MapPin, MessageSquare, Download, X, KeyRound, Printer } from 'lucide-react';
 
 interface BookingConfirmationModalProps {
   bookingRef: string;
@@ -76,39 +76,6 @@ export const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> =
       setIsDownloadingPdf(false);
     }
     handleDownloadPdfPass();
-  };
-
-  const handleDownloadCalendarIcs = () => {
-    const cleanDate = booking.booking_date.replace(/-/g, '');
-    const cleanStart = (booking.start_time || '00:00').replace(':', '') + '00';
-    const cleanEnd = (booking.end_time || '00:00').replace(':', '') + '00';
-    
-    const icsContent = [
-      'BEGIN:VCALENDAR',
-      'VERSION:2.0',
-      'PRODID:-//TurfFlow//Sports Venue Booking//EN',
-      'CALSCALE:GREGORIAN',
-      'METHOD:PUBLISH',
-      'BEGIN:VEVENT',
-      `UID:${booking.booking_ref}@turfflow.com`,
-      `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').split('.')[0]}Z`,
-      `DTSTART:${cleanDate}T${cleanStart}`,
-      `DTEND:${cleanDate}T${cleanEnd}`,
-      `SUMMARY:Turf Game - ${court?.name || 'Pitch'} (${venue.name})`,
-      `DESCRIPTION:Booking Ref: ${booking.booking_ref}\\nGate Pass OTP: ${otpCode}\\nTotal Paid: INR ${booking.total_amount}`,
-      `LOCATION:${venue.name}, ${venue.address}`,
-      'STATUS:CONFIRMED',
-      'END:VEVENT',
-      'END:VCALENDAR'
-    ].join('\r\n');
-
-    const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
-    const link = document.createElement('a');
-    link.href = window.URL.createObjectURL(blob);
-    link.setAttribute('download', `turfflow-match-${booking.booking_ref}.ics`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   };
 
   const handleDownloadPdfPass = () => {
@@ -324,21 +291,12 @@ export const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> =
               {isDownloadingPdf ? 'Generating PDF Pass...' : 'Download PDF Gate Pass'}
             </button>
 
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={handleDownloadPdfPass}
-                className="btn-secondary py-2 text-xs font-headline font-bold flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <Printer className="w-3.5 h-3.5" /> Print / View Pass
-              </button>
-
-              <button
-                onClick={handleDownloadCalendarIcs}
-                className="btn-secondary py-2 text-xs font-headline font-bold flex items-center justify-center gap-1.5 border-primary/30 text-primary hover:bg-primary/5 cursor-pointer"
-              >
-                <Calendar className="w-3.5 h-3.5 text-primary" /> Add Calendar (.ics)
-              </button>
-            </div>
+            <button
+              onClick={handleDownloadPdfPass}
+              className="btn-secondary w-full py-2.5 text-xs font-headline font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <Printer className="w-3.5 h-3.5" /> Print / View Pass
+            </button>
 
             <button
               onClick={onClose}
