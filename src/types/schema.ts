@@ -59,12 +59,15 @@ export interface Court {
   base_price_per_hour: number; // Weekday Rate (Mon - Fri) / Active Discounted Price
   original_price_per_hour?: number; // Pre-discount Regular Price / MRP (displayed with strikethrough)
   saturday_price_per_hour?: number; // Saturday Special Rate
+  saturday_offer_price_per_hour?: number; // Optional Saturday Offer/Discounted Rate
   sunday_price_per_hour?: number; // Sunday Special Rate
+  sunday_offer_price_per_hour?: number; // Optional Sunday Offer/Discounted Rate
   weekend_price_per_hour?: number; // Generic Weekend Rate
   peak_enabled?: boolean; // Enable Peak Hours & Pricing
   peak_start_time?: string; // "18:00" (06:00 PM)
   peak_end_time?: string; // "23:00" (11:00 PM)
   peak_price_per_hour?: number; // e.g. 1800
+  peak_offer_price_per_hour?: number; // Optional Peak Offer/Discounted Rate
 }
 
 export interface PricingRule {
