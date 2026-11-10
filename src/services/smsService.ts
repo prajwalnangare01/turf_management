@@ -1,5 +1,6 @@
 import { Booking, Customer, Venue } from '../types/schema';
 import { normalizeIndianPhone } from '../utils/venueTime';
+import { formatTime12hPlain, formatDateDDMMYYYY } from '../utils/formatters';
 
 export interface SmsDispatchResult {
   success: boolean;
@@ -143,7 +144,7 @@ export class SmsService {
     const message = 
       `🎉 Booking Confirmed! Ref: ${booking.booking_ref}\n` +
       `Pitch: ${courtName} (${venue.name})\n` +
-      `Date: ${booking.booking_date} @ ${booking.start_time} - ${booking.end_time}\n` +
+      `Date: ${formatDateDDMMYYYY(booking.booking_date)} @ ${formatTime12hPlain(booking.start_time)} – ${formatTime12hPlain(booking.end_time)}\n` +
       `Gate Entry OTP: ${otpCode}\n` +
       `Amount Paid: ₹${booking.total_amount}\n` +
       `Please arrive 10 mins early with turf shoes. See you on the turf!`;
@@ -169,7 +170,7 @@ export class SmsService {
     const otpCode = booking.booking_ref ? booking.booking_ref.slice(-4) : '0000';
 
     const message = 
-      `⏰ Kickoff Reminder: Your game at ${venue.name} starts in 1 hour (${booking.start_time})!\n` +
+      `⏰ Kickoff Reminder: Your game at ${venue.name} starts in 1 hour (${formatTime12hPlain(booking.start_time)})!\n` +
       `Court: ${courtName}\n` +
       `Gate Entry OTP: ${otpCode}\n` +
       `Address: ${venue.address}\n` +
