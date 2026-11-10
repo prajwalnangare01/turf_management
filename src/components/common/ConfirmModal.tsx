@@ -36,7 +36,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
 
   return (
     <div className="modal-overlay z-[9999]" style={{ zIndex: 9999 }}>
-      <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl animate-modalScaleIn text-on-surface relative z-[10000]">
+      <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl animate-modalScaleIn text-on-surface relative z-[10000] max-h-[90vh] overflow-y-auto no-scrollbar">
         <div className="flex items-start gap-3">
           <div className="p-3 bg-surface-container-low rounded-xl border border-outline-variant/30 shrink-0">
             {icon}

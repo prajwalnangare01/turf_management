@@ -141,6 +141,7 @@ export class SlotEngine {
         start_time: slotStart,
         end_time: slotEnd,
         price: slotPrice,
+        original_price: (court.original_price_per_hour && court.original_price_per_hour > slotPrice) ? court.original_price_per_hour : undefined,
         is_peak: isPeak,
         status,
         locked_by: effectiveLockedBy,

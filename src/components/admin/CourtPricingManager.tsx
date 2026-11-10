@@ -729,7 +729,7 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
       {/* Add Court Modal */}
       {showAddCourtModal && (
         <div className="modal-overlay">
-          <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl animate-modalScaleIn text-on-surface max-h-[85vh] overflow-y-auto">
+          <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl animate-modalScaleIn text-on-surface max-h-[85vh] overflow-y-auto no-scrollbar">
             <div className="flex items-center justify-between border-b border-outline-variant/40 pb-3">
               <h3 className="font-headline font-bold text-xl text-primary flex items-center gap-2">
                 <PlusCircle className="w-5 h-5 text-primary" /> Add New Pitch / Turf Arena
@@ -1112,7 +1112,7 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
       {/* Edit Court Modal */}
       {editingCourt && (
         <div className="modal-overlay">
-          <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl animate-modalScaleIn text-on-surface max-h-[85vh] overflow-y-auto">
+          <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl animate-modalScaleIn text-on-surface max-h-[85vh] overflow-y-auto no-scrollbar">
             <div className="flex items-center justify-between border-b border-outline-variant/40 pb-3">
               <h3 className="font-headline font-bold text-xl text-primary flex items-center gap-2">
                 <Edit3 className="w-5 h-5 text-primary" /> Edit Pitch Configuration
@@ -1490,7 +1490,7 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
       {/* Block Slot Modal */}
       {showBlockModal && (
         <div className="modal-overlay">
-          <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl animate-modalScaleIn text-on-surface max-h-[85vh] overflow-y-auto">
+          <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl animate-modalScaleIn text-on-surface max-h-[85vh] overflow-y-auto no-scrollbar">
             <div className="flex items-center justify-between border-b border-outline-variant/40 pb-3">
               <h3 className="font-headline font-bold text-lg text-primary flex items-center gap-2">
                 <ShieldAlert className="w-5 h-5 text-amber-700" /> Block Pitch for Maintenance / Event

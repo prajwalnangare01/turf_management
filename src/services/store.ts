@@ -40,6 +40,7 @@ const DEFAULT_COURTS: Court[] = [
     buffer_minutes: 0,
     status: 'active',
     base_price_per_hour: 1200,
+    original_price_per_hour: 1500,
     saturday_price_per_hour: 1600,
     sunday_price_per_hour: 1600,
     peak_enabled: true,
@@ -58,6 +59,7 @@ const DEFAULT_COURTS: Court[] = [
     buffer_minutes: 0,
     status: 'active',
     base_price_per_hour: 1000,
+    original_price_per_hour: 1400,
     saturday_price_per_hour: 1400,
     sunday_price_per_hour: 1400,
     peak_enabled: true,
@@ -76,6 +78,7 @@ const DEFAULT_COURTS: Court[] = [
     buffer_minutes: 0,
     status: 'active',
     base_price_per_hour: 500,
+    original_price_per_hour: 700,
     saturday_price_per_hour: 700,
     sunday_price_per_hour: 700,
     peak_enabled: true,
@@ -276,7 +279,16 @@ class AppStore {
           this.venue.contact_phone = '+91 95791 58374';
         }
         this.sports = parsed.sports || DEFAULT_SPORTS;
-        this.courts = parsed.courts || DEFAULT_COURTS;
+        const rawCourts: Court[] = parsed.courts || DEFAULT_COURTS;
+        this.courts = rawCourts.map(c => {
+          if (!c.original_price_per_hour) {
+            const def = DEFAULT_COURTS.find(dc => dc.id === c.id);
+            if (def && def.original_price_per_hour) {
+              return { ...c, original_price_per_hour: def.original_price_per_hour };
+            }
+          }
+          return c;
+        });
         const rawRules: PricingRule[] = parsed.pricingRules || DEFAULT_PRICING_RULES;
         this.pricingRules = rawRules.filter(
           r => !(r.day_type === 'weekend' && r.start_time === '06:00' && r.end_time === '23:00')

@@ -40,7 +40,7 @@ export const SwitchAdminModal: React.FC<SwitchAdminModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-outline-variant/60 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200">
+      <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-outline-variant/60 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto no-scrollbar">
         {/* Header */}
         <div className="flex justify-between items-start">
           <div className="flex items-center gap-3">

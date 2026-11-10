@@ -62,7 +62,7 @@ export const BookingLookupModal: React.FC<BookingLookupModalProps> = ({ currentC
 
   return (
     <div className="modal-overlay">
-      <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto shadow-2xl animate-modalScaleIn text-on-surface">
+      <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto no-scrollbar shadow-2xl animate-modalScaleIn text-on-surface">
         {/* Header */}
         <div className="p-4 bg-surface-container-low border-b border-outline-variant/40 flex items-center justify-between sticky top-0 bg-white/95 backdrop-blur-md z-10">
           <div className="flex items-center gap-2">

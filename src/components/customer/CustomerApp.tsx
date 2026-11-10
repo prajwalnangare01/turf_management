@@ -561,6 +561,15 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
               );
             })}
           </div>
+          {/* Advance Booking Note */}
+          <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 text-xs bg-surface-container-low px-4 py-2.5 rounded-2xl border border-outline-variant/30 text-on-surface-variant">
+            <span className="flex items-center gap-1.5 font-medium">
+              <span>📅 Advance online booking is available up to 14 days.</span>
+            </span>
+            <span className="text-[11px] font-bold text-primary">
+              Need to book next month or after 15 days? Contact Admin: <a href="tel:+919579158374" className="underline hover:text-primary-focus">+91 95791 58374</a>
+            </span>
+          </div>
         </section>
 
         {/* Slot Grid Container */}

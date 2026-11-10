@@ -47,6 +47,7 @@ export class SupabaseService {
             slot_duration_minutes: c.slot_duration_minutes || 60,
             opening_time: typeof c.opening_time === 'string' ? c.opening_time.slice(0, 5) : '06:00',
             closing_time: typeof c.closing_time === 'string' ? c.closing_time.slice(0, 5) : '23:00',
+            original_price_per_hour: c.original_price_per_hour ? Number(c.original_price_per_hour) : undefined,
             base_price_per_hour: Number(c.base_price_per_hour) || 1200,
             saturday_price_per_hour: Number(c.saturday_price_per_hour) || 1600,
             sunday_price_per_hour: Number(c.sunday_price_per_hour) || 1600,

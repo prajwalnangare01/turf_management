@@ -47,7 +47,7 @@ export const ActiveCustomerHoldModal: React.FC<ActiveCustomerHoldModalProps> = (
 
   return (
     <div className="modal-overlay z-[9999]">
-      <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl animate-modalScaleIn text-on-surface">
+      <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl animate-modalScaleIn text-on-surface max-h-[90vh] overflow-y-auto no-scrollbar">
         <div className="flex items-center justify-between border-b border-outline-variant/40 pb-3">
           <h3 className="font-headline font-bold text-lg text-sky-900 flex items-center gap-2">
             <Clock className="w-5 h-5 text-sky-700 animate-spin" /> Active Customer Hold

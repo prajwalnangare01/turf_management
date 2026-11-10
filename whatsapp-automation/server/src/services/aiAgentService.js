@@ -55,7 +55,13 @@ export class AiAgentService {
       }
     }
 
-    // Direct DD/MM/YYYY or DD-MM-YYYY (e.g. 10/11/2026 or 10-11-2026 or 10/11)
+    // 1. Direct YYYY-MM-DD or YYYY/MM/DD (e.g. 2026-12-05 or 2026/12/05)
+    const matchYMD = text.match(/\b(202\d)[\/\-]([0-1]\d)[\/\-]([0-3]\d)\b/);
+    if (matchYMD) {
+      return `${matchYMD[1]}-${matchYMD[2]}-${matchYMD[3]}`;
+    }
+
+    // 2. Direct DD/MM/YYYY or DD-MM-YYYY (e.g. 10/11/2026 or 10-11-2026 or 10/11)
     const matchDMY = text.match(/\b([0-3]?\d)[\/\-]([0-1]?\d)(?:[\/\-](202\d))?\b/);
     if (matchDMY) {
       const d = String(matchDMY[1]).padStart(2, '0');
@@ -63,10 +69,6 @@ export class AiAgentService {
       const y = matchDMY[3] || String(vNow.getFullYear());
       return `${y}-${m}-${d}`;
     }
-
-    // Direct YYYY-MM-DD
-    const match = text.match(/\b(202\d-[0-1]\d-[0-3]\d)\b/);
-    if (match) return match[1];
 
     // Day + Month e.g. "15 Nov", "15th November", "Nov 15"
     const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
@@ -318,7 +320,10 @@ export class AiAgentService {
               };
             }
             return {
-              reply: `⚠️ *Advance Booking Limit:* Bookings are restricted to the next 10 days (up to ${WhatsAppFormatter.formatDate(windowCheck.maxDateStr)}).\n\n` + this.getDateSelectionPrompt(),
+              reply: `⚠️ *Advance Booking Limit:* Self-booking via WhatsApp is available for the next 10 days (up to ${WhatsAppFormatter.formatDate(windowCheck.maxDateStr)}).\n\n` +
+                `📞 *Need to book for next month or after 15 days?*\n` +
+                `Please contact our Venue Administration directly at *+91 95791 58374* for advance reservations.\n\n` +
+                this.getDateSelectionPrompt(),
               action: 'date_exceeds_10_days'
             };
           }
@@ -372,8 +377,10 @@ export class AiAgentService {
             };
           }
           return {
-            reply: `⚠️ *Advance Booking Limit:* Bookings are strictly restricted to the next 10 days (up to ${WhatsAppFormatter.formatDate(windowCheck.maxDateStr)}).\n\n` +
-              `👉 Please enter a date within the next 10 days:`,
+            reply: `⚠️ *Advance Booking Limit:* Self-booking via WhatsApp is available for the next 10 days (up to ${WhatsAppFormatter.formatDate(windowCheck.maxDateStr)}).\n\n` +
+              `📞 *Need to book for next month or after 15 days?*\n` +
+              `Please contact our Venue Administration directly at *+91 95791 58374* for advance reservations.\n\n` +
+              `👉 Or enter a date within the next 10 days:`,
             action: 'custom_date_exceeds_10_days'
           };
         }
@@ -608,7 +615,10 @@ export class AiAgentService {
         const windowCheck = this.validate10DayWindow(parsedDate);
         if (!windowCheck.valid) {
           return {
-            reply: `⚠️ *Advance Booking Limit:* Bookings are limited to the next 10 days (up to ${WhatsAppFormatter.formatDate(windowCheck.maxDateStr)}).\n\n` + this.getDateSelectionPrompt(),
+            reply: `⚠️ *Advance Booking Limit:* Self-booking via WhatsApp is available for the next 10 days (up to ${WhatsAppFormatter.formatDate(windowCheck.maxDateStr)}).\n\n` +
+              `📞 *Need to book for next month or after 15 days?*\n` +
+              `Please contact our Venue Administration directly at *+91 95791 58374* for advance reservations.\n\n` +
+              this.getDateSelectionPrompt(),
             action: 'direct_booking_limit_exceeded'
           };
         }

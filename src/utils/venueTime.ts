@@ -24,10 +24,13 @@ export function getVenueNow(): Date {
 }
 
 /**
- * Get current date string (YYYY-MM-DD) in Asia/Kolkata
+ * Get current date string (YYYY-MM-DD) in Asia/Kolkata, with optional offset in days
  */
-export function getVenueDateString(): string {
+export function getVenueDateString(offsetDays: number = 0): string {
   const vDate = getVenueNow();
+  if (offsetDays !== 0) {
+    vDate.setDate(vDate.getDate() + offsetDays);
+  }
   const y = vDate.getFullYear();
   const m = String(vDate.getMonth() + 1).padStart(2, '0');
   const d = String(vDate.getDate()).padStart(2, '0');

@@ -38,7 +38,12 @@ export class SlotEngine {
    * CC-S02: Server-side Asia/Kolkata clock skew protection
    * CC-DB1: Midnight operating hours crossover support (e.g. 06:00 to 02:00)
    */
-  public static computeSlotsForCourt(court: Court, dateStr: string, currentSessionId?: string): DynamicSlot[] {
+  public static computeSlotsForCourt(
+    court: Court, 
+    dateStr: string, 
+    currentSessionId?: string,
+    isAdmin: boolean = false
+  ): DynamicSlot[] {
     const slots: DynamicSlot[] = [];
     const openMins = this.timeToMinutes(court.opening_time);
     let closeMins = this.timeToMinutes(court.closing_time);
@@ -70,14 +75,14 @@ export class SlotEngine {
     const isPastDate = dateStr < localTodayStr;
     const isToday = dateStr === localTodayStr;
 
-    // Check advance days limit
+    // Check advance days limit (Only applies to public customer booking; Admin has full authority to book on ANY future date)
     const maxDate = new Date(venueNow);
     maxDate.setDate(maxDate.getDate() + (venue.max_advance_days || 14));
     const maxYear = maxDate.getFullYear();
     const maxMonth = String(maxDate.getMonth() + 1).padStart(2, '0');
     const maxDay = String(maxDate.getDate()).padStart(2, '0');
     const maxDateStr = `${maxYear}-${maxMonth}-${maxDay}`;
-    const isBeyondAdvanceLimit = dateStr > maxDateStr;
+    const isBeyondAdvanceLimit = !isAdmin && dateStr > maxDateStr;
 
     const [slotYear, slotMonth, dayNum] = dateStr.split('-').map(Number);
     const slotDate = new Date(slotYear, slotMonth - 1, dayNum);
@@ -207,10 +212,16 @@ export class SlotEngine {
         ? (pendingHold.source === 'offline_whatsapp' ? 'WhatsApp Hold (5m)' : 'Customer Hold (5m)')
         : redisLock?.locked_by;
 
+      // Compute pre-discount original price if pitch has an original regular price higher than slotPrice
+      const originalPrice = court.original_price_per_hour && court.original_price_per_hour > slotPrice
+        ? court.original_price_per_hour
+        : undefined;
+
       slots.push({
         start_time: slotStart,
         end_time: slotEnd,
         price: slotPrice,
+        original_price: originalPrice,
         is_peak: isPeak,
         status,
         lock_expires_at: effectiveLockExpiresAt,

@@ -88,6 +88,7 @@ export class SupabaseSyncService {
             buffer_minutes: c.buffer_minutes || 0,
             status: c.status || 'active',
             base_price_per_hour: Number(c.base_price_per_hour) || 1200,
+            original_price_per_hour: c.original_price_per_hour ? Number(c.original_price_per_hour) : undefined,
             saturday_price_per_hour: Number(c.saturday_price_per_hour) || 1600,
             sunday_price_per_hour: Number(c.sunday_price_per_hour) || 1600,
             weekend_price_per_hour: Number(c.weekend_price_per_hour) || 1600,
@@ -706,6 +707,47 @@ export class SupabaseSyncService {
       return true;
     } catch (err: any) {
       console.warn('⚠️ [Supabase Sync] Exception deleting slot lock:', err.message);
+      return false;
+    }
+  }
+
+  /**
+   * Persist or update pitch (court) configuration in Supabase
+   */
+  public static async syncCourtToSupabase(court: Court): Promise<boolean> {
+    const supabase = getSupabase();
+    if (!supabase) return false;
+
+    try {
+      const payload = {
+        id: court.id,
+        venue_id: court.venue_id || store.getVenue().id,
+        name: court.name,
+        slot_duration_minutes: court.slot_duration_minutes || 60,
+        opening_time: court.opening_time.length === 5 ? `${court.opening_time}:00` : court.opening_time,
+        closing_time: court.closing_time.length === 5 ? `${court.closing_time}:00` : court.closing_time,
+        buffer_minutes: court.buffer_minutes || 0,
+        status: court.status || 'active',
+        base_price_per_hour: court.base_price_per_hour,
+        original_price_per_hour: court.original_price_per_hour || null,
+        saturday_price_per_hour: court.saturday_price_per_hour || court.base_price_per_hour,
+        sunday_price_per_hour: court.sunday_price_per_hour || court.base_price_per_hour,
+        weekend_price_per_hour: court.weekend_price_per_hour || court.base_price_per_hour,
+        peak_enabled: Boolean(court.peak_enabled),
+        peak_start_time: court.peak_start_time ? (court.peak_start_time.length === 5 ? `${court.peak_start_time}:00` : court.peak_start_time) : '18:00:00',
+        peak_end_time: court.peak_end_time ? (court.peak_end_time.length === 5 ? `${court.peak_end_time}:00` : court.peak_end_time) : '23:00:00',
+        peak_price_per_hour: court.peak_price_per_hour || 1800
+      };
+
+      const { error } = await supabase.from('courts').upsert([payload], { onConflict: 'id' });
+      if (error) {
+        console.error('❌ [Supabase Sync] Error syncing court to Supabase:', error.message);
+        return false;
+      }
+      console.log(`✅ [Supabase Sync] Court ${court.name} synced to Supabase (Base: ₹${court.base_price_per_hour}, Original: ₹${court.original_price_per_hour || 'N/A'}).`);
+      return true;
+    } catch (err: any) {
+      console.error('❌ [Supabase Sync] Exception syncing court to Supabase:', err.message);
       return false;
     }
   }

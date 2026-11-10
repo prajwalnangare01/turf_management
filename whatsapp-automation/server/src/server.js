@@ -1,3 +1,12 @@
+// Global process guards to ensure 24/7 resilience against transient network/socket drops
+process.on('uncaughtException', (err) => {
+  console.error('⚠️ [UncaughtException Guard]:', err?.message || err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('⚠️ [UnhandledRejection Guard]:', reason?.message || reason);
+});
+
 // TurfFlow Unified Production Backend & WhatsApp Automation Server
 import './env.js';
 import express from 'express';

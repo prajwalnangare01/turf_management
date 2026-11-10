@@ -7,6 +7,7 @@ import { RedisLockService } from '../../services/redisLockService';
 import { SupabaseSyncService } from '../../services/supabaseSyncService';
 import { Booking, AdminUser, Court, BlockedSlot } from '../../types/schema';
 import { formatTime12h, formatTimeRange12h } from '../../utils/formatters';
+import { getVenueDateString, getVenueNow } from '../../utils/venueTime';
 import { OfflineBookingModal } from './OfflineBookingModal';
 import { AdminRefundModal } from './AdminRefundModal';
 import { EmergencyWeatherModal } from './EmergencyWeatherModal';
@@ -162,9 +163,17 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
     setSelectedDate(d.toISOString().split('T')[0]);
   };
 
+  // CC-ADV: Venue advance days calculation for admin schedule matrix
+  const venue = store.getVenue();
+  const venueNow = getVenueNow();
+  const maxCustomerDate = new Date(venueNow);
+  maxCustomerDate.setDate(maxCustomerDate.getDate() + (venue.max_advance_days || 14));
+  const maxCustomerDateStr = `${maxCustomerDate.getFullYear()}-${String(maxCustomerDate.getMonth() + 1).padStart(2, '0')}-${String(maxCustomerDate.getDate()).padStart(2, '0')}`;
+  const isBeyondCustomerLimit = selectedDate > maxCustomerDateStr;
+
   // Generate time rows dynamically based on all computed slots for active courts for the selected date
   const allSlotStartTimes = Array.from(
-    new Set(courts.flatMap(c => SlotEngine.computeSlotsForCourt(c, selectedDate).map(s => s.start_time)))
+    new Set(courts.flatMap(c => SlotEngine.computeSlotsForCourt(c, selectedDate, undefined, true).map(s => s.start_time)))
   ).sort();
 
   const timeRows = allSlotStartTimes.length > 0
@@ -190,21 +199,52 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
           <h2 className="font-headline font-bold text-lg text-primary">Pitch Schedule Matrix</h2>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button onClick={() => changeDate(-1)} className="btn-secondary p-1.5 rounded-lg">
-            <ChevronLeft className="w-4 h-4 text-on-surface" />
-          </button>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <button onClick={() => changeDate(-1)} className="btn-secondary p-1.5 rounded-lg" title="Previous Day">
+              <ChevronLeft className="w-4 h-4 text-on-surface" />
+            </button>
 
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={e => setSelectedDate(e.target.value)}
-            className="form-input text-xs font-bold py-1.5 px-3 w-36"
-          />
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={e => setSelectedDate(e.target.value)}
+              className="form-input text-xs font-bold py-1.5 px-3 w-36"
+            />
 
-          <button onClick={() => changeDate(1)} className="btn-secondary p-1.5 rounded-lg">
-            <ChevronRight className="w-4 h-4 text-on-surface" />
-          </button>
+            <button onClick={() => changeDate(1)} className="btn-secondary p-1.5 rounded-lg" title="Next Day">
+              <ChevronRight className="w-4 h-4 text-on-surface" />
+            </button>
+          </div>
+
+          {/* Quick Date Navigation Pills */}
+          <div className="flex items-center gap-1 flex-wrap">
+            {[
+              { label: 'Today', days: 0 },
+              { label: 'Tomorrow', days: 1 },
+              { label: '+7D', days: 7 },
+              { label: '+15D', days: 15 },
+              { label: '+30D (Next Mo.)', days: 30 },
+              { label: '+60D', days: 60 }
+            ].map(pill => {
+              const dStr = getVenueDateString(pill.days);
+              const isActive = selectedDate === dStr;
+              return (
+                <button
+                  key={pill.label}
+                  type="button"
+                  onClick={() => setSelectedDate(dStr)}
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded transition ${
+                    isActive
+                      ? 'bg-primary text-white shadow-xs'
+                      : 'bg-white hover:bg-primary/10 text-on-surface-variant border border-outline-variant/40'
+                  }`}
+                >
+                  {pill.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -243,6 +283,15 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
         </div>
       </div>
 
+      {isBeyondCustomerLimit && (
+        <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-medium px-4 py-2.5 rounded-xl shadow-xs">
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+          <span>
+            <strong>Admin Authority Override Mode:</strong> This date ({selectedDate}) is beyond the public customer window ({venue.max_advance_days || 14} days). All slots are dynamically open for administrative booking.
+          </span>
+        </div>
+      )}
+
       {/* Grid Table */}
       <div className="bg-white border border-outline-variant/40 rounded-xl overflow-x-auto shadow-sm">
         <table className="w-full text-left border-collapse min-w-[700px]">
@@ -267,7 +316,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
 
                 {/* Court Columns */}
                 {courts.map(court => {
-                  const slots = SlotEngine.computeSlotsForCourt(court, selectedDate);
+                  const slots = SlotEngine.computeSlotsForCourt(court, selectedDate, undefined, true);
                   const slot = slots.find(s => s.start_time === timeStr);
 
                   if (!slot) {
@@ -381,7 +430,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
       {/* Booking Detail Drawer Modal */}
       {selectedBooking && (
         <div className="modal-overlay">
-          <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl animate-modalScaleIn text-on-surface">
+          <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl animate-modalScaleIn text-on-surface max-h-[90vh] overflow-y-auto no-scrollbar">
             <div className="flex justify-between items-center border-b border-outline-variant/40 pb-3">
               <h3 className="font-headline font-bold text-lg text-primary">Booking Details</h3>
               <span className="font-mono text-xs text-primary font-bold bg-primary/10 px-2 py-0.5 rounded">{selectedBooking.booking_ref || selectedBooking.id}</span>
@@ -527,7 +576,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
       {/* CC-D03: Pitch Maintenance / Block Slot Modal */}
       {blockModalState.isOpen && (
         <div className="modal-overlay z-[9999]">
-          <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl animate-modalScaleIn text-on-surface">
+          <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl animate-modalScaleIn text-on-surface max-h-[90vh] overflow-y-auto no-scrollbar">
             <div className="flex justify-between items-center border-b border-outline-variant/40 pb-3">
               <h3 className="font-headline font-bold text-lg text-primary flex items-center gap-2">
                 <Lock className="w-5 h-5 text-gray-700" /> Block Court / Pitch

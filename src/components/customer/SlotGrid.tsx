@@ -68,14 +68,27 @@ export const SlotGrid: React.FC<SlotGridProps> = ({ slots, selectedSlots, onTogg
                 <>
                   <div>
                     <span className={`text-[10px] block leading-none ${isSelected ? 'text-on-secondary-container/80' : 'text-on-surface-variant'}`}>Rate</span>
-                    <span className={`text-sm font-headline font-extrabold ${isSelected ? 'text-on-secondary-container' : 'text-primary'}`}>
-                      ₹{slot.price}
-                    </span>
+                    <div className="flex items-baseline gap-1 mt-0.5">
+                      {slot.original_price && slot.original_price > slot.price && (
+                        <span className={`text-xs line-through ${isSelected ? 'text-on-secondary-container/60' : 'text-on-surface-variant/70'}`}>
+                          ₹{slot.original_price}
+                        </span>
+                      )}
+                      <span className={`text-sm font-headline font-extrabold ${isSelected ? 'text-on-secondary-container' : 'text-primary'}`}>
+                        ₹{slot.price}
+                      </span>
+                    </div>
                   </div>
                   {!isSelected && (
-                    <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full">
-                      Open
-                    </span>
+                    slot.original_price && slot.original_price > slot.price ? (
+                      <span className="text-[9px] font-black text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded-full">
+                        {Math.round(((slot.original_price - slot.price) / slot.original_price) * 100)}% OFF
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+                        Open
+                      </span>
+                    )
                   )}
                 </>
               )}

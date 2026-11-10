@@ -84,6 +84,14 @@ export class WhatsAppService {
     this.status = 'connecting';
     this.lastError = null;
 
+    if (this.sock) {
+      try {
+        this.sock.ev?.removeAllListeners();
+        this.sock.end(new Error('Re-initializing socket'));
+      } catch {}
+      this.sock = null;
+    }
+
     if (targetPhoneNumber) {
       this.targetPhone = targetPhoneNumber.replace(/\D/g, '');
     }
@@ -178,8 +186,8 @@ export class WhatsAppService {
             this.lastError = 'Pairing timed out. Click Request Pairing Code to generate a fresh one.';
           } else {
             this.reconnectAttempts++;
-            if (this.reconnectAttempts <= 5) {
-              const delay = Math.min(this.reconnectAttempts * 2000, 10000);
+            if (this.reconnectAttempts <= 10) {
+              const delay = statusCode === 440 ? 15000 : Math.min(this.reconnectAttempts * 2000, 10000);
               setTimeout(() => this.init({ usePairingCode: false }), delay);
             }
           }
@@ -212,8 +220,14 @@ export class WhatsAppService {
             if (msg.key.fromMe) continue;
 
             const remoteJid = msg.key.remoteJid;
-            if (!remoteJid || remoteJid.includes('@g.us') || remoteJid === 'status@broadcast') {
-              // Ignore group chats and status updates
+            if (
+              !remoteJid ||
+              remoteJid.includes('@g.us') ||
+              remoteJid === 'status@broadcast' ||
+              remoteJid.includes('@newsletter') ||
+              remoteJid.includes('@lid')
+            ) {
+              // Ignore group chats, broadcast channels, newsletters, and status updates
               continue;
             }
 

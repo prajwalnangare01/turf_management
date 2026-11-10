@@ -62,7 +62,7 @@ export const CancelBookingConfirmModal: React.FC<CancelBookingConfirmModalProps>
 
   return (
     <div className="modal-overlay">
-      <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl animate-modalScaleIn text-on-surface">
+      <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl animate-modalScaleIn text-on-surface max-h-[90vh] overflow-y-auto no-scrollbar">
         {/* Header */}
         <div className="flex justify-between items-start border-b border-outline-variant/30 pb-3">
           <div className="flex items-center gap-2.5">

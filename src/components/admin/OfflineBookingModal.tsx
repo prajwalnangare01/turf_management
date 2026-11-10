@@ -6,7 +6,7 @@ import { AuditLogger } from '../../services/auditLogger';
 import { NotificationService } from '../../services/notificationService';
 import { SlotEngine } from '../../services/slotEngine';
 import { AdminUser, BookingSource, PaymentMethod, Payment } from '../../types/schema';
-import { normalizeIndianPhone } from '../../utils/venueTime';
+import { normalizeIndianPhone, getVenueDateString } from '../../utils/venueTime';
 import { AlertTriangle, ShieldAlert, PlusCircle, X, Split, KeyRound, Clock } from 'lucide-react';
 
 interface OfflineBookingModalProps {
@@ -36,7 +36,7 @@ export const OfflineBookingModal: React.FC<OfflineBookingModalProps> = ({
   const selectedCourt = courts.find(c => c.id === courtId);
 
   // Compute available slots for court and date
-  const availableSlots = selectedCourt ? SlotEngine.computeSlotsForCourt(selectedCourt, dateStr) : [];
+  const availableSlots = selectedCourt ? SlotEngine.computeSlotsForCourt(selectedCourt, dateStr, undefined, true) : [];
   
   const [startTime, setStartTime] = useState(() => {
     if (initialStartTime) return initialStartTime;
@@ -99,15 +99,7 @@ export const OfflineBookingModal: React.FC<OfflineBookingModalProps> = ({
       return;
     }
 
-    // EDGE CASE: Check advance booking window limit
-    const venue = store.getVenue();
-    const maxDate = new Date(now);
-    maxDate.setDate(maxDate.getDate() + (venue.max_advance_days || 14));
-    const maxDateStr = `${maxDate.getFullYear()}-${String(maxDate.getMonth() + 1).padStart(2, '0')}-${String(maxDate.getDate()).padStart(2, '0')}`;
-    if (dateStr > maxDateStr) {
-      setErrorMsg(`Date exceeds the maximum advance booking window (${venue.max_advance_days || 14} days).`);
-      return;
-    }
+    // Admin Authority: Venue managers and staff are authorized to book on ANY future date (no advance limit)
 
     // CC-D01: Active Hold & RBAC Override Protection
     if (conflictInfo.hasLock && !overrideLock) {
@@ -237,7 +229,7 @@ export const OfflineBookingModal: React.FC<OfflineBookingModalProps> = ({
 
   return (
     <div className="modal-overlay">
-      <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-md max-h-[85vh] overflow-y-auto shadow-2xl animate-modalScaleIn text-on-surface">
+      <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-md max-h-[85vh] overflow-y-auto no-scrollbar shadow-2xl animate-modalScaleIn text-on-surface">
         <div className="p-4 bg-surface-container-low border-b border-outline-variant/40 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <PlusCircle className="w-5 h-5 text-secondary font-bold" />
@@ -322,7 +314,7 @@ export const OfflineBookingModal: React.FC<OfflineBookingModalProps> = ({
                 setCourtId(e.target.value);
                 const c = courts.find(crt => crt.id === e.target.value);
                 if (c) {
-                  const slots = SlotEngine.computeSlotsForCourt(c, dateStr);
+                  const slots = SlotEngine.computeSlotsForCourt(c, dateStr, undefined, true);
                   if (slots.length > 0) setStartTime(slots[0].start_time);
                 }
               }}
@@ -336,20 +328,59 @@ export const OfflineBookingModal: React.FC<OfflineBookingModalProps> = ({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-headline font-bold text-on-surface-variant mb-1">Date *</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-headline font-bold text-on-surface-variant">Date *</label>
+                <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded border border-emerald-300">
+                  ✨ Admin Authority: Any Date
+                </span>
+              </div>
               <input
                 type="date"
                 required
+                min={getVenueDateString(0)}
                 value={dateStr}
                 onChange={e => {
                   setDateStr(e.target.value);
                   if (selectedCourt) {
-                    const slots = SlotEngine.computeSlotsForCourt(selectedCourt, e.target.value);
+                    const slots = SlotEngine.computeSlotsForCourt(selectedCourt, e.target.value, undefined, true);
                     if (slots.length > 0) setStartTime(slots[0].start_time);
                   }
                 }}
                 className="form-input"
               />
+              {/* Quick Jump Buttons for Future Dates */}
+              <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+                {[
+                  { label: 'Today', days: 0 },
+                  { label: 'Tomorrow', days: 1 },
+                  { label: '+15 Days', days: 15 },
+                  { label: '+30 Days (Next Mo.)', days: 30 },
+                  { label: '+60 Days', days: 60 }
+                ].map(item => {
+                  const targetD = getVenueDateString(item.days);
+                  const isCurrent = dateStr === targetD;
+                  return (
+                    <button
+                      key={item.label}
+                      type="button"
+                      onClick={() => {
+                        setDateStr(targetD);
+                        if (selectedCourt) {
+                          const slots = SlotEngine.computeSlotsForCourt(selectedCourt, targetD, undefined, true);
+                          if (slots.length > 0) setStartTime(slots[0].start_time);
+                        }
+                      }}
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded transition ${
+                        isCurrent
+                          ? 'bg-primary text-white shadow-xs'
+                          : 'bg-surface-container hover:bg-primary/10 text-on-surface-variant border border-outline-variant/40'
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             <div>

@@ -126,7 +126,7 @@ export const EmergencyWeatherModal: React.FC<EmergencyWeatherModalProps> = ({
 
   return (
     <div className="modal-overlay z-[9999]">
-      <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl animate-modalScaleIn text-on-surface">
+      <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto no-scrollbar shadow-2xl animate-modalScaleIn text-on-surface">
         {/* Header */}
         <div className="p-4 bg-red-50 border-b border-red-200 flex items-center justify-between sticky top-0 z-10">
           <div className="flex items-center gap-2">
@@ -283,7 +283,7 @@ export const EmergencyWeatherModal: React.FC<EmergencyWeatherModalProps> = ({
               </div>
 
               {affectedBookings.length > 0 && (
-                <div className="max-h-32 overflow-y-auto space-y-1.5 pt-1.5 border-t border-amber-200/60">
+                <div className="max-h-32 overflow-y-auto no-scrollbar space-y-1.5 pt-1.5 border-t border-amber-200/60">
                   {affectedBookings.map(b => {
                     const cust = store.getCustomers().find(c => c.id === b.customer_id);
                     return (

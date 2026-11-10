@@ -56,7 +56,8 @@ export interface Court {
   closing_time: string; // "23:00"
   buffer_minutes: number; // turnover time (e.g., 10 mins)
   status: 'active' | 'maintenance' | 'inactive';
-  base_price_per_hour: number; // Weekday Rate (Mon - Fri)
+  base_price_per_hour: number; // Weekday Rate (Mon - Fri) / Active Discounted Price
+  original_price_per_hour?: number; // Pre-discount Regular Price / MRP (displayed with strikethrough)
   saturday_price_per_hour?: number; // Saturday Special Rate
   sunday_price_per_hour?: number; // Sunday Special Rate
   weekend_price_per_hour?: number; // Generic Weekend Rate
@@ -221,6 +222,7 @@ export interface DynamicSlot {
   start_time: string;
   end_time: string;
   price: number;
+  original_price?: number; // Pre-discount Regular Price for this slot (displayed with strikethrough)
   is_peak: boolean;
   status: 'available' | 'locked' | 'booked_online' | 'booked_offline' | 'blocked' | 'past';
   lock_expires_at?: number;

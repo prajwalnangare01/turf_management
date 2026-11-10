@@ -139,6 +139,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   }, [targetExpiryMs, court.id, dateStr, sessionId, selectedSlots, isHoldExpired]);
 
   const rawTotal = selectedSlots.reduce((sum, s) => sum + s.price, 0);
+  const originalRawTotal = selectedSlots.reduce((sum, s) => sum + (s.original_price || s.price), 0);
   const discount = appliedCoupon
     ? appliedCoupon.discount_type === 'flat'
       ? appliedCoupon.value
@@ -390,7 +391,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   return (
     <div className="modal-overlay">
-      <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto shadow-2xl animate-modalScaleIn text-on-surface">
+      <div className="bg-white border border-outline-variant rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto no-scrollbar shadow-2xl animate-modalScaleIn text-on-surface">
         {/* Stitch Header */}
         <div className="p-4 bg-surface-container-low border-b border-outline-variant/40 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -431,9 +432,20 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               </span>
             </div>
             <div className="border-t border-outline-variant/30 pt-2 flex justify-between items-center">
-              <span className="text-xs font-semibold text-on-surface-variant">Total Payable:</span>
-              <div className="text-right">
-                {discount > 0 && <span className="line-through text-on-surface-variant text-xs mr-2">₹{rawTotal}</span>}
+              <div>
+                <span className="text-xs font-semibold text-on-surface-variant block">Total Payable:</span>
+                {originalRawTotal > finalTotal && (
+                  <span className="text-[10px] text-emerald-700 font-bold">
+                    You Save: ₹{originalRawTotal - finalTotal}
+                  </span>
+                )}
+              </div>
+              <div className="text-right flex items-baseline justify-end gap-1.5">
+                {originalRawTotal > finalTotal && (
+                  <span className="line-through text-on-surface-variant/70 text-xs font-semibold">
+                    ₹{originalRawTotal}
+                  </span>
+                )}
                 <span className="font-headline text-2xl font-extrabold text-primary">₹{finalTotal}</span>
               </div>
             </div>
@@ -644,7 +656,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       {/* 5-Minute Hold Expired In-App Popup Modal */}
       {isHoldExpired && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-900/75 backdrop-blur-md p-4">
-          <div className="bg-white border border-outline-variant/60 rounded-3xl w-full max-w-md p-6 space-y-5 shadow-2xl text-center animate-modalScaleIn text-on-surface">
+          <div className="bg-white border border-outline-variant/60 rounded-3xl w-full max-w-md p-6 space-y-5 shadow-2xl text-center animate-modalScaleIn text-on-surface max-h-[90vh] overflow-y-auto no-scrollbar">
             <div className="w-16 h-16 bg-amber-50 border-2 border-amber-300 text-amber-600 rounded-full flex items-center justify-center mx-auto shadow-sm">
               <Clock className="w-8 h-8 text-amber-600 animate-pulse" />
             </div>

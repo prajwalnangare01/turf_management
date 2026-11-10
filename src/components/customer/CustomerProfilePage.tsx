@@ -598,7 +598,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
 
       {/* Entry Pass & Receipt Modal */}
       {passModalBooking && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto no-scrollbar">
           <div className="bg-white rounded-3xl max-w-xl w-full border border-outline-variant/60 shadow-2xl overflow-hidden animate-in zoom-in-95 my-auto">
             
             {/* Header with Title & Close Button (No PDF View switch) */}
@@ -760,7 +760,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
       {/* Resend Email OTP Verification Modal for Profile Update */}
       {isVerifyingEmail && (
         <div className="modal-overlay">
-          <div className="bg-white border border-outline-variant rounded-3xl w-full max-w-md p-6 shadow-2xl animate-modalScaleIn text-on-surface space-y-4">
+          <div className="bg-white border border-outline-variant rounded-3xl w-full max-w-md p-6 shadow-2xl animate-modalScaleIn text-on-surface space-y-4 max-h-[90vh] overflow-y-auto no-scrollbar">
             <div className="flex justify-between items-center pb-2 border-b border-outline-variant/40">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold">
