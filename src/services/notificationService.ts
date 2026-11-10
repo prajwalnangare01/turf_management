@@ -61,7 +61,7 @@ export class NotificationService {
       const emailSubject = type === 'confirmation'
         ? `Booking Confirmed: ${booking.booking_ref} - ${venue.name}`
         : type === 'reminder'
-          ? `⏰ Kickoff in 1 Hour: ${courtName} at ${booking.start_time} (${venue.name})`
+          ? `⏰ Kickoff in 1 Hour: ${courtName} at ${formatTime12hPlain(booking.start_time)} (${venue.name})`
           : type === 'cancellation'
             ? (booking.refund_amount && booking.refund_amount > 0
                 ? `Booking Cancelled & Refund Initiated: ${booking.booking_ref}`

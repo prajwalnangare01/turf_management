@@ -1,5 +1,5 @@
 import { Booking, Customer, Court, Venue } from '../types/schema';
-import { formatTimeRange12h, formatDateDDMMYYYY } from '../utils/formatters';
+import { formatTimeRange12h, formatTime12hPlain, formatDateDDMMYYYY } from '../utils/formatters';
 
 export interface EmailDispatchResult {
   success: boolean;
@@ -717,7 +717,7 @@ export class EmailService {
     const otpCode = (booking.booking_ref || booking.id || '').slice(-4) || '----';
     const timeRangeStr = formatTimeRange12h(booking.start_time, booking.end_time);
 
-    const subject = `⏰ Kickoff in 1 Hour: ${courtName} at ${booking.start_time} (${venue.name})`;
+    const subject = `⏰ Kickoff in 1 Hour: ${courtName} at ${formatTime12hPlain(booking.start_time)} (${venue.name})`;
 
     const text = [
       `TURFFLOW - MATCHDAY REMINDER (1 HOUR TO KICKOFF)`,
