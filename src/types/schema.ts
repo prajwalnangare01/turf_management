@@ -49,6 +49,7 @@ export interface Sport {
   icon: string; // Emoji or Lucide icon name
   image_url?: string; // Uploaded image (data URL) or external cover image URL
   subtitle?: string; // Short description shown on the Select Sport card
+  display_order?: number; // Sorting/display sequence order index (0 = first, 1 = second, etc.)
 }
 
 export interface Court {

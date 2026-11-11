@@ -31,6 +31,8 @@ export interface HoldSummaryBarProps {
   onProceed: () => void;
   /** Optional custom class overrides */
   className?: string;
+  /** Optional callback fired when the 5-minute hold expires */
+  onExpire?: () => void;
 }
 
 export const HoldSummaryBar: React.FC<HoldSummaryBarProps> = ({
@@ -47,7 +49,8 @@ export const HoldSummaryBar: React.FC<HoldSummaryBarProps> = ({
   proceedText = 'PROCEED',
   isLoading = false,
   onProceed,
-  className = ''
+  className = '',
+  onExpire
 }) => {
   // 1. Resolve start & end times cleanly
   let startTime = propStartTime;
@@ -79,6 +82,7 @@ export const HoldSummaryBar: React.FC<HoldSummaryBarProps> = ({
   const slotCountLabel = heldCount === 1 ? '1 Slot Held' : `${heldCount} Slots Held`;
 
   // 4. Live Countdown Timer (if expiresAt provided or active hold)
+  const hasExpiredRef = React.useRef(false);
   const [secondsRemaining, setSecondsRemaining] = useState<number | null>(() => {
     if (!expiresAt) return null;
     return Math.min(300, Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000)));
@@ -87,16 +91,21 @@ export const HoldSummaryBar: React.FC<HoldSummaryBarProps> = ({
   useEffect(() => {
     if (!expiresAt) {
       setSecondsRemaining(null);
+      hasExpiredRef.current = false;
       return;
     }
     const updateCountdown = () => {
       const remaining = Math.min(300, Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000)));
       setSecondsRemaining(remaining);
+      if (remaining <= 0 && !hasExpiredRef.current) {
+        hasExpiredRef.current = true;
+        onExpire?.();
+      }
     };
     updateCountdown();
     const interval = setInterval(updateCountdown, 1000);
     return () => clearInterval(interval);
-  }, [expiresAt]);
+  }, [expiresAt, onExpire]);
 
   const formattedTimer = secondsRemaining !== null && secondsRemaining > 0
     ? `${String(Math.floor(secondsRemaining / 60)).padStart(2, '0')}:${String(secondsRemaining % 60).padStart(2, '0')}`

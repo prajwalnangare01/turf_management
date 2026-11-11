@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS sports (
   name VARCHAR(64) NOT NULL UNIQUE,
   icon VARCHAR(64) NOT NULL,
   image_url TEXT,
-  subtitle VARCHAR(120)
+  subtitle VARCHAR(120),
+  display_order INT DEFAULT 0
 );
 
 -- 3. Courts Table

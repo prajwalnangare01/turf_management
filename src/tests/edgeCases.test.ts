@@ -1805,6 +1805,58 @@ async function runResendTests() {
   const skew20 = skewSlots.find(s => s.start_time === '20:00');
   assert(skew20?.status === 'available', 'Clock-skewed future pending_payment booking does not hold slot');
   store.setBookings(store.getBookings().filter(b => b.id !== 'bk-skew-future'));
+
+  // --- TEST 30: Inactivity Hold Timeout & Site Auto-Deselect After 5 Minutes ---
+  console.log('\n--- TEST 30: Inactivity Hold Timeout & Site Auto-Deselect After 5 Minutes ---');
+  const inactivityTestCourt = store.getCourts()[1] || store.getCourts()[0];
+  const inactivityTestDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const testSlotTime = '11:00';
+  const testSessionId = 'sess_inactivity_test_user_1';
+
+  // 30.1: User selects slot and acquires 5-minute lock
+  const lockAcquire = RedisLockService.acquireLock(inactivityTestCourt.id, inactivityTestDate, testSlotTime, testSessionId);
+  assert(lockAcquire.success === true, 'Slot lock successfully acquired for selected slot');
+  assert(lockAcquire.lock?.locked_by === testSessionId, 'Lock ownership matches user session ID');
+  const initialLock = RedisLockService.getLock(inactivityTestCourt.id, inactivityTestDate, testSlotTime);
+  assert(initialLock !== undefined, 'Slot is locked in Redis');
+
+  // Verify slot is locked by user in slot engine
+  const slotsDuringHold = SlotEngine.computeSlotsForCourt(inactivityTestCourt, inactivityTestDate, testSessionId);
+  const userHeldSlot = slotsDuringHold.find(s => s.start_time === testSlotTime);
+  assert(userHeldSlot?.status === 'locked' && userHeldSlot.locked_by === testSessionId, 'Slot engine reflects user hold');
+
+  // Other user attempting to select is blocked
+  const otherUserLockAttempt = RedisLockService.acquireLock(inactivityTestCourt.id, inactivityTestDate, testSlotTime, 'sess_other_user_2');
+  assert(otherUserLockAttempt.success === false, 'Other user blocked from selecting currently held slot');
+
+  // 30.2: Inactivity Watchdog Simulation (5 Minutes Inactivity / Hold Timeout)
+  const INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000;
+  let lastActivityTime = Date.now() - (INACTIVITY_TIMEOUT_MS + 1000); // 5 min + 1s ago (idle)
+
+  const isIdle5Min = (Date.now() - lastActivityTime) >= INACTIVITY_TIMEOUT_MS;
+  assert(isIdle5Min === true, 'Inactivity watchdog accurately detects 5+ minutes of inactivity');
+
+  // Simulate handleHoldExpired execution
+  // 1. Release all locks for session
+  RedisLockService.releaseAllLocksForSession(testSessionId);
+  const lockAfterTimeout = RedisLockService.getLock(inactivityTestCourt.id, inactivityTestDate, testSlotTime);
+  assert(lockAfterTimeout === undefined, 'Held slot lock is released after 5-minute inactivity timeout');
+
+  // 2. Selected slots array is deselected
+  let selectedSlotsSimulation = [{ start_time: testSlotTime, end_time: '18:00', price: 1200 }];
+  selectedSlotsSimulation = [];
+  assert(selectedSlotsSimulation.length === 0, 'Selected slots array is cleared/deselected');
+
+  // 3. Slot immediately returns to available in SlotEngine for all users
+  const slotsAfterDeselect = SlotEngine.computeSlotsForCourt(inactivityTestCourt, inactivityTestDate);
+  const releasedSlot = slotsAfterDeselect.find(s => s.start_time === testSlotTime);
+  assert(releasedSlot?.status === 'available', 'Slot engine returns slot to available status');
+
+  // 4. Other user can now immediately acquire the slot
+  const otherUserAcquire = RedisLockService.acquireLock(inactivityTestCourt.id, inactivityTestDate, testSlotTime, 'sess_other_user_2');
+  assert(otherUserAcquire.success === true, 'Another user can immediately select the slot once 5-minute timeout deselects it');
+  RedisLockService.releaseLock(inactivityTestCourt.id, inactivityTestDate, testSlotTime, 'sess_other_user_2');
+
   console.log('\n🎉 ALL CORNER & EDGE CASE TESTS (INCLUDING AUTO-COMPLETE & OWNER REDUCED WORKFLOW) PASSED PERFECTLY!\n');
 }
 

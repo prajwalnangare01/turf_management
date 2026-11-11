@@ -52,6 +52,15 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
         setSports(updated);
         setSelectedSportIds(prev => prev.filter(id => id !== sportId));
         setEditSportIds(prev => prev.filter(id => id !== sportId));
+
+        // Clean court sport associations
+        const updatedCourts = courts.map(c => ({
+          ...c,
+          sport_ids: (c.sport_ids || []).filter(id => id !== sportId)
+        }));
+        store.setCourts(updatedCourts);
+        setCourts(updatedCourts);
+
         closeConfirm();
 
         try {
@@ -397,6 +406,17 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
       status: newStatus
     };
 
+    // Remove from deleted blacklist if re-adding/creating
+    try {
+      const raw = localStorage.getItem('TURFFLOW_DELETED_COURTS');
+      if (raw) {
+        const list: string[] = JSON.parse(raw);
+        if (list.includes(newCourt.id)) {
+          localStorage.setItem('TURFFLOW_DELETED_COURTS', JSON.stringify(list.filter(id => id !== newCourt.id)));
+        }
+      }
+    } catch (e) {}
+
     const updatedCourts = [...courts, newCourt];
     store.setCourts(updatedCourts);
     setCourts(updatedCourts);
@@ -597,12 +617,24 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
       confirmText: 'Yes, Delete Pitch',
       variant: 'danger',
       onConfirm: async () => {
-        const updatedCourts = courts.filter(c => c.id !== courtId);
+        // 1. Immediately record in local deleted courts blacklist so background sync never resurrects it
+        try {
+          const raw = localStorage.getItem('TURFFLOW_DELETED_COURTS');
+          const deletedList: string[] = raw ? JSON.parse(raw) : [];
+          if (!deletedList.includes(courtId)) {
+            deletedList.push(courtId);
+            localStorage.setItem('TURFFLOW_DELETED_COURTS', JSON.stringify(deletedList));
+          }
+        } catch (e) {}
+
+        // 2. Remove court from store and local state
+        const updatedCourts = store.getCourts().filter(c => c.id !== courtId);
         store.setCourts(updatedCourts);
         setCourts(updatedCourts);
-        AuditLogger.log(currentAdmin.id, 'DELETE_COURT', 'Court', courtId);
+        AuditLogger.log(currentAdmin.id, 'DELETE_COURT', 'Court', courtId, { name: courtName });
         closeConfirm();
 
+        // 3. Delete court and its associations from Supabase
         try {
           await SupabaseSyncService.deleteCourtFromSupabase(courtId);
         } catch (err) {
@@ -625,7 +657,13 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
         if (selectedSportIds.length === 1) return;
         setSelectedSportIds(selectedSportIds.filter(id => id !== sportId));
       } else {
-        setSelectedSportIds([...selectedSportIds, sportId]);
+        // If the only selected sport is the default initial sport (e.g. sp-football),
+        // and the user clicks another sport (like sp-pickleball), switch directly to it
+        if (selectedSportIds.length === 1 && selectedSportIds[0] === 'sp-football' && sportId !== 'sp-football') {
+          setSelectedSportIds([sportId]);
+        } else {
+          setSelectedSportIds([...selectedSportIds, sportId]);
+        }
       }
     }
   };
@@ -804,7 +842,13 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
         </div>
 
         {courts.length === 0 ? (
-          <PitchGridSkeleton count={3} />
+          <div className="p-8 text-center bg-white rounded-2xl border border-dashed border-outline-variant/60 space-y-2 shadow-xs">
+            <div className="text-3xl">🏟️</div>
+            <h4 className="font-headline font-bold text-sm text-on-surface">No Pitches Configured</h4>
+            <p className="text-xs text-on-surface-variant max-w-md mx-auto">
+              There are currently no active pitches configured. Click &ldquo;+ Add Pitch&rdquo; above to set up a new pitch.
+            </p>
+          </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {courts.map(court => {
@@ -1132,7 +1176,7 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
                         <CustomSportCreator
                           sports={sports}
                           onSportsUpdated={setSports}
-                          onSelectSportId={(sportId) => setSelectedSportIds(prev => prev.includes(sportId) ? prev : [...prev, sportId])}
+                          onSelectSportId={(sportId) => setSelectedSportIds([sportId])}
                           onClose={() => setShowAddCustomSportAdd(false)}
                         />
                       )}
@@ -1897,17 +1941,33 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
               </div>
 
               {/* Action Buttons */}
-              <div className="flex gap-2.5 pt-2 border-t border-outline-variant/30">
-                <button
-                  type="button"
-                  onClick={() => setEditingCourt(null)}
-                  className="btn-secondary flex-1 py-2 text-xs font-bold"
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="btn-primary flex-1 py-2 text-xs font-headline font-bold">
-                  Update Pitch Specs
-                </button>
+              <div className="flex items-center justify-between gap-2.5 pt-2 border-t border-outline-variant/30">
+                {currentAdmin.role !== 'staff' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const courtToDelete = editingCourt;
+                      setEditingCourt(null);
+                      handleDeleteCourt(courtToDelete.id, courtToDelete.name);
+                    }}
+                    className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 py-2 px-3.5 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                    title="Delete this pitch"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Delete Pitch
+                  </button>
+                )}
+                <div className="flex items-center gap-2 flex-1 justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setEditingCourt(null)}
+                    className="btn-secondary py-2 px-4 text-xs font-bold"
+                  >
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn-primary py-2 px-4 text-xs font-headline font-bold">
+                    Update Pitch Specs
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -2476,10 +2536,10 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
         isOpen={showSportsManagerModal}
         onClose={() => setShowSportsManagerModal(false)}
         sports={sports}
+        courts={courts}
         currentAdmin={currentAdmin}
         predefinedSportIds={PREDEFINED_SPORT_IDS}
         onSportsUpdated={setSports}
-        onRequestDeleteSport={handleDeleteCustomSport}
       />
 
       {/* Universal Confirmation Modal (Rendered at top-most z-index overlay level) */}

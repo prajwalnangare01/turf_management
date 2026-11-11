@@ -569,7 +569,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
                             type="button"
                             onClick={() => setSelectedHoldSlot({ court, date: selectedDate, time: timeStr, remainingSec })}
                             className="w-full h-14 rounded-lg bg-sky-100 hover:bg-sky-200 border border-sky-300 text-sky-950 text-[10px] font-headline font-bold flex flex-col items-center justify-center p-1.5 text-center animate-pulse transition-colors cursor-pointer"
-                            title="Click to view hold remaining time and unlock slot"
+                            title="Click to view hold remaining countdown"
                           >
                             <span className="flex items-center gap-1 font-mono font-black text-xs text-sky-900">
                               ⏱️ {timerStr}
@@ -782,10 +782,6 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
           time={selectedHoldSlot.time}
           initialRemainingSec={selectedHoldSlot.remainingSec}
           onClose={() => setSelectedHoldSlot(null)}
-          onReleaseHold={() => {
-            RedisLockService.releaseLock(selectedHoldSlot.court.id, selectedHoldSlot.date, selectedHoldSlot.time);
-            setSelectedHoldSlot(null);
-          }}
         />
       )}
 

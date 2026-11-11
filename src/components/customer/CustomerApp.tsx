@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { store } from '../../services/store';
 import { Sport, Court, DynamicSlot, Customer } from '../../types/schema';
 import { SlotEngine } from '../../services/slotEngine';
@@ -18,7 +18,7 @@ import { ActiveCustomerHoldModal } from '../common/ActiveCustomerHoldModal';
 import { formatTimeRange12h, formatTime12hPlain, formatTimeRange12hPlain, formatDateDDMMYYYY } from '../../utils/formatters';
 import { DEFAULT_SPORT_FALLBACK_IMAGE } from '../../utils/imageUpload';
 import { CustomerPortalSkeleton, PitchGridSkeleton, SportCardsSkeleton } from '../common/SkeletonLoaders';
-import { ChevronRight, Search, UserCheck, User, LogOut, ShieldCheck, Clock, Calendar, Lock, MapPin, Phone, FileText, RotateCcw } from 'lucide-react';
+import { ChevronRight, Search, UserCheck, User, LogOut, ShieldCheck, Clock, Calendar, Lock, MapPin, Phone, FileText, RotateCcw, X } from 'lucide-react';
 
 interface CustomerAppProps {
   onSwitchToAdmin: () => void;
@@ -27,8 +27,22 @@ interface CustomerAppProps {
 export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => {
   const [, setStoreVersion] = useState(0);
   const venue = store.getVenue();
-  const allSports = store.getSports();
-  const allCourts = store.getCourts();
+  const [allSports, setAllSports] = useState<Sport[]>(() => store.getSports());
+  const [allCourts, setAllCourts] = useState<Court[]>(() => store.getCourts());
+
+  // Listen to store updates for live dynamic sports & pitches synchronization
+  useEffect(() => {
+    const handleStoreChange = () => {
+      setAllSports([...store.getSports()]);
+      setAllCourts([...store.getCourts()]);
+    };
+    const unsubscribe = store.subscribe(handleStoreChange);
+    window.addEventListener('turfflow_store_synced', handleStoreChange);
+    return () => {
+      unsubscribe();
+      window.removeEventListener('turfflow_store_synced', handleStoreChange);
+    };
+  }, []);
 
   // Skeleton loading states for perceived high speed & zero content flash
   const [isInitialLoading, setIsInitialLoading] = useState(true);
@@ -45,11 +59,88 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
 
   // Filter sports to only those that have active courts configured at this venue
   const activeCourts = allCourts.filter(c => c.status === 'active');
-  const sports = allSports.filter(s => activeCourts.some(c => c.sport_ids.includes(s.id)));
-  const availableSports = sports.length > 0 ? sports : allSports;
+  const sports = allSports.filter(s =>
+    activeCourts.some(
+      c =>
+        c.sport_ids.includes(s.id) ||
+        c.sport_ids.some(
+          id => id.toLowerCase() === s.id.toLowerCase() || id.toLowerCase().includes(s.name.toLowerCase())
+        )
+    )
+  );
+  const availableSports = (sports.length > 0 ? sports : allSports).slice().sort((a, b) => {
+    const ordA = typeof a.display_order === 'number' ? a.display_order : allSports.findIndex(as => as.id === a.id);
+    const ordB = typeof b.display_order === 'number' ? b.display_order : allSports.findIndex(as => as.id === b.id);
+    if (ordA !== -1 && ordB !== -1) return ordA - ordB;
+    if (ordA !== -1) return -1;
+    if (ordB !== -1) return 1;
+    return 0;
+  });
 
-  const [selectedSport, setSelectedSport] = useState<Sport>(availableSports[0]);
-  const [selectedCourt, setSelectedCourt] = useState<Court | null>(null);
+  // Inactivity timeout notice & preserved state recovery
+  const [inactivityNotice, setInactivityNotice] = useState<string | null>(() => {
+    try {
+      const storage = typeof localStorage !== 'undefined' ? localStorage : (typeof sessionStorage !== 'undefined' ? sessionStorage : null);
+      if (storage && storage.getItem('turfflow_hold_timeout_refresh') === 'true') {
+        return 'Your slot hold expired due to 5 minutes of inactivity. Selected slots have been deselected.';
+      }
+    } catch {}
+    return null;
+  });
+
+  const getPreservedItem = (key: string) => {
+    try {
+      if (typeof localStorage !== 'undefined' && localStorage.getItem(key)) return localStorage.getItem(key);
+      if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(key)) return sessionStorage.getItem(key);
+    } catch {}
+    return null;
+  };
+
+  const preservedSportId = getPreservedItem('turfflow_preserved_sport');
+  const preservedCourtId = getPreservedItem('turfflow_preserved_court');
+  const preservedDate = getPreservedItem('turfflow_preserved_date');
+
+  useEffect(() => {
+    // Clean up preserved items after initial render without breaking React StrictMode
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('turfflow_hold_timeout_refresh');
+        localStorage.removeItem('turfflow_preserved_sport');
+        localStorage.removeItem('turfflow_preserved_court');
+        localStorage.removeItem('turfflow_preserved_date');
+      }
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.removeItem('turfflow_hold_timeout_refresh');
+        sessionStorage.removeItem('turfflow_preserved_sport');
+        sessionStorage.removeItem('turfflow_preserved_court');
+        sessionStorage.removeItem('turfflow_preserved_date');
+      }
+    } catch {}
+  }, []);
+
+  const [selectedSport, setSelectedSport] = useState<Sport>(() => {
+    if (preservedSportId) {
+      const match = availableSports.find(s => s.id === preservedSportId);
+      if (match) return match;
+    }
+    return availableSports[0];
+  });
+  const [selectedCourt, setSelectedCourt] = useState<Court | null>(() => {
+    if (preservedCourtId) {
+      const match = activeCourts.find(c => c.id === preservedCourtId);
+      if (match) return match;
+    }
+    return null;
+  });
+
+  // Synchronize selectedSport whenever availableSports change
+  useEffect(() => {
+    if (availableSports.length > 0) {
+      if (!selectedSport || !availableSports.some(s => s.id === selectedSport.id)) {
+        setSelectedSport(availableSports[0]);
+      }
+    }
+  }, [availableSports, selectedSport]);
 
   // Quick filter state
   const [activeFilter, setActiveFilter] = useState<'today' | 'tomorrow' | 'weekend' | 'all'>('today');
@@ -64,7 +155,9 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
 
   // Date strip setup (next 14 days)
   const todayStr = new Date().toISOString().split('T')[0];
-  const [selectedDate, setSelectedDate] = useState<string>(todayStr);
+  const [selectedDate, setSelectedDate] = useState<string>(() => {
+    return preservedDate || todayStr;
+  });
 
   const dateStrip = Array.from({ length: 14 }, (_, i) => {
     const d = new Date();
@@ -284,16 +377,107 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
     }, delay);
   };
 
-  const releaseCurrentSelectionLocks = () => {
-    if (selectedCourt && selectedSlots.length > 0) {
-      selectedSlots.forEach(s => {
+  const releaseCurrentSelectionLocks = useCallback(() => {
+    const slots = selectedSlotsRef.current;
+    if (selectedCourt && slots.length > 0) {
+      slots.forEach(s => {
         RedisLockService.releaseLock(selectedCourt.id, selectedDate, s.start_time, effectiveSessionId);
         if (sessionId !== effectiveSessionId) {
           RedisLockService.releaseLock(selectedCourt.id, selectedDate, s.start_time, sessionId);
         }
       });
     }
-  };
+  }, [selectedCourt, selectedDate, effectiveSessionId, sessionId]);
+
+  // 5-Minute Inactivity & Hold Expiration Handler:
+  // Automatically releases locks, deselects slots, and refreshes the user site.
+  const handleHoldExpired = useCallback(() => {
+    if (selectedSlotsRef.current.length === 0) return;
+
+    // 1. Release all locks for this session / customer
+    releaseCurrentSelectionLocks();
+    if (effectiveSessionId) {
+      RedisLockService.releaseAllLocksForSession(effectiveSessionId);
+    }
+    if (sessionId && sessionId !== effectiveSessionId) {
+      RedisLockService.releaseAllLocksForSession(sessionId);
+    }
+    if (currentCustomer?.id) {
+      RedisLockService.releaseAllLocksForSession(currentCustomer.id);
+    }
+
+    // 2. Deselect slots and close any open checkout modal
+    setSelectedSlots([]);
+    setShowCheckout(false);
+
+    // 3. Store refresh state in localStorage and sessionStorage
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('turfflow_hold_timeout_refresh', 'true');
+        if (selectedSport?.id) localStorage.setItem('turfflow_preserved_sport', selectedSport.id);
+        if (selectedCourt?.id) localStorage.setItem('turfflow_preserved_court', selectedCourt.id);
+        if (selectedDate) localStorage.setItem('turfflow_preserved_date', selectedDate);
+      }
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem('turfflow_hold_timeout_refresh', 'true');
+        if (selectedSport?.id) sessionStorage.setItem('turfflow_preserved_sport', selectedSport.id);
+        if (selectedCourt?.id) sessionStorage.setItem('turfflow_preserved_court', selectedCourt.id);
+        if (selectedDate) sessionStorage.setItem('turfflow_preserved_date', selectedDate);
+      }
+    } catch {}
+
+    // 4. Refresh user site to deselect the slot
+    if (typeof window !== 'undefined' && typeof window.location?.reload === 'function') {
+      window.location.reload();
+    } else {
+      refreshSlots();
+      setInactivityNotice('Your slot hold expired due to 5 minutes of inactivity. Selected slots have been deselected.');
+    }
+  }, [releaseCurrentSelectionLocks, effectiveSessionId, sessionId, currentCustomer?.id, selectedSport?.id, selectedCourt?.id, selectedDate]);
+
+  // 5-Minute Inactivity & Hold Expiration Watchdog:
+  // When user selects any slot and does not do anything for 5 minutes (or 5-minute hold expires),
+  // refresh the user site to deselect the slot.
+  const lastActivityTimeRef = useRef<number>(Date.now());
+  const INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+
+  useEffect(() => {
+    if (selectedSlots.length === 0) {
+      return;
+    }
+
+    // Reset activity timer when slots are selected
+    lastActivityTimeRef.current = Date.now();
+
+    const updateActivity = () => {
+      lastActivityTimeRef.current = Date.now();
+    };
+
+    const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'touchmove', 'scroll', 'click'];
+    events.forEach(ev => window.addEventListener(ev, updateActivity, { passive: true }));
+
+    const checkInterval = setInterval(() => {
+      const now = Date.now();
+      const idleTime = now - lastActivityTimeRef.current;
+
+      const firstLock = selectedCourt && selectedSlotsRef.current.length > 0
+        ? RedisLockService.getLock(selectedCourt.id, selectedDate, selectedSlotsRef.current[0]?.start_time)
+        : null;
+
+      const isLockExpired = firstLock ? now >= firstLock.expires_at : false;
+      const isIdle5Min = idleTime >= INACTIVITY_TIMEOUT_MS;
+
+      if (isIdle5Min || isLockExpired) {
+        clearInterval(checkInterval);
+        handleHoldExpired();
+      }
+    }, 1000);
+
+    return () => {
+      events.forEach(ev => window.removeEventListener(ev, updateActivity));
+      clearInterval(checkInterval);
+    };
+  }, [selectedSlots.length, selectedCourt?.id, selectedDate, effectiveSessionId, handleHoldExpired]);
 
   const handleSportSelect = (sport: Sport) => {
     if (selectedCourt && !selectedCourt.sport_ids.includes(sport.id)) {
@@ -385,6 +569,26 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
       img: 'https://images.unsplash.com/photo-1529900748604-07564a03e7a6?auto=format&fit=crop&w=600&q=80',
       subtitle: '5-a-side & 11-a-side'
     },
+    cricket: {
+      img: 'https://images.unsplash.com/photo-1531415074968-036ba1b575da?auto=format&fit=crop&w=600&q=80',
+      subtitle: 'Indoor Net & Turf Pitch'
+    },
+    badminton: {
+      img: 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&w=600&q=80',
+      subtitle: 'BWF Wooden Synthetic'
+    },
+    pickleball: {
+      img: 'https://images.unsplash.com/photo-1599586120429-48281b6f0ece?auto=format&fit=crop&w=600&q=80',
+      subtitle: 'Dedicated Acrylic Courts'
+    },
+    swimming: {
+      img: 'https://images.unsplash.com/photo-1530549387789-4c1017266635?auto=format&fit=crop&w=600&q=80',
+      subtitle: 'Olympic & Training Pools'
+    },
+    volleyball: {
+      img: 'https://images.unsplash.com/photo-1612872087720-bb876e2e67d1?auto=format&fit=crop&w=600&q=80',
+      subtitle: 'Indoor & Sand Courts'
+    },
     tennis: {
       img: 'https://images.unsplash.com/photo-1622279457486-62dcc4a431d6?auto=format&fit=crop&w=600&q=80',
       subtitle: 'Clay & Hard Acrylic Courts'
@@ -393,13 +597,17 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
       img: 'https://images.unsplash.com/photo-1546519638-68e109498ffc?auto=format&fit=crop&w=600&q=80',
       subtitle: 'Indoor High-Gloss Maple'
     },
-    badminton: {
-      img: 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&w=600&q=80',
-      subtitle: 'BWF Wooden Synthetic'
+    squash: {
+      img: 'https://images.unsplash.com/photo-1558365849-6ebd8b0454b2?auto=format&fit=crop&w=600&q=80',
+      subtitle: 'Glass-Back Pro Courts'
     },
-    cricket: {
-      img: 'https://images.unsplash.com/photo-1531415074968-036ba1b575da?auto=format&fit=crop&w=600&q=80',
-      subtitle: 'Indoor Net & Turf Pitch'
+    padel: {
+      img: 'https://images.unsplash.com/photo-1554068865-24cecd4e34b8?auto=format&fit=crop&w=600&q=80',
+      subtitle: 'Panoramic Enclosed Courts'
+    },
+    kabaddi: {
+      img: 'https://images.unsplash.com/photo-1517649763962-0c623266010b?auto=format&fit=crop&w=600&q=80',
+      subtitle: 'Standard Pro Mat Arena'
     }
   };
 
@@ -519,6 +727,28 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
           <CustomerPortalSkeleton />
         ) : (
           <>
+            {/* 5-Minute Inactivity Hold Timeout Notice */}
+            {inactivityNotice && (
+              <div className="bg-amber-50 border border-amber-300 rounded-2xl p-3.5 sm:p-4 flex items-center justify-between gap-3 shadow-xs text-amber-950 animate-in fade-in">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                    <Clock className="w-4 h-4 text-amber-700" />
+                  </div>
+                  <div className="text-xs font-medium">
+                    <strong className="font-bold">Hold Timed Out:</strong> {inactivityNotice}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setInactivityNotice(null)}
+                  className="text-amber-800 hover:text-amber-950 p-1.5 rounded-lg hover:bg-amber-100 transition cursor-pointer shrink-0"
+                  aria-label="Dismiss notice"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
             {/* Blacklisted Account Warning Banner */}
         {currentCustomer?.is_blacklisted && (
           <div className="bg-red-50 border-2 border-red-300 rounded-2xl p-4 md:p-5 flex items-start gap-3.5 shadow-sm text-red-950 animate-in fade-in">
@@ -748,6 +978,7 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
             courtName={selectedCourt.name}
             expiresAt={firstLock?.expires_at}
             onProceed={handleProceedCheckout}
+            onExpire={handleHoldExpired}
           />
         );
       })()}

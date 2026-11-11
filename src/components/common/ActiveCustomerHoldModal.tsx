@@ -10,7 +10,6 @@ interface ActiveCustomerHoldModalProps {
   time: string;
   initialRemainingSec?: number;
   onClose: () => void;
-  onReleaseHold?: () => void;
 }
 
 export const ActiveCustomerHoldModal: React.FC<ActiveCustomerHoldModalProps> = ({
@@ -18,8 +17,7 @@ export const ActiveCustomerHoldModal: React.FC<ActiveCustomerHoldModalProps> = (
   date,
   time,
   initialRemainingSec,
-  onClose,
-  onReleaseHold
+  onClose
 }) => {
   const [remainingSec, setRemainingSec] = useState<number>(() => {
     if (initialRemainingSec !== undefined && initialRemainingSec > 0) {
@@ -112,20 +110,11 @@ export const ActiveCustomerHoldModal: React.FC<ActiveCustomerHoldModalProps> = (
           </div>
         </div>
 
-        <div className={onReleaseHold ? 'pt-0.5 flex items-center gap-2' : 'pt-0.5'}>
-          {onReleaseHold && (
-            <button
-              type="button"
-              onClick={onReleaseHold}
-              className="flex-1 py-2 text-xs font-headline font-bold rounded-xl border border-red-300 bg-red-50 text-red-700 hover:bg-red-100 transition cursor-pointer"
-            >
-              Release Hold
-            </button>
-          )}
+        <div className="pt-0.5">
           <button
             type="button"
             onClick={onClose}
-            className={`btn-primary py-2 text-xs font-headline font-bold cursor-pointer ${onReleaseHold ? 'flex-1' : 'w-full'}`}
+            className="btn-primary py-2 text-xs font-headline font-bold cursor-pointer w-full"
           >
             Got It
           </button>

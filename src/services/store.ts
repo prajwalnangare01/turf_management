@@ -29,28 +29,32 @@ const DEFAULT_SPORTS: Sport[] = [
     name: 'Football',
     icon: '⚽',
     image_url: 'https://images.unsplash.com/photo-1529900748604-07564a03e7a6?auto=format&fit=crop&w=600&q=80',
-    subtitle: '5-a-side & 11-a-side'
+    subtitle: '5-a-side & 11-a-side',
+    display_order: 0
   },
   {
     id: 'sp-cricket',
     name: 'Cricket',
     icon: '🏏',
     image_url: 'https://images.unsplash.com/photo-1531415074968-036ba1b575da?auto=format&fit=crop&w=600&q=80',
-    subtitle: 'Indoor Net & Turf Pitch'
+    subtitle: 'Indoor Net & Turf Pitch',
+    display_order: 1
   },
   {
     id: 'sp-badminton',
     name: 'Badminton',
     icon: '🏸',
     image_url: 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&w=600&q=80',
-    subtitle: 'BWF Wooden Synthetic'
+    subtitle: 'BWF Wooden Synthetic',
+    display_order: 2
   },
   {
     id: 'sp-pickleball',
     name: 'Pickleball',
     icon: '🏓',
     image_url: 'https://images.unsplash.com/photo-1622279457486-62dcc4a431d6?auto=format&fit=crop&w=600&q=80',
-    subtitle: 'Outdoor Pro Cushioned'
+    subtitle: 'Outdoor Pro Cushioned',
+    display_order: 3
   }
 ];
 
@@ -372,15 +376,24 @@ class AppStore {
           this.venue.google_maps_link = this.venue.location_url;
         }
         const rawSports: Sport[] = Array.isArray(parsed.sports) && parsed.sports.length > 0 ? parsed.sports : DEFAULT_SPORTS;
-        this.sports = rawSports.map(s => {
+        this.sports = rawSports.map((s, idx) => {
           const def = DEFAULT_SPORTS.find(ds => ds.id === s.id || ds.name.toLowerCase() === s.name.toLowerCase());
           return {
             ...s,
+            display_order: typeof s.display_order === 'number' ? s.display_order : idx,
             image_url: s.image_url || def?.image_url,
             subtitle: s.subtitle || def?.subtitle
           };
-        });
-        const rawCourts: Court[] = parsed.courts || DEFAULT_COURTS;
+        }).sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
+        let deletedCourtIds: string[] = [];
+        try {
+          const raw = localStorage.getItem('TURFFLOW_DELETED_COURTS');
+          if (raw) deletedCourtIds = JSON.parse(raw);
+        } catch (e) {}
+
+        const rawCourts: Court[] = (parsed.courts || DEFAULT_COURTS).filter(
+          (c: Court) => !deletedCourtIds.includes(c.id) && c.status !== 'inactive'
+        );
         this.courts = rawCourts.map(c => {
           if (!c.original_price_per_hour) {
             const def = DEFAULT_COURTS.find(dc => dc.id === c.id);

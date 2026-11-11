@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { X, Upload, Image as ImageIcon, PlusCircle, Trash2, Check, RotateCcw, AlertCircle } from 'lucide-react';
-import { Sport, AdminUser } from '../../types/schema';
+import { X, Upload, Image as ImageIcon, PlusCircle, Check, RotateCcw, AlertCircle, GripVertical, ChevronLeft, ChevronRight, ArrowUpDown } from 'lucide-react';
+import { Sport, AdminUser, Court } from '../../types/schema';
 import { store } from '../../services/store';
 import { SupabaseSyncService } from '../../services/supabaseSyncService';
 import { AuditLogger } from '../../services/auditLogger';
@@ -11,10 +11,10 @@ interface SportsImageManagerModalProps {
   isOpen: boolean;
   onClose: () => void;
   sports: Sport[];
+  courts?: Court[];
   currentAdmin: AdminUser;
   predefinedSportIds: string[];
   onSportsUpdated: (updated: Sport[]) => void;
-  onRequestDeleteSport?: (sportId: string, sportName: string, e: React.MouseEvent) => void;
 }
 
 const DEFAULT_FALLBACK_MAP: Record<string, { img: string; subtitle: string; icon: string }> = {
@@ -44,10 +44,10 @@ export const SportsImageManagerModal: React.FC<SportsImageManagerModalProps> = (
   isOpen,
   onClose,
   sports,
+  courts,
   currentAdmin,
   predefinedSportIds,
-  onSportsUpdated,
-  onRequestDeleteSport
+  onSportsUpdated
 }) => {
   const [newName, setNewName] = useState('');
   const [newIcon, setNewIcon] = useState('');
@@ -60,11 +60,38 @@ export const SportsImageManagerModal: React.FC<SportsImageManagerModalProps> = (
   const [savedNoticeId, setSavedNoticeId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [draggedSportId, setDraggedSportId] = useState<string | null>(null);
+  const [dragOverSportId, setDragOverSportId] = useState<string | null>(null);
+  const [reorderSuccessMsg, setReorderSuccessMsg] = useState<string | null>(null);
 
   const newFileInputRef = useRef<HTMLInputElement | null>(null);
   const cardFileInputsRef = useRef<Record<string, HTMLInputElement | null>>({});
 
   if (!isOpen) return null;
+
+  // Active courts resolution
+  const activeCourtsList = courts && courts.length > 0 ? courts : store.getCourts();
+
+  // Helper: Find courts that list this sport
+  const getCourtsForSport = (sport: Sport): Court[] => {
+    return activeCourtsList.filter(c => {
+      if (Array.isArray(c.sport_ids) && c.sport_ids.includes(sport.id)) return true;
+      if (Array.isArray(c.sport_ids) && c.sport_ids.some(id => id.toLowerCase() === sport.id.toLowerCase() || id.toLowerCase().includes(sport.name.toLowerCase()))) return true;
+      return false;
+    });
+  };
+
+  // Only show sports of which our courts are listed, sorted by display_order!
+  const listedCourtSports = sports
+    .filter(s => getCourtsForSport(s).length > 0)
+    .sort((a, b) => {
+      const ordA = typeof a.display_order === 'number' ? a.display_order : sports.findIndex(s => s.id === a.id);
+      const ordB = typeof b.display_order === 'number' ? b.display_order : sports.findIndex(s => s.id === b.id);
+      if (ordA !== -1 && ordB !== -1) return ordA - ordB;
+      if (ordA !== -1) return -1;
+      if (ordB !== -1) return 1;
+      return 0;
+    });
 
   const showSavedFeedback = (id: string) => {
     setSavedNoticeId(id);
@@ -75,12 +102,60 @@ export const SportsImageManagerModal: React.FC<SportsImageManagerModalProps> = (
 
   const persistSportUpdate = (updatedSport: Sport) => {
     const oldSport = sports.find(s => s.id === updatedSport.id) || null;
-    const updatedList = sports.map(s => (s.id === updatedSport.id ? updatedSport : s));
+    const finalSport: Sport = {
+      ...updatedSport,
+      display_order: updatedSport.display_order ?? oldSport?.display_order ?? sports.findIndex(s => s.id === updatedSport.id)
+    };
+    const updatedList = sports.map(s => (s.id === finalSport.id ? finalSport : s));
     store.setSports(updatedList);
     onSportsUpdated(updatedList);
-    SupabaseSyncService.syncSportToSupabase(updatedSport).catch(() => {});
-    AuditLogger.log(currentAdmin.id, 'UPDATE_SPORT_IMAGE', 'Sport', updatedSport.id, oldSport, updatedSport);
-    showSavedFeedback(updatedSport.id);
+    SupabaseSyncService.syncSportToSupabase(finalSport).catch(() => {});
+    AuditLogger.log(currentAdmin.id, 'UPDATE_SPORT_IMAGE', 'Sport', finalSport.id, oldSport, finalSport);
+    showSavedFeedback(finalSport.id);
+  };
+
+  const handleReorder = (sourceId: string, targetId: string) => {
+    if (!sourceId || !targetId || sourceId === targetId) return;
+
+    const fromIndex = listedCourtSports.findIndex(s => s.id === sourceId);
+    const toIndex = listedCourtSports.findIndex(s => s.id === targetId);
+    if (fromIndex === -1 || toIndex === -1) return;
+
+    const reorderedListed = [...listedCourtSports];
+    const [movedItem] = reorderedListed.splice(fromIndex, 1);
+    reorderedListed.splice(toIndex, 0, movedItem);
+
+    // Keep unlisted sports after the listed ones while preserving their order
+    const unlisted = sports.filter(s => !reorderedListed.some(rs => rs.id === s.id));
+    const fullUpdatedSports: Sport[] = [...reorderedListed, ...unlisted].map((s, idx) => ({
+      ...s,
+      display_order: idx
+    }));
+
+    store.setSports(fullUpdatedSports);
+    onSportsUpdated(fullUpdatedSports);
+    SupabaseSyncService.syncSportsOrderToSupabase(fullUpdatedSports).catch(() => {});
+    AuditLogger.log(currentAdmin.id, 'REORDER_SPORTS', 'Sport', movedItem.id, null, {
+      movedSport: movedItem.name,
+      fromPosition: fromIndex + 1,
+      toPosition: toIndex + 1,
+      newOrder: fullUpdatedSports.map(s => s.name)
+    });
+
+    setReorderSuccessMsg(`Arranged "${movedItem.name}" to position #${toIndex + 1}`);
+    setTimeout(() => {
+      setReorderSuccessMsg(null);
+    }, 2500);
+  };
+
+  const handleMoveStep = (sportId: string, direction: 'earlier' | 'later') => {
+    const currentIndex = listedCourtSports.findIndex(s => s.id === sportId);
+    if (currentIndex === -1) return;
+    const targetIndex = direction === 'earlier' ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= listedCourtSports.length) return;
+
+    const targetSport = listedCourtSports[targetIndex];
+    handleReorder(sportId, targetSport.id);
   };
 
   const handleExistingSportFileUpload = async (sport: Sport, file?: File) => {
@@ -133,7 +208,8 @@ export const SportsImageManagerModal: React.FC<SportsImageManagerModalProps> = (
         name: cleanName,
         icon: newIcon.trim() || getEmojiForSport(cleanName),
         subtitle: newSubtitle.trim() || 'Professional Facilities',
-        image_url: newImageUrl.trim() || undefined
+        image_url: newImageUrl.trim() || undefined,
+        display_order: sports.length
       };
       const updatedList = [...sports, created];
       store.setSports(updatedList);
@@ -170,7 +246,7 @@ export const SportsImageManagerModal: React.FC<SportsImageManagerModalProps> = (
               <ImageIcon className="w-5 h-5" /> Manage Sports &amp; Card Images
             </h3>
             <p className="text-xs text-on-surface-variant font-medium mt-0.5">
-              Upload custom cover images and subtitles for the customer &ldquo;Select Sport&rdquo; cards (e.g., Football, Cricket, Badminton, Swimming).
+              Upload custom cover images and subtitles for sports with active pitches listed on your venue.
             </p>
           </div>
           <button
@@ -201,7 +277,7 @@ export const SportsImageManagerModal: React.FC<SportsImageManagerModalProps> = (
                 <PlusCircle className="w-4 h-4" /> Add New Sport with Cover Image
               </h4>
               <span className="text-[10px] font-bold text-on-surface-variant">
-                Appears in Select Sport once assigned to an active pitch
+                Will appear once assigned to an active pitch in Configured Pitches
               </span>
             </div>
 
@@ -328,132 +404,326 @@ export const SportsImageManagerModal: React.FC<SportsImageManagerModalProps> = (
             )}
           </form>
 
-          {/* Existing Sports Grid */}
+          {/* Listed Sports Grid (Only sports whose pitches are listed!) */}
           <div className="space-y-3">
-            <h4 className="font-headline font-bold text-sm text-on-surface">
-              Configured Sports ({sports.length})
-            </h4>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h4 className="font-headline font-bold text-sm text-on-surface">
+                  Sports with Listed Pitches ({listedCourtSports.length})
+                </h4>
+                <p className="text-[11px] text-on-surface-variant font-medium">
+                  Showing only the sports configured on your venue&apos;s pitches and courts.
+                </p>
+              </div>
+            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {sports.map(sport => {
-                const fallback = DEFAULT_FALLBACK_MAP[sport.name.toLowerCase()];
-                const previewImg = sport.image_url || fallback?.img || DEFAULT_SPORT_FALLBACK_IMAGE;
-                const displaySubtitle = subtitleDrafts[sport.id] ?? sport.subtitle ?? fallback?.subtitle ?? 'Professional Facilities';
-                const draftUrl = urlDrafts[sport.id] ?? '';
-                const isCustom = !predefinedSportIds.includes(sport.id);
-                const isJustSaved = savedNoticeId === sport.id;
+            {/* Reorder Guidance & Drag Notice */}
+            {listedCourtSports.length > 0 && (
+              <div className="bg-primary/5 border border-primary/20 rounded-2xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <div className="flex items-start sm:items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-primary text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <ArrowUpDown className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h5 className="text-xs font-bold text-primary flex items-center gap-1.5">
+                      Arrange Display Sequence (Drag &amp; Drop)
+                    </h5>
+                    <p className="text-[11px] text-on-surface-variant font-medium">
+                      Drag any sport card by its grip handle (or use the ◀ / ▶ buttons) to choose the display order (1st, 2nd, etc.) on the customer booking page.
+                    </p>
+                  </div>
+                </div>
+                {reorderSuccessMsg && (
+                  <div className="bg-emerald-600 text-white text-xs font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5 shadow-xs shrink-0 animate-fadeIn">
+                    <Check className="w-3.5 h-3.5" />
+                    <span>{reorderSuccessMsg}</span>
+                  </div>
+                )}
+              </div>
+            )}
 
-                return (
-                  <div
-                    key={sport.id}
-                    className="rounded-2xl border border-outline-variant/50 bg-white overflow-hidden shadow-xs flex flex-col"
-                  >
-                    {/* Storefront Card Preview */}
-                    <div className="h-28 w-full relative overflow-hidden bg-surface-container-low">
-                      <img
-                        src={previewImg}
-                        alt={sport.name}
-                        onError={e => {
-                          const target = e.currentTarget;
-                          if (target.src !== DEFAULT_SPORT_FALLBACK_IMAGE) {
-                            target.src = DEFAULT_SPORT_FALLBACK_IMAGE;
-                          }
-                        }}
-                        className="w-full h-full object-cover"
-                      />
-                      <div className="absolute inset-0 bg-black/30" />
-                      <button
-                        type="button"
-                        onClick={() => setOpenEmojiPickerId(prev => (prev === sport.id ? null : sport.id))}
-                        className="absolute top-2 left-2 text-xl bg-white/95 hover:bg-white p-1 rounded-xl shadow-xs transition-transform hover:scale-105 cursor-pointer"
-                        title="Click to change emoji icon"
-                      >
-                        {sport.icon}
-                      </button>
+            {listedCourtSports.length === 0 ? (
+              <div className="p-8 text-center bg-surface-container-low rounded-2xl border border-dashed border-outline-variant/60 space-y-2">
+                <div className="text-3xl">🏟️</div>
+                <h5 className="font-headline font-bold text-sm text-on-surface">No Sports Assigned to Pitches</h5>
+                <p className="text-xs text-on-surface-variant max-w-md mx-auto">
+                  Only sports associated with active pitches appear here. Please assign sports to your pitches in Configured Pitches to manage card covers.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {listedCourtSports.map((sport, index) => {
+                  const fallback = DEFAULT_FALLBACK_MAP[sport.name.toLowerCase()];
+                  const previewImg = sport.image_url || fallback?.img || DEFAULT_SPORT_FALLBACK_IMAGE;
+                  const displaySubtitle = subtitleDrafts[sport.id] ?? sport.subtitle ?? fallback?.subtitle ?? 'Professional Facilities';
+                  const draftUrl = urlDrafts[sport.id] ?? '';
+                  const isJustSaved = savedNoticeId === sport.id;
+                  const assignedCourts = getCourtsForSport(sport);
+                  const isDragging = draggedSportId === sport.id;
+                  const isDragOver = dragOverSportId === sport.id && draggedSportId !== sport.id;
 
-                      {isJustSaved && (
-                        <div className="absolute top-2 right-2 bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm">
-                          <Check className="w-3 h-3" /> Saved
+                  return (
+                    <div
+                      key={sport.id}
+                      draggable
+                      onDragStart={e => {
+                        const target = e.target as HTMLElement;
+                        if (
+                          target.tagName === 'INPUT' ||
+                          target.tagName === 'TEXTAREA' ||
+                          target.tagName === 'BUTTON' ||
+                          target.closest('input') ||
+                          target.closest('button')
+                        ) {
+                          e.preventDefault();
+                          return;
+                        }
+                        e.dataTransfer.effectAllowed = 'move';
+                        e.dataTransfer.setData('text/plain', sport.id);
+                        setDraggedSportId(sport.id);
+                      }}
+                      onDragOver={e => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'move';
+                        if (dragOverSportId !== sport.id) {
+                          setDragOverSportId(sport.id);
+                        }
+                      }}
+                      onDragLeave={e => {
+                        if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                        if (dragOverSportId === sport.id) {
+                          setDragOverSportId(null);
+                        }
+                      }}
+                      onDrop={e => {
+                        e.preventDefault();
+                        const sourceId = e.dataTransfer.getData('text/plain') || draggedSportId;
+                        setDraggedSportId(null);
+                        setDragOverSportId(null);
+                        if (sourceId) {
+                          handleReorder(sourceId, sport.id);
+                        }
+                      }}
+                      onDragEnd={() => {
+                        setDraggedSportId(null);
+                        setDragOverSportId(null);
+                      }}
+                      className={`rounded-2xl border bg-white overflow-hidden shadow-xs flex flex-col transition-all duration-200 ${
+                        isDragging
+                          ? 'opacity-40 scale-95 ring-2 ring-primary border-primary shadow-lg cursor-grabbing'
+                          : isDragOver
+                          ? 'ring-2 ring-primary border-primary scale-[1.02] shadow-xl bg-primary/5'
+                          : 'border-outline-variant/50 hover:border-primary/40 hover:shadow-sm'
+                      }`}
+                    >
+                      {/* Reorder Grip & Sequence Bar */}
+                      <div className="bg-surface-container-low px-3 py-2 border-b border-outline-variant/30 flex items-center justify-between gap-2 select-none">
+                        <div
+                          className="flex items-center gap-1.5 cursor-grab active:cursor-grabbing text-on-surface-variant hover:text-primary transition-colors py-0.5"
+                          title="Click and drag to rearrange this sport"
+                        >
+                          <GripVertical className="w-4 h-4 text-on-surface-variant/80 shrink-0" />
+                          <span className="text-[11px] font-black text-primary bg-primary/10 px-2 py-0.5 rounded-md">
+                            #{index + 1}
+                          </span>
+                          <span className="text-[11px] font-bold text-on-surface-variant">
+                            {index === 0 ? '1st (First Displayed)' : index === 1 ? '2nd' : index === 2 ? '3rd' : `${index + 1}th`}
+                          </span>
                         </div>
-                      )}
 
-                      <button
-                        type="button"
-                        onClick={() => cardFileInputsRef.current[sport.id]?.click()}
-                        disabled={uploadingId === sport.id}
-                        className="absolute bottom-2 right-2 bg-white/95 hover:bg-white text-primary text-[11px] font-bold px-2.5 py-1 rounded-lg shadow-sm flex items-center gap-1 transition-colors"
-                      >
-                        <Upload className="w-3 h-3" />
-                        <span>{uploadingId === sport.id ? 'Uploading...' : 'Upload Image'}</span>
-                      </button>
-                      <input
-                        ref={el => { cardFileInputsRef.current[sport.id] = el; }}
-                        type="file"
-                        accept="image/*"
-                        onChange={e => handleExistingSportFileUpload(sport, e.target.files?.[0])}
-                        className="hidden"
-                      />
-                    </div>
-
-                    {/* Controls */}
-                    <div className="p-3 space-y-2 flex-1 flex flex-col">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-headline font-bold text-sm text-on-surface truncate">
-                          {sport.name}
-                        </span>
                         <div className="flex items-center gap-1 shrink-0">
-                          {fallback && (
-                            <button
-                              type="button"
-                              onClick={() => handleResetToDefault(sport)}
-                              className="p-1 text-on-surface-variant hover:text-primary hover:bg-primary/10 rounded-md transition-colors"
-                              title="Reset to default image, icon & subtitle"
-                            >
-                              <RotateCcw className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                          {isCustom && onRequestDeleteSport && (
-                            <button
-                              type="button"
-                              onClick={e => onRequestDeleteSport(sport.id, sport.name, e)}
-                              className="p-1 text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                              title={`Delete ${sport.name}`}
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            disabled={index === 0}
+                            onClick={e => {
+                              e.stopPropagation();
+                              handleMoveStep(sport.id, 'earlier');
+                            }}
+                            className="p-1 rounded-md text-on-surface-variant hover:text-primary hover:bg-surface-container disabled:opacity-25 disabled:hover:bg-transparent transition-colors"
+                            title={index === 0 ? 'Already first in order' : `Move ${sport.name} earlier (Left)`}
+                            aria-label={`Move ${sport.name} earlier`}
+                          >
+                            <ChevronLeft className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={index === listedCourtSports.length - 1}
+                            onClick={e => {
+                              e.stopPropagation();
+                              handleMoveStep(sport.id, 'later');
+                            }}
+                            className="p-1 rounded-md text-on-surface-variant hover:text-primary hover:bg-surface-container disabled:opacity-25 disabled:hover:bg-transparent transition-colors"
+                            title={index === listedCourtSports.length - 1 ? 'Already last in order' : `Move ${sport.name} later (Right)`}
+                            aria-label={`Move ${sport.name} later`}
+                          >
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
                         </div>
                       </div>
 
-                      <div>
-                        <div className="flex items-center justify-between mb-0.5">
-                          <label className="block text-[10px] font-bold text-on-surface-variant">
-                            Emoji Icon
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() => setOpenEmojiPickerId(prev => (prev === sport.id ? null : sport.id))}
-                            className="text-[10px] font-bold text-primary hover:underline"
-                          >
-                            {openEmojiPickerId === sport.id ? 'Hide Picker' : 'Quick Pick'}
-                          </button>
+                      {/* Storefront Card Preview */}
+                      <div className="h-28 w-full relative overflow-hidden bg-surface-container-low">
+                        <img
+                          src={previewImg}
+                          alt={sport.name}
+                          onError={e => {
+                            const target = e.currentTarget;
+                            if (target.src !== DEFAULT_SPORT_FALLBACK_IMAGE) {
+                              target.src = DEFAULT_SPORT_FALLBACK_IMAGE;
+                            }
+                          }}
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute inset-0 bg-black/30" />
+                        <button
+                          type="button"
+                          onClick={() => setOpenEmojiPickerId(prev => (prev === sport.id ? null : sport.id))}
+                          className="absolute top-2 left-2 text-xl bg-white/95 hover:bg-white p-1 rounded-xl shadow-xs transition-transform hover:scale-105 cursor-pointer"
+                          title="Click to change emoji icon"
+                        >
+                          {sport.icon}
+                        </button>
+
+                        {isJustSaved && (
+                          <div className="absolute top-2 right-2 bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm">
+                            <Check className="w-3 h-3" /> Saved
+                          </div>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => cardFileInputsRef.current[sport.id]?.click()}
+                          disabled={uploadingId === sport.id}
+                          className="absolute bottom-2 right-2 bg-white/95 hover:bg-white text-primary text-[11px] font-bold px-2.5 py-1 rounded-lg shadow-sm flex items-center gap-1 transition-colors"
+                        >
+                          <Upload className="w-3 h-3" />
+                          <span>{uploadingId === sport.id ? 'Uploading...' : 'Upload Image'}</span>
+                        </button>
+                        <input
+                          ref={el => { cardFileInputsRef.current[sport.id] = el; }}
+                          type="file"
+                          accept="image/*"
+                          onChange={e => handleExistingSportFileUpload(sport, e.target.files?.[0])}
+                          className="hidden"
+                        />
+                      </div>
+
+                      {/* Controls */}
+                      <div className="p-3 space-y-2 flex-1 flex flex-col">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-headline font-bold text-sm text-on-surface truncate">
+                            {sport.name}
+                          </span>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {fallback && (
+                              <button
+                                type="button"
+                                onClick={() => handleResetToDefault(sport)}
+                                className="p-1 text-on-surface-variant hover:text-primary hover:bg-primary/10 rounded-md transition-colors"
+                                title="Reset to default image, icon & subtitle"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex gap-1">
-                          <input
-                            type="text"
-                            value={iconDrafts[sport.id] ?? sport.icon}
-                            onChange={e => setIconDrafts(prev => ({ ...prev, [sport.id]: e.target.value }))}
-                            placeholder="🏆"
-                            className="form-input text-xs py-1 flex-1 font-medium text-center"
-                          />
-                          {iconDrafts[sport.id] !== undefined &&
-                            iconDrafts[sport.id].trim() !== '' &&
-                            iconDrafts[sport.id].trim() !== sport.icon && (
+
+                        {/* Associated Pitches Badge */}
+                        <div className="bg-primary/5 border border-primary/20 text-primary text-[10px] font-bold px-2 py-1 rounded-lg flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                          <span className="shrink-0">{assignedCourts.length} Pitch{assignedCourts.length > 1 ? 'es' : ''}:</span>
+                          <span className="font-semibold text-on-surface truncate">
+                            {assignedCourts.map(c => c.name).join(', ')}
+                          </span>
+                        </div>
+
+                        <div>
+                          <div className="flex items-center justify-between mb-0.5">
+                            <label className="block text-[10px] font-bold text-on-surface-variant">
+                              Emoji Icon
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => setOpenEmojiPickerId(prev => (prev === sport.id ? null : sport.id))}
+                              className="text-[10px] font-bold text-primary hover:underline"
+                            >
+                              {openEmojiPickerId === sport.id ? 'Hide Picker' : 'Quick Pick'}
+                            </button>
+                          </div>
+                          <div className="flex gap-1">
+                            <input
+                              type="text"
+                              value={iconDrafts[sport.id] ?? sport.icon}
+                              onChange={e => setIconDrafts(prev => ({ ...prev, [sport.id]: e.target.value }))}
+                              placeholder="🏆"
+                              className="form-input text-xs py-1 flex-1 font-medium text-center"
+                            />
+                            {iconDrafts[sport.id] !== undefined &&
+                              iconDrafts[sport.id].trim() !== '' &&
+                              iconDrafts[sport.id].trim() !== sport.icon && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    persistSportUpdate({ ...sport, icon: iconDrafts[sport.id].trim() });
+                                    setIconDrafts(prev => {
+                                      const next = { ...prev };
+                                      delete next[sport.id];
+                                      return next;
+                                    });
+                                  }}
+                                  className="btn-primary text-[10px] px-2 py-1 font-bold"
+                                >
+                                  Save
+                                </button>
+                              )}
+                          </div>
+
+                          {openEmojiPickerId === sport.id && (
+                            <div className="mt-1.5 p-1.5 bg-surface-container-low border border-outline-variant/40 rounded-xl flex flex-wrap gap-1">
+                              {SPORT_EMOJI_CHOICES.map(emoji => (
+                                <button
+                                  key={emoji}
+                                  type="button"
+                                  onClick={() => {
+                                    persistSportUpdate({ ...sport, icon: emoji });
+                                    setIconDrafts(prev => {
+                                      const next = { ...prev };
+                                      delete next[sport.id];
+                                      return next;
+                                    });
+                                    setOpenEmojiPickerId(null);
+                                  }}
+                                  className={`w-7 h-7 rounded-lg text-sm flex items-center justify-center transition-colors ${
+                                    sport.icon === emoji
+                                      ? 'bg-primary text-white shadow-xs'
+                                      : 'bg-white hover:bg-primary/10 border border-outline-variant/40'
+                                  }`}
+                                >
+                                  {emoji}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold text-on-surface-variant mb-0.5">
+                            Subtitle
+                          </label>
+                          <div className="flex gap-1">
+                            <input
+                              type="text"
+                              value={displaySubtitle}
+                              onChange={e => setSubtitleDrafts(prev => ({ ...prev, [sport.id]: e.target.value }))}
+                              placeholder="Card subtitle"
+                              className="form-input text-[11px] py-1 flex-1 font-medium"
+                            />
+                            {subtitleDrafts[sport.id] !== undefined && subtitleDrafts[sport.id] !== (sport.subtitle || '') && (
                               <button
                                 type="button"
                                 onClick={() => {
-                                  persistSportUpdate({ ...sport, icon: iconDrafts[sport.id].trim() });
-                                  setIconDrafts(prev => {
+                                  persistSportUpdate({ ...sport, subtitle: subtitleDrafts[sport.id].trim() || undefined });
+                                  setSubtitleDrafts(prev => {
                                     const next = { ...prev };
                                     delete next[sport.id];
                                     return next;
@@ -464,101 +734,44 @@ export const SportsImageManagerModal: React.FC<SportsImageManagerModalProps> = (
                                 Save
                               </button>
                             )}
+                          </div>
                         </div>
 
-                        {openEmojiPickerId === sport.id && (
-                          <div className="mt-1.5 p-1.5 bg-surface-container-low border border-outline-variant/40 rounded-xl flex flex-wrap gap-1">
-                            {SPORT_EMOJI_CHOICES.map(emoji => (
-                              <button
-                                key={emoji}
-                                type="button"
-                                onClick={() => {
-                                  persistSportUpdate({ ...sport, icon: emoji });
-                                  setIconDrafts(prev => {
-                                    const next = { ...prev };
-                                    delete next[sport.id];
-                                    return next;
-                                  });
-                                  setOpenEmojiPickerId(null);
-                                }}
-                                className={`w-7 h-7 rounded-lg text-sm flex items-center justify-center transition-colors ${
-                                  sport.icon === emoji
-                                    ? 'bg-primary text-white shadow-xs'
-                                    : 'bg-white hover:bg-primary/10 border border-outline-variant/40'
-                                }`}
-                              >
-                                {emoji}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-[10px] font-bold text-on-surface-variant mb-0.5">
-                          Subtitle
-                        </label>
-                        <div className="flex gap-1">
-                          <input
-                            type="text"
-                            value={displaySubtitle}
-                            onChange={e => setSubtitleDrafts(prev => ({ ...prev, [sport.id]: e.target.value }))}
-                            placeholder="Card subtitle"
-                            className="form-input text-[11px] py-1 flex-1 font-medium"
-                          />
-                          {subtitleDrafts[sport.id] !== undefined && subtitleDrafts[sport.id] !== (sport.subtitle || '') && (
+                        <div>
+                          <label className="block text-[10px] font-bold text-on-surface-variant mb-0.5">
+                            Or Paste Image URL
+                          </label>
+                          <div className="flex gap-1">
+                            <input
+                              type="url"
+                              value={draftUrl}
+                              onChange={e => setUrlDrafts(prev => ({ ...prev, [sport.id]: e.target.value }))}
+                              placeholder="https://images..."
+                              className="form-input text-[11px] py-1 flex-1 font-medium"
+                            />
                             <button
                               type="button"
+                              disabled={!draftUrl.trim()}
                               onClick={() => {
-                                persistSportUpdate({ ...sport, subtitle: subtitleDrafts[sport.id].trim() || undefined });
-                                setSubtitleDrafts(prev => {
+                                persistSportUpdate({ ...sport, image_url: draftUrl.trim() });
+                                setUrlDrafts(prev => {
                                   const next = { ...prev };
                                   delete next[sport.id];
                                   return next;
                                 });
                               }}
-                              className="btn-primary text-[10px] px-2 py-1 font-bold"
+                              className="btn-secondary text-[10px] px-2 py-1 font-bold disabled:opacity-40"
                             >
-                              Save
+                              Apply
                             </button>
-                          )}
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-[10px] font-bold text-on-surface-variant mb-0.5">
-                          Or Paste Image URL
-                        </label>
-                        <div className="flex gap-1">
-                          <input
-                            type="url"
-                            value={draftUrl}
-                            onChange={e => setUrlDrafts(prev => ({ ...prev, [sport.id]: e.target.value }))}
-                            placeholder="https://images..."
-                            className="form-input text-[11px] py-1 flex-1 font-medium"
-                          />
-                          <button
-                            type="button"
-                            disabled={!draftUrl.trim()}
-                            onClick={() => {
-                              persistSportUpdate({ ...sport, image_url: draftUrl.trim() });
-                              setUrlDrafts(prev => {
-                                const next = { ...prev };
-                                delete next[sport.id];
-                                return next;
-                              });
-                            }}
-                            className="btn-secondary text-[10px] px-2 py-1 font-bold disabled:opacity-40"
-                          >
-                            Apply
-                          </button>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 

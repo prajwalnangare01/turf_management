@@ -67,14 +67,30 @@ export class SupabaseSyncService {
       // 2. Fetch Sports
       const { data: sports, error: sErr } = await supabase.from('sports').select('*');
       if (!sErr && sports && sports.length > 0) {
+        let deletedSportIds: string[] = [];
+        try {
+          const raw = localStorage.getItem('TURFFLOW_DELETED_SPORTS');
+          if (raw) deletedSportIds = JSON.parse(raw);
+        } catch (e) {}
+
+        const activeRemoteSports = sports.filter((sp: any) => !deletedSportIds.includes(sp.id));
         const currentSports = store.getSports();
-        const mergedSports = sports.map((sp: any) => {
+        const mergedSports = activeRemoteSports.map((sp: any) => {
           const existing = currentSports.find(cs => cs.id === sp.id || cs.name.toLowerCase() === sp.name?.toLowerCase());
           return {
             ...sp,
             image_url: sp.image_url || existing?.image_url,
-            subtitle: sp.subtitle || existing?.subtitle
+            subtitle: sp.subtitle || existing?.subtitle,
+            display_order: typeof sp.display_order === 'number' ? sp.display_order : existing?.display_order
           };
+        });
+        mergedSports.sort((a, b) => {
+          const ordA = typeof a.display_order === 'number' ? a.display_order : currentSports.findIndex(cs => cs.id === a.id);
+          const ordB = typeof b.display_order === 'number' ? b.display_order : currentSports.findIndex(cs => cs.id === b.id);
+          if (ordA !== -1 && ordB !== -1) return ordA - ordB;
+          if (ordA !== -1) return -1;
+          if (ordB !== -1) return 1;
+          return 0;
         });
         store.setSports(mergedSports);
       }
@@ -83,10 +99,37 @@ export class SupabaseSyncService {
       const { data: courts, error: cErr } = await supabase.from('courts').select('*');
       const { data: courtSports, error: csErr } = await supabase.from('court_sports').select('*');
       if (!cErr && courts) {
-        const enrichedCourts: Court[] = courts.map((c: any) => {
+        let deletedCourtIds: string[] = [];
+        try {
+          const raw = localStorage.getItem('TURFFLOW_DELETED_COURTS');
+          if (raw) deletedCourtIds = JSON.parse(raw);
+        } catch (e) {}
+
+        const activeRemoteCourts = courts.filter((c: any) => !deletedCourtIds.includes(c.id) && c.status !== 'inactive');
+        const existingCourts = store.getCourts();
+        const enrichedCourts: Court[] = activeRemoteCourts.map((c: any) => {
           const matchingSports = (courtSports || [])
             .filter((cs: any) => cs.court_id === c.id)
             .map((cs: any) => cs.sport_id);
+
+          const existingCourt = existingCourts.find(ec => ec.id === c.id);
+
+          // If court_sports junction in Supabase has records, use them.
+          // Otherwise, if local store already knows the court's sport_ids (e.g. Pickleball, Badminton), preserve them!
+          // And automatically self-heal the missing junction in Supabase!
+          let resolvedSportIds: string[] = matchingSports;
+          if (resolvedSportIds.length === 0) {
+            if (existingCourt?.sport_ids && existingCourt.sport_ids.length > 0) {
+              resolvedSportIds = existingCourt.sport_ids;
+              const junctionRows = resolvedSportIds.map(sid => ({ court_id: c.id, sport_id: sid }));
+              Promise.resolve(supabase.from('court_sports').upsert(junctionRows)).catch(() => {});
+            } else if (c.id === 'crt-003') {
+              resolvedSportIds = ['sp-badminton'];
+              Promise.resolve(supabase.from('court_sports').upsert([{ court_id: c.id, sport_id: 'sp-badminton' }])).catch(() => {});
+            } else {
+              resolvedSportIds = ['sp-football'];
+            }
+          }
 
           return {
             id: c.id,
@@ -98,7 +141,7 @@ export class SupabaseSyncService {
             buffer_minutes: c.buffer_minutes || 0,
             status: c.status || 'active',
             base_price_per_hour: Number(c.base_price_per_hour) || 1200,
-            original_price_per_hour: c.original_price_per_hour ? Number(c.original_price_per_hour) : undefined,
+            original_price_per_hour: c.original_price_per_hour ? Number(c.original_price_per_hour) : (existingCourt?.original_price_per_hour || undefined),
             saturday_price_per_hour: Number(c.saturday_price_per_hour) || 1600,
             saturday_offer_price_per_hour: c.saturday_offer_price_per_hour ? Number(c.saturday_offer_price_per_hour) : undefined,
             sunday_price_per_hour: Number(c.sunday_price_per_hour) || 1600,
@@ -110,9 +153,18 @@ export class SupabaseSyncService {
             peak_price_per_hour: Number(c.peak_price_per_hour) || 1800,
             peak_offer_price_per_hour: c.peak_offer_price_per_hour ? Number(c.peak_offer_price_per_hour) : undefined,
             offer_end_date: c.offer_end_date ? String(c.offer_end_date).slice(0, 10) : undefined,
-            sport_ids: matchingSports.length > 0 ? matchingSports : ['sp-football']
+            sport_ids: resolvedSportIds
           };
         });
+
+        // Also merge any local courts that haven't been committed to Supabase yet (excluding blacklisted deleted courts)
+        for (const locCourt of existingCourts) {
+          if (!deletedCourtIds.includes(locCourt.id) && locCourt.status !== 'inactive' && !enrichedCourts.some(ec => ec.id === locCourt.id)) {
+            enrichedCourts.push(locCourt);
+            this.syncCourtToSupabase(locCourt).catch(() => {});
+          }
+        }
+
         store.setCourts(enrichedCourts);
       }
 
@@ -825,6 +877,37 @@ export class SupabaseSyncService {
         console.error('❌ [Supabase Sync] Error syncing court to Supabase:', error.message);
         return false;
       }
+
+      // Sync court_sports junction table
+      if (court.sport_ids && court.sport_ids.length > 0) {
+        try {
+          await supabase.from('court_sports').delete().eq('court_id', court.id);
+          const junctionRows = court.sport_ids.map(sid => ({
+            court_id: court.id,
+            sport_id: sid
+          }));
+          const { error: csErr } = await supabase.from('court_sports').upsert(junctionRows);
+          if (csErr) {
+            console.warn('⚠️ [Supabase Sync] Note when syncing court_sports:', csErr.message);
+          } else {
+            console.log(`✅ [Supabase Sync] Synced ${junctionRows.length} sport association(s) for court "${court.name}"`);
+          }
+        } catch (csEx: any) {
+          console.warn('⚠️ [Supabase Sync] Exception syncing court_sports:', csEx.message);
+        }
+      }
+
+      // Un-blacklist if re-adding/syncing an active court
+      try {
+        const raw = localStorage.getItem('TURFFLOW_DELETED_COURTS');
+        if (raw) {
+          const list: string[] = JSON.parse(raw);
+          if (list.includes(court.id)) {
+            localStorage.setItem('TURFFLOW_DELETED_COURTS', JSON.stringify(list.filter(id => id !== court.id)));
+          }
+        }
+      } catch (e) {}
+
       console.log(`✅ [Supabase Sync] Court ${court.name} synced to Supabase (Base: ₹${court.base_price_per_hour}, Original: ₹${court.original_price_per_hour || 'N/A'}).`);
       return true;
     } catch (err: any) {
@@ -837,19 +920,29 @@ export class SupabaseSyncService {
    * Delete court and its related records (junction, pricing rules, blocked slots, locks) from Supabase
    */
   public static async deleteCourtFromSupabase(courtId: string): Promise<boolean> {
+    // 1. Immediately record in local deleted courts blacklist so hydration never re-inserts it
+    try {
+      const raw = localStorage.getItem('TURFFLOW_DELETED_COURTS');
+      const deletedList: string[] = raw ? JSON.parse(raw) : [];
+      if (!deletedList.includes(courtId)) {
+        deletedList.push(courtId);
+        localStorage.setItem('TURFFLOW_DELETED_COURTS', JSON.stringify(deletedList));
+      }
+    } catch (e) {}
+
     const supabase = getSupabase();
-    if (!supabase) return false;
+    if (!supabase) return true;
 
     try {
-      // 1. Delete associated junction entries first
-      await supabase.from('court_sports').delete().eq('court_id', courtId);
-      // 2. Delete associated pricing rules if any
-      await supabase.from('court_pricing_rules').delete().eq('court_id', courtId);
-      // 3. Delete associated blocked slots if any
-      await supabase.from('blocked_slots').delete().eq('court_id', courtId);
-      // 4. Delete associated slot locks if any
-      await supabase.from('slot_locks').delete().eq('court_id', courtId);
-      // 5. Delete the court itself
+      // 2. Delete associated junction entries & child records safely
+      await Promise.allSettled([
+        supabase.from('court_sports').delete().eq('court_id', courtId),
+        supabase.from('pricing_rules').delete().eq('court_id', courtId),
+        supabase.from('blocked_slots').delete().eq('court_id', courtId),
+        supabase.from('slot_locks').delete().eq('court_id', courtId)
+      ]);
+
+      // 3. Delete the court record itself
       const { error } = await supabase.from('courts').delete().eq('id', courtId);
       if (error) {
         // If foreign key constraint blocks hard delete (e.g. historical bookings exist), mark inactive
@@ -884,15 +977,38 @@ export class SupabaseSyncService {
         image_url: sport.image_url || null,
         subtitle: sport.subtitle || null
       };
+      if (typeof sport.display_order === 'number') {
+        fullPayload.display_order = sport.display_order;
+      }
 
       const { error } = await supabase.from('sports').upsert([fullPayload], { onConflict: 'id' });
       if (error) {
-        // Fallback if remote Supabase table hasn't added image_url/subtitle columns yet
-        if (error.message?.includes('image_url') || error.message?.includes('subtitle') || error.code === '42703' || error.code === 'PGRST204') {
-          const { error: fallbackErr } = await supabase.from('sports').upsert([{ id: sport.id, name: sport.name, icon: sport.icon }], { onConflict: 'id' });
+        // Fallback if remote Supabase table hasn't added display_order/image_url/subtitle columns yet
+        if (
+          error.message?.includes('display_order') ||
+          error.message?.includes('image_url') ||
+          error.message?.includes('subtitle') ||
+          error.code === '42703' ||
+          error.code === 'PGRST204'
+        ) {
+          const fallbackPayload: any = {
+            id: sport.id,
+            name: sport.name,
+            icon: sport.icon
+          };
+          if (sport.image_url && !error.message?.includes('image_url')) {
+            fallbackPayload.image_url = sport.image_url;
+          }
+          if (sport.subtitle && !error.message?.includes('subtitle')) {
+            fallbackPayload.subtitle = sport.subtitle;
+          }
+          const { error: fallbackErr } = await supabase.from('sports').upsert([fallbackPayload], { onConflict: 'id' });
           if (fallbackErr) {
-            console.warn('⚠️ [Supabase Sync] Error syncing sport fallback:', fallbackErr.message);
-            return false;
+            const { error: basicErr } = await supabase.from('sports').upsert([{ id: sport.id, name: sport.name, icon: sport.icon }], { onConflict: 'id' });
+            if (basicErr) {
+              console.warn('⚠️ [Supabase Sync] Error syncing sport basic fallback:', basicErr.message);
+              return false;
+            }
           }
           return true;
         }
@@ -902,6 +1018,23 @@ export class SupabaseSyncService {
       return true;
     } catch (err: any) {
       console.warn('⚠️ [Supabase Sync] Exception syncing sport to Supabase:', err.message);
+      return false;
+    }
+  }
+
+  /**
+   * Persist sports display order sequence to Supabase
+   */
+  public static async syncSportsOrderToSupabase(sports: Sport[]): Promise<boolean> {
+    const supabase = getSupabase();
+    if (!supabase) return false;
+    try {
+      for (let i = 0; i < sports.length; i++) {
+        await this.syncSportToSupabase({ ...sports[i], display_order: i });
+      }
+      return true;
+    } catch (err: any) {
+      console.warn('⚠️ [Supabase Sync] Exception syncing sports order to Supabase:', err.message);
       return false;
     }
   }
@@ -920,6 +1053,17 @@ export class SupabaseSyncService {
         console.warn('⚠️ [Supabase Sync] Error deleting sport from Supabase:', error.message);
         return false;
       }
+
+      // Record in local deleted sports blacklist so hydration never re-inserts it
+      try {
+        const raw = localStorage.getItem('TURFFLOW_DELETED_SPORTS');
+        const deletedList: string[] = raw ? JSON.parse(raw) : [];
+        if (!deletedList.includes(sportId)) {
+          deletedList.push(sportId);
+          localStorage.setItem('TURFFLOW_DELETED_SPORTS', JSON.stringify(deletedList));
+        }
+      } catch (e) {}
+
       console.log(`✅ [Supabase Sync] Sport "${sportId}" deleted from Supabase.`);
       return true;
     } catch (err: any) {

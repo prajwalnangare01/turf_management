@@ -46,13 +46,15 @@ CREATE TABLE IF NOT EXISTS sports (
   name VARCHAR(64) NOT NULL UNIQUE,
   icon VARCHAR(64) NOT NULL,
   image_url TEXT,
-  subtitle VARCHAR(120)
+  subtitle VARCHAR(120),
+  display_order INT DEFAULT 0
 );
 
 -- -----------------------------------------------------------------------------
 -- -----------------------------------------------------------------------------
 ALTER TABLE sports ADD COLUMN IF NOT EXISTS image_url TEXT;
 ALTER TABLE sports ADD COLUMN IF NOT EXISTS subtitle VARCHAR(120);
+ALTER TABLE sports ADD COLUMN IF NOT EXISTS display_order INT DEFAULT 0;
 
 -- 3. COURTS TABLE
 -- -----------------------------------------------------------------------------
