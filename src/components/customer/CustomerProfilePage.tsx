@@ -1074,18 +1074,13 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
                           >
                             {isRainout ? '🌧️ RAINOUT (OWNER CANCEL)' : b.status.replace('_', ' ').toUpperCase()}
                           </span>
-                          {b.all_slots && b.all_slots.length > 1 && (
-                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                              {b.all_slots.length} Slots Pass
-                            </span>
-                          )}
                         </div>
                         <h4 className="font-headline font-bold text-base text-on-surface mt-1 flex items-center gap-1.5">
                           <span>{sport?.icon || '⚽'}</span> {court?.name || 'Turf Court'}
                         </h4>
                       </div>
                       <div className="text-right">
-                        <p className="font-headline font-extrabold text-lg text-primary">₹{b.total_order_amount ?? b.total_amount}</p>
+                        <p className="font-headline font-extrabold text-lg text-primary">₹{b.total_amount}</p>
                         {b.status === 'refunded' && b.refund_amount !== undefined && (
                           <span className="block text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 mt-0.5">
                             Refund: ₹{b.refund_amount}
@@ -1111,20 +1106,16 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
                         <Clock className="w-4 h-4 text-primary shrink-0" />
                         <div>
                           <span className="text-[10px] font-headline font-bold text-on-surface-variant uppercase block">
-                            {b.all_slots && b.all_slots.length > 1 ? `Slot Sessions (${b.all_slots.length})` : 'Slot Session'}
+                            Slot Session
                           </span>
                           <div className="font-bold text-on-surface flex items-center gap-1">
-                            {b.formatted_slots ? (
-                              <span>{b.formatted_slots}</span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1">
+                            <span className="inline-flex items-center gap-1">
                                 <TimeOfDayIcon time24={b.start_time} className="w-3.5 h-3.5" />
                                 <span>{formatTime12hPlain(b.start_time)}</span>
                                 <span>–</span>
                                 <TimeOfDayIcon time24={b.end_time} className="w-3.5 h-3.5" />
                                 <span>{formatTime12hPlain(b.end_time)}</span>
                               </span>
-                            )}
                           </div>
                         </div>
                       </div>

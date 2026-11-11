@@ -1,6 +1,6 @@
 import { store } from './store';
 import { getSupabase, isSupabaseConfigured } from './supabaseClient';
-import { Booking, Customer, Payment, BlockedSlot, Court, SlotLock, Venue } from '../types/schema';
+import { Booking, Customer, Payment, BlockedSlot, Court, SlotLock, Venue, Sport } from '../types/schema';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { getBookingGatePassOtp, getBookingGroupRef } from '../utils/formatters';
 
@@ -67,7 +67,16 @@ export class SupabaseSyncService {
       // 2. Fetch Sports
       const { data: sports, error: sErr } = await supabase.from('sports').select('*');
       if (!sErr && sports && sports.length > 0) {
-        store.setSports(sports);
+        const currentSports = store.getSports();
+        const mergedSports = sports.map((sp: any) => {
+          const existing = currentSports.find(cs => cs.id === sp.id || cs.name.toLowerCase() === sp.name?.toLowerCase());
+          return {
+            ...sp,
+            image_url: sp.image_url || existing?.image_url,
+            subtitle: sp.subtitle || existing?.subtitle
+          };
+        });
+        store.setSports(mergedSports);
       }
 
       // 3. Fetch Courts & Court Sports
@@ -204,16 +213,36 @@ export class SupabaseSyncService {
       const { data: locks, error: lockErr } = await supabase.from('slot_locks').select('*');
       if (!lockErr && locks) {
         const nowMs = Date.now();
-        const activeLocks = locks
-          .filter((l: any) => Number(l.expires_at) > nowMs)
-          .map((l: any) => ({
+        const maxValidExpiresAt = nowMs + 315 * 1000; // 5 minutes + 15s clock skew tolerance
+        const activeLocks: SlotLock[] = [];
+        const staleOrCorruptLocks: any[] = [];
+
+        for (const l of locks) {
+          const expMs = Number(l.expires_at);
+          if (!Number.isFinite(expMs) || expMs <= nowMs || expMs > maxValidExpiresAt) {
+            staleOrCorruptLocks.push(l);
+            continue;
+          }
+          activeLocks.push({
             court_id: l.court_id,
             date: typeof l.date === 'string' ? l.date.slice(0, 10) : l.date,
             start_time: typeof l.start_time === 'string' ? l.start_time.slice(0, 5) : l.start_time,
             locked_by: l.locked_by,
-            expires_at: Number(l.expires_at)
-          }));
+            expires_at: expMs
+          });
+        }
         store.setSlotLocks(activeLocks);
+
+        // Clean up expired or corrupt far-future locks in Supabase so they cannot persist
+        for (const stale of staleOrCorruptLocks) {
+          supabase
+            .from('slot_locks')
+            .delete()
+            .eq('court_id', stale.court_id)
+            .eq('date', stale.date)
+            .eq('start_time', stale.start_time)
+            .then(() => {}, () => {});
+        }
       }
 
       // 8. Fetch Payments
@@ -408,13 +437,18 @@ export class SupabaseSyncService {
 
   private static handleRealtimeSlotLockChange(payload: any) {
     const locks = [...store.getSlotLocks()];
-    if (payload.eventType === 'INSERT' && payload.new) {
+    if ((payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') && payload.new) {
+      const nowMs = Date.now();
+      const expMs = Number(payload.new.expires_at);
+      if (!Number.isFinite(expMs) || expMs <= nowMs || expMs > nowMs + 315 * 1000) {
+        return;
+      }
       const newLock: SlotLock = {
         court_id: payload.new.court_id,
         date: typeof payload.new.date === 'string' ? payload.new.date.slice(0, 10) : payload.new.date,
         start_time: typeof payload.new.start_time === 'string' ? payload.new.start_time.slice(0, 5) : payload.new.start_time,
         locked_by: payload.new.locked_by,
-        expires_at: Number(payload.new.expires_at)
+        expires_at: expMs
       };
       const existing = locks.findIndex(l => l.court_id === newLock.court_id && l.date === newLock.date && l.start_time === newLock.start_time);
       if (existing === -1) {
@@ -424,7 +458,9 @@ export class SupabaseSyncService {
       }
       store.setSlotLocks(locks);
     } else if (payload.eventType === 'DELETE' && payload.old) {
-      const filtered = locks.filter(l => l.court_id !== payload.old.court_id || l.date !== payload.old.date || l.start_time !== payload.old.start_time);
+      const oldDate = typeof payload.old.date === 'string' ? payload.old.date.slice(0, 10) : payload.old.date;
+      const oldTime = typeof payload.old.start_time === 'string' ? payload.old.start_time.slice(0, 5) : payload.old.start_time;
+      const filtered = locks.filter(l => !(l.court_id === payload.old.court_id && l.date === oldDate && l.start_time === oldTime));
       store.setSlotLocks(filtered);
     }
   }
@@ -729,6 +765,30 @@ export class SupabaseSyncService {
   }
 
   /**
+   * Remove all locks owned by a specific session/customer from Supabase
+   */
+  public static async deleteSlotLocksBySessionFromSupabase(sessionId: string): Promise<boolean> {
+    const supabase = getSupabase();
+    if (!supabase || !sessionId) return false;
+
+    try {
+      const { error } = await supabase
+        .from('slot_locks')
+        .delete()
+        .eq('locked_by', sessionId);
+
+      if (error) {
+        console.warn('⚠️ [Supabase Sync] Error deleting session slot locks:', error.message);
+        return false;
+      }
+      return true;
+    } catch (err: any) {
+      console.warn('⚠️ [Supabase Sync] Exception deleting session slot locks:', err.message);
+      return false;
+    }
+  }
+
+  /**
    * Persist or update pitch (court) configuration in Supabase
    */
   public static async syncCourtToSupabase(court: Court): Promise<boolean> {
@@ -805,6 +865,43 @@ export class SupabaseSyncService {
       return true;
     } catch (err: any) {
       console.error('❌ [Supabase Sync] Exception deleting court from Supabase:', err.message);
+      return false;
+    }
+  }
+
+  /**
+   * Persist or update Sport (including custom card image & subtitle) in Supabase
+   */
+  public static async syncSportToSupabase(sport: Sport): Promise<boolean> {
+    const supabase = getSupabase();
+    if (!supabase) return false;
+
+    try {
+      const fullPayload: any = {
+        id: sport.id,
+        name: sport.name,
+        icon: sport.icon,
+        image_url: sport.image_url || null,
+        subtitle: sport.subtitle || null
+      };
+
+      const { error } = await supabase.from('sports').upsert([fullPayload], { onConflict: 'id' });
+      if (error) {
+        // Fallback if remote Supabase table hasn't added image_url/subtitle columns yet
+        if (error.message?.includes('image_url') || error.message?.includes('subtitle') || error.code === '42703' || error.code === 'PGRST204') {
+          const { error: fallbackErr } = await supabase.from('sports').upsert([{ id: sport.id, name: sport.name, icon: sport.icon }], { onConflict: 'id' });
+          if (fallbackErr) {
+            console.warn('⚠️ [Supabase Sync] Error syncing sport fallback:', fallbackErr.message);
+            return false;
+          }
+          return true;
+        }
+        console.warn('⚠️ [Supabase Sync] Error syncing sport to Supabase:', error.message);
+        return false;
+      }
+      return true;
+    } catch (err: any) {
+      console.warn('⚠️ [Supabase Sync] Exception syncing sport to Supabase:', err.message);
       return false;
     }
   }

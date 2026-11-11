@@ -24,6 +24,8 @@ interface ScheduleCalendarViewProps {
 
 export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ currentAdmin }) => {
   const courts = store.getCourts();
+  const sports = store.getSports();
+  const [selectedSportId, setSelectedSportId] = useState<string>('all');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [isCalendarLoading, setIsCalendarLoading] = useState(false);
 
@@ -101,7 +103,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
   }>({
     isOpen: false,
     courtId: courts[0]?.id || '',
-    startDate: selectedDate,
+              startDate: selectedDate,
     startTime: '14:00',
     endDate: selectedDate,
     endTime: '18:00',
@@ -208,9 +210,17 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
   const maxCustomerDateStr = `${maxCustomerDate.getFullYear()}-${String(maxCustomerDate.getMonth() + 1).padStart(2, '0')}-${String(maxCustomerDate.getDate()).padStart(2, '0')}`;
   const isBeyondCustomerLimit = selectedDate > maxCustomerDateStr;
 
-  // Generate time rows dynamically based on all computed slots for active courts for the selected date
+  const activeSportFilter = selectedSportId !== 'all' && sports.some(s => s.id === selectedSportId)
+    ? selectedSportId
+    : 'all';
+  const filteredCourts = activeSportFilter === 'all'
+    ? courts
+    : courts.filter(c => c.sport_ids.includes(activeSportFilter));
+  const activeSportObj = activeSportFilter === 'all' ? null : sports.find(s => s.id === activeSportFilter) || null;
+
+  // Generate time rows dynamically based on computed slots for visible courts on the selected date
   const allSlotStartTimes = Array.from(
-    new Set(courts.flatMap(c => SlotEngine.computeSlotsForCourt(c, selectedDate, undefined, true).map(s => s.start_time)))
+    new Set(filteredCourts.flatMap(c => SlotEngine.computeSlotsForCourt(c, selectedDate, undefined, true).map(s => s.start_time)))
   ).sort();
 
   const timeRows = allSlotStartTimes.length > 0
@@ -319,7 +329,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
             onClick={() => setBlockModalState(prev => ({
               ...prev,
               isOpen: true,
-              courtId: courts[0]?.id || '',
+              courtId: filteredCourts[0]?.id || courts[0]?.id || '',
               startDate: selectedDate,
               endDate: selectedDate
             }))}
@@ -334,7 +344,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 text-xs text-on-surface-variant font-medium">
           <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-500"></span> Online</span>
           <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span> Walk-in</span>
-          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-sky-500"></span> 2-Min Hold</span>
+          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-sky-500"></span> 5-Min Hold</span>
           <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-primary"></span> Free</span>
         </div>
       </div>
@@ -348,19 +358,97 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
         </div>
       )}
 
+      {/* Sport Hierarchy Dropdown Filter */}
+      {sports.length > 0 && (
+        <div className="bg-white border border-outline-variant/40 rounded-xl px-4 py-3 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <label
+              htmlFor="schedule-sport-filter"
+              className="text-xs font-headline font-bold uppercase tracking-wider text-on-surface-variant whitespace-nowrap"
+            >
+              Filter by Sport:
+            </label>
+            <select
+              id="schedule-sport-filter"
+              value={activeSportFilter}
+              onChange={e => setSelectedSportId(e.target.value)}
+              className="form-input text-xs font-headline font-bold py-1.5 px-3 min-w-[220px] bg-surface-container-low border border-outline-variant/60 rounded-lg cursor-pointer"
+            >
+              <option value="all">
+                All Sports ({courts.length} {courts.length === 1 ? 'pitch' : 'pitches'})
+              </option>
+              {sports.map(sport => {
+                const sportCourtsCount = courts.filter(c => c.sport_ids.includes(sport.id)).length;
+                return (
+                  <option key={sport.id} value={sport.id}>
+                    {sport.icon} {sport.name} ({sportCourtsCount} {sportCourtsCount === 1 ? 'pitch' : 'pitches'})
+                  </option>
+                );
+              })}
+            </select>
+            {activeSportFilter !== 'all' && (
+              <button
+                type="button"
+                onClick={() => setSelectedSportId('all')}
+                className="text-[11px] font-bold text-primary hover:underline px-1.5 py-1 cursor-pointer"
+              >
+                Clear Filter
+              </button>
+            )}
+          </div>
+
+          <span className="text-xs font-semibold text-on-surface-variant">
+            Showing <strong className="text-primary">{filteredCourts.length}</strong> of {courts.length} pitch{courts.length !== 1 ? 'es' : ''}
+            {activeSportObj ? ` under ${activeSportObj.icon} ${activeSportObj.name}` : ''}
+          </span>
+        </div>
+      )}
+
       {/* Grid Table */}
-      {isCalendarLoading || courts.length === 0 ? (
-        <CalendarTableSkeleton rows={10} columns={courts.length || 2} />
+      {isCalendarLoading ? (
+        <CalendarTableSkeleton rows={10} columns={filteredCourts.length || 2} />
+      ) : filteredCourts.length === 0 ? (
+        <div className="bg-white border border-outline-variant/40 rounded-xl p-8 text-center space-y-3 shadow-sm">
+          <div className="text-3xl">{activeSportObj ? activeSportObj.icon : '🏟️'}</div>
+          <h3 className="font-headline font-bold text-base text-on-surface">
+            {activeSportObj ? `No pitches configured under ${activeSportObj.name}` : 'No pitches configured yet'}
+          </h3>
+          <p className="text-xs text-on-surface-variant max-w-md mx-auto">
+            {activeSportObj
+              ? `Assign one or more pitches to ${activeSportObj.name} in Court & Pricing Manager to view its schedule here.`
+              : 'Add a court or pitch in Court & Pricing Manager to manage time slots.'}
+          </p>
+          {activeSportObj && (
+            <button
+              type="button"
+              onClick={() => setSelectedSportId('all')}
+              className="btn-secondary text-xs px-4 py-2 font-bold cursor-pointer"
+            >
+              Show All Sports ({courts.length})
+            </button>
+          )}
+        </div>
       ) : (
         <div className="bg-white border border-outline-variant/40 rounded-xl overflow-x-auto shadow-sm">
-          <table className="w-full text-left border-collapse min-w-[700px]">
+          <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-surface-container-low border-b border-outline-variant/40 text-xs font-headline font-bold text-on-surface-variant">
-              <th className="p-3 w-32 text-center border-r border-outline-variant/40">Time</th>
-              {courts.map(court => (
-                <th key={court.id} className="p-3 border-r border-outline-variant/40 last:border-r-0">
+              <th className="p-3 w-32 min-w-[120px] text-center border-r border-outline-variant/40 sticky left-0 z-10 bg-surface-container-low">Time</th>
+              {filteredCourts.map(court => (
+                <th key={court.id} className="p-3 min-w-[190px] border-r border-outline-variant/40 last:border-r-0">
                   <div className="font-headline font-bold text-on-surface text-sm">{court.name}</div>
-                  <div className="text-[10px] text-primary font-bold">₹{court.base_price_per_hour}/hr</div>
+                  <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                    <span className="text-[10px] text-primary font-bold">₹{court.base_price_per_hour}/hr</span>
+                    {activeSportFilter === 'all' && court.sport_ids.map(sid => {
+                      const sp = sports.find(s => s.id === sid);
+                      if (!sp) return null;
+                      return (
+                        <span key={sid} className="text-[9.5px] bg-white border border-outline-variant/40 text-on-surface-variant px-1.5 py-0.2 rounded font-semibold">
+                          {sp.icon} {sp.name}
+                        </span>
+                      );
+                    })}
+                  </div>
                 </th>
               ))}
             </tr>
@@ -373,7 +461,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
               return (
               <tr key={timeStr} className="border-b border-outline-variant/30 hover:bg-surface-container-low/50">
                 {/* Time Column */}
-                <td className="p-2.5 border-r border-outline-variant/40 bg-surface-container-low/30">
+                <td className="p-2.5 border-r border-outline-variant/40 bg-surface-container-low sticky left-0 z-10">
                   <div className="flex items-center justify-center gap-2">
                     <div
                       className={`p-1.5 rounded-lg shrink-0 flex items-center justify-center ${
@@ -395,7 +483,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
                 </td>
 
                 {/* Court Columns */}
-                {courts.map(court => {
+                {filteredCourts.map(court => {
                   const slots = SlotEngine.computeSlotsForCourt(court, selectedDate, undefined, true);
                   const slot = slots.find(s => s.start_time === timeStr);
 
@@ -470,7 +558,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
 
                       {slot.status === 'locked' && (() => {
                         const remainingSec = slot.lock_expires_at
-                          ? Math.max(0, Math.ceil((slot.lock_expires_at - currentTimeMs) / 1000))
+                          ? Math.min(300, Math.max(0, Math.ceil((slot.lock_expires_at - currentTimeMs) / 1000)))
                           : 0;
                         const m = Math.floor(remainingSec / 60);
                         const s = remainingSec % 60;
@@ -694,6 +782,10 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
           time={selectedHoldSlot.time}
           initialRemainingSec={selectedHoldSlot.remainingSec}
           onClose={() => setSelectedHoldSlot(null)}
+          onReleaseHold={() => {
+            RedisLockService.releaseLock(selectedHoldSlot.court.id, selectedHoldSlot.date, selectedHoldSlot.time);
+            setSelectedHoldSlot(null);
+          }}
         />
       )}
 

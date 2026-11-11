@@ -6,8 +6,10 @@ import { SupabaseSyncService } from '../../services/supabaseSyncService';
 import { AdminUser, Court, BlockedSlot, Sport } from '../../types/schema';
 import { ConfirmModal } from '../common/ConfirmModal';
 import { PitchGridSkeleton } from '../common/SkeletonLoaders';
-import { Settings, ShieldAlert, Trash2, PlusCircle, Edit3, X, Check, Calendar, Zap, Clock, AlertTriangle, Tag, Sparkles, Percent, RotateCcw } from 'lucide-react';
+import { Settings, ShieldAlert, Trash2, PlusCircle, Edit3, X, Check, Calendar, Zap, Clock, AlertTriangle, Tag, Sparkles, Percent, RotateCcw, Image as ImageIcon } from 'lucide-react';
 import { formatTime12hPlain, formatDateDDMMYYYY } from '../../utils/formatters';
+import { CustomSportCreator } from './CustomSportCreator';
+import { SportsImageManagerModal } from './SportsImageManagerModal';
 
 interface CourtPricingManagerProps {
   currentAdmin: AdminUser;
@@ -32,93 +34,7 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
   // Custom Sport Input State
   const [showAddCustomSportAdd, setShowAddCustomSportAdd] = useState(false);
   const [showAddCustomSportEdit, setShowAddCustomSportEdit] = useState(false);
-  const [customSportName, setCustomSportName] = useState('');
-
-  const addPresetSport = (name: string, icon: string, forEditModal: boolean = false) => {
-    let existing = sports.find(s => s.name.toLowerCase() === name.toLowerCase());
-    let targetSportId = existing?.id;
-
-    if (!existing) {
-      const newSport: Sport = {
-        id: `sp-${name.toLowerCase().replace(/\s+/g, '-')}`,
-        name,
-        icon
-      };
-      const updated = [...sports, newSport];
-      store.setSports(updated);
-      setSports(updated);
-      targetSportId = newSport.id;
-    }
-
-    if (targetSportId) {
-      if (forEditModal) {
-        setEditSportIds(prev => prev.includes(targetSportId!) ? prev : [...prev, targetSportId!]);
-      } else {
-        setSelectedSportIds(prev => prev.includes(targetSportId!) ? prev : [...prev, targetSportId!]);
-      }
-    }
-  };
-
-  const getEmojiForSport = (name: string) => {
-    const lower = name.toLowerCase();
-    if (lower.includes('volley')) return '🏐';
-    if (lower.includes('basket')) return '🏀';
-    if (lower.includes('foot') || lower.includes('soccer') || lower.includes('futsal')) return '⚽';
-    if (lower.includes('cricket')) return '🏏';
-    if (lower.includes('badminton') || lower.includes('squash')) return '🏸';
-    if (lower.includes('tennis') || lower.includes('padel')) return '🎾';
-    if (lower.includes('swim') || lower.includes('pool')) return '🏊';
-    if (lower.includes('skate') || lower.includes('roller')) return '🛼';
-    if (lower.includes('golf')) return '⛳';
-    if (lower.includes('boxing') || lower.includes('mma')) return '🥊';
-    if (lower.includes('archery')) return '🏹';
-    if (lower.includes('bowling')) return '🎳';
-    if (lower.includes('table') || lower.includes('ping')) return '🏓';
-    return '🏆';
-  };
-
-  const handleCreateCustomSport = (forEditModal: boolean = false, e?: React.MouseEvent) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-
-    if (!customSportName.trim()) return;
-
-    const cleanName = customSportName.trim();
-    const autoIcon = getEmojiForSport(cleanName);
-
-    // Check if sport already exists
-    let existing = sports.find(s => s.name.toLowerCase() === cleanName.toLowerCase());
-    let targetSportId = existing?.id;
-
-    if (!existing) {
-      const newSport: Sport = {
-        id: `sp-${cleanName.toLowerCase().replace(/\s+/g, '-')}-${Date.now().toString().slice(-4)}`,
-        name: cleanName,
-        icon: autoIcon
-      };
-      const updatedSports = [...sports, newSport];
-      store.setSports(updatedSports);
-      setSports(updatedSports);
-      targetSportId = newSport.id;
-    }
-
-    if (targetSportId) {
-      if (forEditModal) {
-        setEditSportIds(prev => prev.includes(targetSportId!) ? prev : [...prev, targetSportId!]);
-      } else {
-        setSelectedSportIds(prev => prev.includes(targetSportId!) ? prev : [...prev, targetSportId!]);
-      }
-    }
-
-    setCustomSportName('');
-    if (forEditModal) {
-      setShowAddCustomSportEdit(false);
-    } else {
-      setShowAddCustomSportAdd(false);
-    }
-  };
+  const [showSportsManagerModal, setShowSportsManagerModal] = useState(false);
 
   const PREDEFINED_SPORT_IDS = ['sp-football', 'sp-cricket', 'sp-badminton', 'sp-pickleball', 'sp-tennis'];
 
@@ -825,6 +741,13 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
             </button>
 
             <button
+              onClick={() => setShowSportsManagerModal(true)}
+              className="btn-secondary text-xs px-3.5 py-2 flex items-center gap-1.5 font-headline font-bold text-primary border-primary/40"
+            >
+              <ImageIcon className="w-4 h-4" /> Sports &amp; Images
+            </button>
+
+            <button
               onClick={() => setShowBlockModal(true)}
               className="btn-secondary text-xs px-3.5 py-2 flex items-center gap-1.5 font-headline font-bold text-amber-800 border-amber-300"
             >
@@ -1153,7 +1076,16 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
                     </div>
 
                     <div>
-                      <label className="block text-on-surface-variant font-headline font-bold mb-1">Supported Sports *</label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-on-surface-variant font-headline font-bold">Supported Sports *</label>
+                        <button
+                          type="button"
+                          onClick={() => setShowSportsManagerModal(true)}
+                          className="text-[10.5px] font-bold text-primary hover:underline flex items-center gap-1"
+                        >
+                          <ImageIcon className="w-3 h-3" /> Manage Sport Images
+                        </button>
+                      </div>
                       <div className="flex flex-wrap gap-1.5">
                         {sports.map(s => {
                           const isSelected = selectedSportIds.includes(s.id);
@@ -1197,66 +1129,12 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
                       </div>
 
                       {showAddCustomSportAdd && (
-                        <div className="bg-primary/5 border border-primary/20 p-2.5 rounded-xl space-y-2 mt-2 animate-modalScaleIn">
-                          <div>
-                            <span className="text-[10px] font-bold text-primary uppercase tracking-wider block mb-1">
-                              ⚡ Quick 1-Click Sports
-                            </span>
-                            <div className="flex flex-wrap gap-1">
-                              {[
-                                { name: 'Volleyball', icon: '🏐' },
-                                { name: 'Basketball', icon: '🏀' },
-                                { name: 'Futsal', icon: '⚽' },
-                                { name: 'Padel', icon: '🎾' },
-                                { name: 'Squash', icon: '🏸' },
-                                { name: 'Kabaddi', icon: '🤼' }
-                              ].map(preset => (
-                                <button
-                                  type="button"
-                                  key={preset.name}
-                                  onClick={() => addPresetSport(preset.name, preset.icon, false)}
-                                  className="bg-white hover:bg-primary/10 border border-outline-variant/50 text-on-surface text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 transition-colors"
-                                >
-                                  <span>{preset.icon}</span>
-                                  <span>{preset.name}</span>
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div className="border-t border-outline-variant/30 pt-1.5">
-                            <span className="text-[10px] font-bold text-on-surface block mb-0.5">
-                              Or Type Custom Sport Name:
-                            </span>
-                            <div className="flex gap-1.5">
-                              <input
-                                type="text"
-                                placeholder="Sport Name (e.g. Swimming, Archery)"
-                                value={customSportName}
-                                onChange={e => setCustomSportName(e.target.value)}
-                                onKeyDown={e => {
-                                  if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    handleCreateCustomSport(false, e as any);
-                                  }
-                                }}
-                                className="form-input text-xs flex-1 py-1 font-medium"
-                              />
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  handleCreateCustomSport(false, e);
-                                }}
-                                className="btn-primary text-xs px-2.5 py-1 font-bold shrink-0 shadow-xs"
-                              >
-                                + Add Sport
-                              </button>
-                            </div>
-                          </div>
-                        </div>
+                        <CustomSportCreator
+                          sports={sports}
+                          onSportsUpdated={setSports}
+                          onSelectSportId={(sportId) => setSelectedSportIds(prev => prev.includes(sportId) ? prev : [...prev, sportId])}
+                          onClose={() => setShowAddCustomSportAdd(false)}
+                        />
                       )}
                     </div>
                   </div>
@@ -1632,7 +1510,16 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
                     </div>
 
                     <div>
-                      <label className="block text-on-surface-variant font-headline font-bold mb-1">Supported Sports *</label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-on-surface-variant font-headline font-bold">Supported Sports *</label>
+                        <button
+                          type="button"
+                          onClick={() => setShowSportsManagerModal(true)}
+                          className="text-[10.5px] font-bold text-primary hover:underline flex items-center gap-1"
+                        >
+                          <ImageIcon className="w-3 h-3" /> Manage Sport Images
+                        </button>
+                      </div>
                       <div className="flex flex-wrap gap-1.5">
                         {sports.map(s => {
                           const isSelected = editSportIds.includes(s.id);
@@ -1676,66 +1563,12 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
                       </div>
 
                       {showAddCustomSportEdit && (
-                        <div className="bg-primary/5 border border-primary/20 p-2.5 rounded-xl space-y-2 mt-2 animate-modalScaleIn">
-                          <div>
-                            <span className="text-[10px] font-bold text-primary uppercase tracking-wider block mb-1">
-                              ⚡ Quick 1-Click Sports
-                            </span>
-                            <div className="flex flex-wrap gap-1">
-                              {[
-                                { name: 'Volleyball', icon: '🏐' },
-                                { name: 'Basketball', icon: '🏀' },
-                                { name: 'Futsal', icon: '⚽' },
-                                { name: 'Padel', icon: '🎾' },
-                                { name: 'Squash', icon: '🏸' },
-                                { name: 'Kabaddi', icon: '🤼' }
-                              ].map(preset => (
-                                <button
-                                  type="button"
-                                  key={preset.name}
-                                  onClick={() => addPresetSport(preset.name, preset.icon, true)}
-                                  className="bg-white hover:bg-primary/10 border border-outline-variant/50 text-on-surface text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 transition-colors"
-                                >
-                                  <span>{preset.icon}</span>
-                                  <span>{preset.name}</span>
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div className="border-t border-outline-variant/30 pt-1.5">
-                            <span className="text-[10px] font-bold text-on-surface block mb-0.5">
-                              Or Type Custom Sport Name:
-                            </span>
-                            <div className="flex gap-1.5">
-                              <input
-                                type="text"
-                                placeholder="Sport Name (e.g. Volleyball, Archery)"
-                                value={customSportName}
-                                onChange={e => setCustomSportName(e.target.value)}
-                                onKeyDown={e => {
-                                  if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    handleCreateCustomSport(true, e as any);
-                                  }
-                                }}
-                                className="form-input text-xs flex-1 py-1 font-medium"
-                              />
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  handleCreateCustomSport(true, e);
-                                }}
-                                className="btn-primary text-xs px-2.5 py-1 font-bold shrink-0 shadow-xs"
-                              >
-                                + Add Sport
-                              </button>
-                            </div>
-                          </div>
-                        </div>
+                        <CustomSportCreator
+                          sports={sports}
+                          onSportsUpdated={setSports}
+                          onSelectSportId={(sportId) => setEditSportIds(prev => prev.includes(sportId) ? prev : [...prev, sportId])}
+                          onClose={() => setShowAddCustomSportEdit(false)}
+                        />
                       )}
                     </div>
                   </div>
@@ -2637,6 +2470,17 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
           </div>
         </div>
       )}
+
+      {/* Sports & Card Images Manager Modal */}
+      <SportsImageManagerModal
+        isOpen={showSportsManagerModal}
+        onClose={() => setShowSportsManagerModal(false)}
+        sports={sports}
+        currentAdmin={currentAdmin}
+        predefinedSportIds={PREDEFINED_SPORT_IDS}
+        onSportsUpdated={setSports}
+        onRequestDeleteSport={handleDeleteCustomSport}
+      />
 
       {/* Universal Confirmation Modal (Rendered at top-most z-index overlay level) */}
       <ConfirmModal

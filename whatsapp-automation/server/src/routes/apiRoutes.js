@@ -196,7 +196,8 @@ apiRouter.post('/slots/lock', (req, res) => {
     return res.status(400).json({ success: false, message: 'Missing courtId, date, startTime, or lockedBy' });
   }
 
-  const result = LockService.acquireLock(courtId, date, startTime, lockedBy, ttlSeconds || 300);
+  const effectiveTtl = Math.min(300, Math.max(1, Number(ttlSeconds) || 300));
+  const result = LockService.acquireLock(courtId, date, startTime, lockedBy, effectiveTtl);
   if (!result.success) {
     return res.status(409).json({ success: false, message: result.message });
   }
@@ -613,7 +614,7 @@ apiRouter.get('/pay/:ref', async (req, res) => {
   const courtName = court?.name || booking.court_name || 'Turf Pitch';
   const createdMs = new Date(booking.created_at).getTime();
   const expiresAtMs = createdMs + (300 * 1000); // 5 minutes
-  const remainingSec = Math.max(0, Math.floor((expiresAtMs - Date.now()) / 1000));
+  const remainingSec = Math.min(300, Math.max(0, Math.floor((expiresAtMs - Date.now()) / 1000)));
 
   // If already confirmed:
   if (booking.status === 'confirmed') {

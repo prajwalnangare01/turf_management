@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Court } from '../../types/schema';
-import { RedisLockService } from '../../services/redisLockService';
+import { RedisLockService, HOLD_TTL_SECONDS } from '../../services/redisLockService';
 import { Clock, X, Sun, Moon } from 'lucide-react';
 import { formatTime12hPlain, formatDateDDMMYYYY } from '../../utils/formatters';
 
@@ -10,6 +10,7 @@ interface ActiveCustomerHoldModalProps {
   time: string;
   initialRemainingSec?: number;
   onClose: () => void;
+  onReleaseHold?: () => void;
 }
 
 export const ActiveCustomerHoldModal: React.FC<ActiveCustomerHoldModalProps> = ({
@@ -17,17 +18,25 @@ export const ActiveCustomerHoldModal: React.FC<ActiveCustomerHoldModalProps> = (
   date,
   time,
   initialRemainingSec,
-  onClose
+  onClose,
+  onReleaseHold
 }) => {
   const [remainingSec, setRemainingSec] = useState<number>(() => {
     if (initialRemainingSec !== undefined && initialRemainingSec > 0) {
-      return initialRemainingSec;
+      return Math.min(HOLD_TTL_SECONDS, initialRemainingSec);
     }
     const lockInfo = RedisLockService.checkAdminConflict(court.id, date, time);
-    return lockInfo.remainingSeconds;
+    return Math.min(HOLD_TTL_SECONDS, lockInfo.remainingSeconds);
   });
 
   useEffect(() => {
+    if (initialRemainingSec !== undefined && initialRemainingSec > 0) {
+      setRemainingSec(Math.min(HOLD_TTL_SECONDS, initialRemainingSec));
+    } else {
+      const lockInfo = RedisLockService.checkAdminConflict(court.id, date, time);
+      setRemainingSec(Math.min(HOLD_TTL_SECONDS, lockInfo.remainingSeconds));
+    }
+
     const timer = setInterval(() => {
       setRemainingSec(prev => {
         if (prev <= 1) {
@@ -39,7 +48,7 @@ export const ActiveCustomerHoldModal: React.FC<ActiveCustomerHoldModalProps> = (
     }, 1000);
 
     return () => clearInterval(timer);
-  }, []);
+  }, [court.id, date, time, initialRemainingSec]);
 
   const mins = Math.floor(remainingSec / 60);
   const secs = remainingSec % 60;
@@ -103,11 +112,20 @@ export const ActiveCustomerHoldModal: React.FC<ActiveCustomerHoldModalProps> = (
           </div>
         </div>
 
-        <div className="pt-0.5">
+        <div className={onReleaseHold ? 'pt-0.5 flex items-center gap-2' : 'pt-0.5'}>
+          {onReleaseHold && (
+            <button
+              type="button"
+              onClick={onReleaseHold}
+              className="flex-1 py-2 text-xs font-headline font-bold rounded-xl border border-red-300 bg-red-50 text-red-700 hover:bg-red-100 transition cursor-pointer"
+            >
+              Release Hold
+            </button>
+          )}
           <button
             type="button"
             onClick={onClose}
-            className="btn-primary w-full py-2 text-xs font-headline font-bold cursor-pointer"
+            className={`btn-primary py-2 text-xs font-headline font-bold cursor-pointer ${onReleaseHold ? 'flex-1' : 'w-full'}`}
           >
             Got It
           </button>

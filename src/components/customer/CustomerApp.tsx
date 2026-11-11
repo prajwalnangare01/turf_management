@@ -16,6 +16,7 @@ import { BookingConfirmationModal } from './BookingConfirmationModal';
 import { BookingLookupModal } from './BookingLookupModal';
 import { ActiveCustomerHoldModal } from '../common/ActiveCustomerHoldModal';
 import { formatTimeRange12h, formatTime12hPlain, formatTimeRange12hPlain, formatDateDDMMYYYY } from '../../utils/formatters';
+import { DEFAULT_SPORT_FALLBACK_IMAGE } from '../../utils/imageUpload';
 import { CustomerPortalSkeleton, PitchGridSkeleton, SportCardsSkeleton } from '../common/SkeletonLoaders';
 import { ChevronRight, Search, UserCheck, User, LogOut, ShieldCheck, Clock, Calendar, Lock, MapPin, Phone, FileText, RotateCcw } from 'lucide-react';
 
@@ -24,6 +25,7 @@ interface CustomerAppProps {
 }
 
 export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => {
+  const [, setStoreVersion] = useState(0);
   const venue = store.getVenue();
   const allSports = store.getSports();
   const allCourts = store.getCourts();
@@ -89,6 +91,9 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
   });
   const effectiveSessionId = currentCustomer ? currentCustomer.id : sessionId;
   const [selectedSlots, setSelectedSlots] = useState<DynamicSlot[]>([]);
+  const selectedSlotsRef = React.useRef<DynamicSlot[]>([]);
+  const showCheckoutRef = React.useRef<boolean>(false);
+  selectedSlotsRef.current = selectedSlots;
 
   // Automatically release held slots when the user refreshes or closes the page.
   // Resolves the corner case where a user holds a slot, refreshes, and finds their own slot stuck as held for 5 minutes.
@@ -131,6 +136,7 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
 
   // Modals
   const [showCheckout, setShowCheckout] = useState(false);
+  showCheckoutRef.current = showCheckout;
   const [confirmedBookingRef, setConfirmedBookingRef] = useState<string | null>(null);
   const [showLookup, setShowLookup] = useState(false);
   const [selectedHoldSlot, setSelectedHoldSlot] = useState<{ court: Court; date: string; time: string } | null>(null);
@@ -157,6 +163,15 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
   useEffect(() => {
     refreshSlots();
     const unsubscribe = store.subscribe(() => {
+      if (selectedSlotsRef.current.length === 0 && !showCheckoutRef.current) {
+        const tabSession = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('turfflow_user_session_id') : null;
+        const hasDanglingTabLock = tabSession && store.getSlotLocks().some(l => l.locked_by === tabSession);
+        if (hasDanglingTabLock && tabSession) {
+          RedisLockService.releaseAllLocksForSession(tabSession);
+          return;
+        }
+      }
+      setStoreVersion(v => v + 1);
       refreshSlots();
     });
     const interval = setInterval(refreshSlots, 3000);
@@ -223,7 +238,7 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
 
     // If slot is currently locked by another customer, show Active Customer Hold Modal (no login required to view timer)
     if (slot.status === 'locked') {
-      const isMyLock = slot.locked_by === effectiveSessionId;
+      const isMyLock = slot.locked_by === effectiveSessionId || (!!currentCustomer && slot.locked_by === currentCustomer.id) || slot.locked_by === sessionId;
       if (!isMyLock) {
         setSelectedHoldSlot({ court: selectedCourt, date: selectedDate, time: slot.start_time });
         return;
@@ -269,12 +284,30 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
     }, delay);
   };
 
+  const releaseCurrentSelectionLocks = () => {
+    if (selectedCourt && selectedSlots.length > 0) {
+      selectedSlots.forEach(s => {
+        RedisLockService.releaseLock(selectedCourt.id, selectedDate, s.start_time, effectiveSessionId);
+        if (sessionId !== effectiveSessionId) {
+          RedisLockService.releaseLock(selectedCourt.id, selectedDate, s.start_time, sessionId);
+        }
+      });
+    }
+  };
+
   const handleSportSelect = (sport: Sport) => {
+    if (selectedCourt && !selectedCourt.sport_ids.includes(sport.id)) {
+      releaseCurrentSelectionLocks();
+      setSelectedSlots([]);
+    }
     setSelectedSport(sport);
     scrollToSection('pitch-selection');
   };
 
   const handleCourtSelect = (court: Court) => {
+    if (selectedCourt && court.id !== selectedCourt.id) {
+      releaseCurrentSelectionLocks();
+    }
     setSelectedCourt(court);
     setSelectedSlots([]);
     scrollToSection('date-selection');
@@ -347,31 +380,26 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
   const totalPrice = selectedSlots.reduce((sum, s) => sum + s.price, 0);
 
   // Sport card image map matching Stitch mockups
-  const sportImages: Record<string, { img: string; subtitle: string; courts: string }> = {
+  const sportImages: Record<string, { img: string; subtitle: string }> = {
     football: {
       img: 'https://images.unsplash.com/photo-1529900748604-07564a03e7a6?auto=format&fit=crop&w=600&q=80',
-      subtitle: '5-a-side & 11-a-side',
-      courts: '8 Courts Available'
+      subtitle: '5-a-side & 11-a-side'
     },
     tennis: {
       img: 'https://images.unsplash.com/photo-1622279457486-62dcc4a431d6?auto=format&fit=crop&w=600&q=80',
-      subtitle: 'Clay & Hard Acrylic Courts',
-      courts: '4 Courts Available'
+      subtitle: 'Clay & Hard Acrylic Courts'
     },
     basketball: {
       img: 'https://images.unsplash.com/photo-1546519638-68e109498ffc?auto=format&fit=crop&w=600&q=80',
-      subtitle: 'Indoor High-Gloss Maple',
-      courts: '2 Courts Available'
+      subtitle: 'Indoor High-Gloss Maple'
     },
     badminton: {
       img: 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&w=600&q=80',
-      subtitle: 'BWF Wooden Synthetic',
-      courts: '6 Courts Available'
+      subtitle: 'BWF Wooden Synthetic'
     },
     cricket: {
       img: 'https://images.unsplash.com/photo-1531415074968-036ba1b575da?auto=format&fit=crop&w=600&q=80',
-      subtitle: 'Indoor Net & Turf Pitch',
-      courts: '3 Courts Available'
+      subtitle: 'Indoor Net & Turf Pitch'
     }
   };
 
@@ -521,10 +549,13 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
               const isSelected = selectedSport?.id === s.id;
               const key = s.name.toLowerCase();
               const meta = sportImages[key] || {
-                img: 'https://images.unsplash.com/photo-1517649763962-0c623266010b?auto=format&fit=crop&w=600&q=80',
-                subtitle: 'Professional Facilities',
-                courts: 'Multiple Courts'
+                img: DEFAULT_SPORT_FALLBACK_IMAGE,
+                subtitle: 'Professional Facilities'
               };
+              const cardImage = s.image_url || meta.img;
+              const cardSubtitle = s.subtitle || meta.subtitle;
+              const sportCourtCount = activeCourts.filter(c => c.sport_ids.includes(s.id)).length;
+              const courtsLabel = `${sportCourtCount} Court${sportCourtCount === 1 ? '' : 's'} Available`;
 
               return (
                 <div
@@ -538,7 +569,13 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
                 >
                   <div className="h-28 w-full relative overflow-hidden">
                     <img
-                      src={meta.img}
+                      src={cardImage}
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        if (target.src !== DEFAULT_SPORT_FALLBACK_IMAGE) {
+                          target.src = DEFAULT_SPORT_FALLBACK_IMAGE;
+                        }
+                      }}
                       alt={s.name}
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                     />
@@ -553,8 +590,8 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
                       <span>{s.name}</span>
                       {isSelected && <span className="w-2 h-2 rounded-full bg-primary" />}
                     </h4>
-                    <p className="text-[11px] text-on-surface-variant font-medium line-clamp-1">{meta.subtitle}</p>
-                    <p className="text-[10px] text-primary font-bold pt-1">{meta.courts}</p>
+                    <p className="text-[11px] text-on-surface-variant font-medium line-clamp-1">{cardSubtitle}</p>
+                    <p className="text-[10px] text-primary font-bold pt-1">{courtsLabel}</p>
                   </div>
                 </div>
               );

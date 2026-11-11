@@ -84,12 +84,13 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [targetExpiryMs] = useState<number>(() => {
     const first = selectedSlots[0];
     const existingLock = first ? RedisLockService.getLock(court.id, dateStr, first.start_time) : undefined;
-    return existingLock?.expires_at || (Date.now() + 300 * 1000);
+    const maxExpiry = Date.now() + 300 * 1000;
+    return existingLock?.expires_at ? Math.min(existingLock.expires_at, maxExpiry) : maxExpiry;
   });
 
   // Lock countdown timer in seconds
   const [timeLeft, setTimeLeft] = useState<number>(() => {
-    return Math.max(0, Math.ceil((targetExpiryMs - Date.now()) / 1000));
+    return Math.min(300, Math.max(0, Math.ceil((targetExpiryMs - Date.now()) / 1000)));
   });
 
   // 5-minute hold expired popup modal state

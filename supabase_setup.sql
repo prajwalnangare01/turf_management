@@ -44,10 +44,16 @@ ALTER TABLE venues ADD COLUMN IF NOT EXISTS email_sender VARCHAR(255) DEFAULT 'T
 CREATE TABLE IF NOT EXISTS sports (
   id VARCHAR(64) PRIMARY KEY DEFAULT uuid_generate_v4()::text,
   name VARCHAR(64) NOT NULL UNIQUE,
-  icon VARCHAR(64) NOT NULL
+  icon VARCHAR(64) NOT NULL,
+  image_url TEXT,
+  subtitle VARCHAR(120)
 );
 
 -- -----------------------------------------------------------------------------
+-- -----------------------------------------------------------------------------
+ALTER TABLE sports ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE sports ADD COLUMN IF NOT EXISTS subtitle VARCHAR(120);
+
 -- 3. COURTS TABLE
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS courts (

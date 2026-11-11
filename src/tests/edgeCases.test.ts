@@ -1757,6 +1757,54 @@ async function runResendTests() {
   assert(freshEmailUpdateRes.customer?.email === freshEmail, 'Customer record reflects updated email');
   assert(freshEmailUpdateRes.customer?.email_verified === true, 'Customer email verified status set to true');
 
+
+  // --- TEST 29: Corrupt / Clock-Skewed Far-Future Slot Locks & Pending Holds Auto-Purge ---
+  console.log('\n--- TEST 29: Corrupt / Clock-Skewed Far-Future Slot Locks & Pending Holds Auto-Purge ---');
+  const skewCourt = store.getCourts()[0];
+  const skewDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const corruptLock = {
+    court_id: skewCourt.id,
+    date: skewDate,
+    start_time: '20:00',
+    locked_by: 'corrupt-session-187m',
+    expires_at: Date.now() + 187 * 60 * 1000
+  };
+  const validLock = {
+    court_id: skewCourt.id,
+    date: skewDate,
+    start_time: '21:00',
+    locked_by: 'valid-session-5m',
+    expires_at: Date.now() + 290 * 1000
+  };
+  store.setSlotLocks([...store.getSlotLocks(), corruptLock, validLock]);
+  const afterPurgeCorrupt = RedisLockService.getLock(skewCourt.id, skewDate, '20:00');
+  assert(afterPurgeCorrupt === undefined, 'Corrupt 187-minute far-future lock automatically purged');
+  const afterPurgeValid = RedisLockService.getLock(skewCourt.id, skewDate, '21:00');
+  assert(afterPurgeValid !== undefined, 'Valid 5-minute lock preserved intact');
+  const validConflict = RedisLockService.checkAdminConflict(skewCourt.id, skewDate, '21:00');
+  assert(validConflict.remainingSeconds > 0 && validConflict.remainingSeconds <= 300, 'Valid hold countdown capped strictly <= 300s');
+  RedisLockService.releaseLock(skewCourt.id, skewDate, '21:00', 'valid-session-5m');
+
+  store.setBookings([...store.getBookings(), {
+    id: 'bk-skew-future',
+    booking_ref: 'TRF-SKEW-FUT',
+    customer_id: 'cust-101',
+    court_id: skewCourt.id,
+    sport_id: skewCourt.sport_ids[0],
+    booking_date: skewDate,
+    start_time: '20:00',
+    end_time: '21:00',
+    source: 'online',
+    status: 'pending_payment',
+    total_amount: 1800,
+    discount_amount: 0,
+    created_at: new Date(Date.now() + 180 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString()
+  }]);
+  const skewSlots = SlotEngine.computeSlotsForCourt(skewCourt, skewDate);
+  const skew20 = skewSlots.find(s => s.start_time === '20:00');
+  assert(skew20?.status === 'available', 'Clock-skewed future pending_payment booking does not hold slot');
+  store.setBookings(store.getBookings().filter(b => b.id !== 'bk-skew-future'));
   console.log('\n🎉 ALL CORNER & EDGE CASE TESTS (INCLUDING AUTO-COMPLETE & OWNER REDUCED WORKFLOW) PASSED PERFECTLY!\n');
 }
 

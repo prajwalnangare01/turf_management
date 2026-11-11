@@ -172,7 +172,7 @@ export class SlotEngine {
       }
 
       const effectiveLockExpiresAt = pendingHold 
-        ? (new Date(pendingHold.created_at).getTime() + 300 * 1000)
+        ? Math.min(new Date(pendingHold.created_at).getTime() + 300 * 1000, Date.now() + 300 * 1000)
         : (isLocked ? (Date.now() + 300000) : undefined);
 
       const effectiveLockedBy = pendingHold 

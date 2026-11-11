@@ -216,9 +216,10 @@ export class SlotEngine {
       // Check Active 5-minute Pending Payment Holds (temporary hold)
       const pendingHold = bookings.find(b => {
         if (b.status !== 'pending_payment') return false;
+        const nowMs = Date.now();
         const createdMs = new Date(b.created_at).getTime();
-        const ageMs = Date.now() - createdMs;
-        if (ageMs >= 300 * 1000) return false; // 5-minute hold expired!
+        const ageMs = nowMs - createdMs;
+        if (!Number.isFinite(createdMs) || ageMs >= 300 * 1000 || createdMs - nowMs > 60 * 1000) return false; // 5-minute hold expired or skewed
         const bStart = this.timeToMinutes(b.start_time);
         let bEnd = this.timeToMinutes(b.end_time);
         if (bEnd <= bStart) bEnd += 1440;
@@ -249,9 +250,12 @@ export class SlotEngine {
         status = 'locked';
       }
 
-      const effectiveLockExpiresAt = pendingHold 
+      const rawLockExpiresAt = pendingHold
         ? (new Date(pendingHold.created_at).getTime() + 300 * 1000)
         : redisLock?.expires_at;
+      const effectiveLockExpiresAt = rawLockExpiresAt
+        ? Math.min(rawLockExpiresAt, Date.now() + 300 * 1000)
+        : undefined;
 
       const effectiveLockedBy = pendingHold 
         ? (pendingHold.source === 'offline_whatsapp' ? 'WhatsApp Hold (5m)' : 'Customer Hold (5m)')

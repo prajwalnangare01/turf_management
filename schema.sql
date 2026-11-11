@@ -29,7 +29,9 @@ CREATE TABLE IF NOT EXISTS venues (
 CREATE TABLE IF NOT EXISTS sports (
   id VARCHAR(64) PRIMARY KEY DEFAULT uuid_generate_v4()::text,
   name VARCHAR(64) NOT NULL UNIQUE,
-  icon VARCHAR(64) NOT NULL
+  icon VARCHAR(64) NOT NULL,
+  image_url TEXT,
+  subtitle VARCHAR(120)
 );
 
 -- 3. Courts Table

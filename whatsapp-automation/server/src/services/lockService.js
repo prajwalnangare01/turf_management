@@ -19,6 +19,7 @@ export class LockService {
    * @returns {{ success: boolean, message?: string, expiresAt?: number }}
    */
   static acquireLock(courtId, date, startTime, lockedBy, ttlSeconds = 300) {
+    const effectiveTtlSeconds = Math.min(300, Math.max(1, Number(ttlSeconds) || 300));
     this.cleanExpiredLocks();
     const key = this.makeKey(courtId, date, startTime);
     const now = Date.now();
@@ -27,7 +28,7 @@ export class LockService {
     if (existing && existing.expiresAt > now) {
       if (existing.lockedBy === lockedBy) {
         // Extend existing lock
-        const newExpires = now + (ttlSeconds * 1000);
+        const newExpires = now + (effectiveTtlSeconds * 1000);
         store.locks.set(key, { lockedBy, expiresAt: newExpires, courtId, date, startTime });
         return { success: true, expiresAt: newExpires };
       }
@@ -58,7 +59,7 @@ export class LockService {
       };
     }
 
-    const expiresAt = now + (ttlSeconds * 1000);
+    const expiresAt = now + (effectiveTtlSeconds * 1000);
     store.locks.set(key, { lockedBy, expiresAt, courtId, date, startTime });
 
     // Persist lock to Supabase so website and Admin panel immediately show "Held"
@@ -120,8 +121,9 @@ export class LockService {
 
   static cleanExpiredLocks() {
     const now = Date.now();
+    const maxValidExpiresAt = now + 315 * 1000;
     for (const [key, val] of store.locks.entries()) {
-      if (val.expiresAt <= now) {
+      if (!Number.isFinite(val.expiresAt) || val.expiresAt <= now || val.expiresAt > maxValidExpiresAt) {
         store.locks.delete(key);
       }
     }

@@ -81,7 +81,7 @@ export const HoldSummaryBar: React.FC<HoldSummaryBarProps> = ({
   // 4. Live Countdown Timer (if expiresAt provided or active hold)
   const [secondsRemaining, setSecondsRemaining] = useState<number | null>(() => {
     if (!expiresAt) return null;
-    return Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
+    return Math.min(300, Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000)));
   });
 
   useEffect(() => {
@@ -90,7 +90,7 @@ export const HoldSummaryBar: React.FC<HoldSummaryBarProps> = ({
       return;
     }
     const updateCountdown = () => {
-      const remaining = Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
+      const remaining = Math.min(300, Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000)));
       setSecondsRemaining(remaining);
     };
     updateCountdown();

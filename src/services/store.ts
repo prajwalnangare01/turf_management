@@ -24,10 +24,34 @@ const DEFAULT_VENUE: Venue = {
 };
 
 const DEFAULT_SPORTS: Sport[] = [
-  { id: 'sp-football', name: 'Football', icon: '⚽' },
-  { id: 'sp-cricket', name: 'Cricket', icon: '🏏' },
-  { id: 'sp-badminton', name: 'Badminton', icon: '🏸' },
-  { id: 'sp-pickleball', name: 'Pickleball', icon: '🏓' }
+  {
+    id: 'sp-football',
+    name: 'Football',
+    icon: '⚽',
+    image_url: 'https://images.unsplash.com/photo-1529900748604-07564a03e7a6?auto=format&fit=crop&w=600&q=80',
+    subtitle: '5-a-side & 11-a-side'
+  },
+  {
+    id: 'sp-cricket',
+    name: 'Cricket',
+    icon: '🏏',
+    image_url: 'https://images.unsplash.com/photo-1531415074968-036ba1b575da?auto=format&fit=crop&w=600&q=80',
+    subtitle: 'Indoor Net & Turf Pitch'
+  },
+  {
+    id: 'sp-badminton',
+    name: 'Badminton',
+    icon: '🏸',
+    image_url: 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&w=600&q=80',
+    subtitle: 'BWF Wooden Synthetic'
+  },
+  {
+    id: 'sp-pickleball',
+    name: 'Pickleball',
+    icon: '🏓',
+    image_url: 'https://images.unsplash.com/photo-1622279457486-62dcc4a431d6?auto=format&fit=crop&w=600&q=80',
+    subtitle: 'Outdoor Pro Cushioned'
+  }
 ];
 
 const DEFAULT_COURTS: Court[] = [
@@ -347,7 +371,15 @@ class AppStore {
         if (!this.venue.google_maps_link) {
           this.venue.google_maps_link = this.venue.location_url;
         }
-        this.sports = parsed.sports || DEFAULT_SPORTS;
+        const rawSports: Sport[] = Array.isArray(parsed.sports) && parsed.sports.length > 0 ? parsed.sports : DEFAULT_SPORTS;
+        this.sports = rawSports.map(s => {
+          const def = DEFAULT_SPORTS.find(ds => ds.id === s.id || ds.name.toLowerCase() === s.name.toLowerCase());
+          return {
+            ...s,
+            image_url: s.image_url || def?.image_url,
+            subtitle: s.subtitle || def?.subtitle
+          };
+        });
         const rawCourts: Court[] = parsed.courts || DEFAULT_COURTS;
         this.courts = rawCourts.map(c => {
           if (!c.original_price_per_hour) {

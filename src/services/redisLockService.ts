@@ -2,7 +2,10 @@ import { store } from './store';
 import { SlotLock } from '../types/schema';
 import { SupabaseSyncService } from './supabaseSyncService';
 
-const LOCK_TTL_SECONDS = 300; // 5 minutes hold time
+export const HOLD_TTL_SECONDS = 300; // 5 minutes hold time
+export const HOLD_TTL_MS = HOLD_TTL_SECONDS * 1000;
+const LOCK_TTL_SECONDS = HOLD_TTL_SECONDS;
+const MAX_CLOCK_SKEW_TOLERANCE_MS = 15 * 1000;
 
 export class RedisLockService {
   /**
@@ -16,10 +19,28 @@ export class RedisLockService {
   // Purge expired locks from simulated Redis store
   private static cleanExpiredLocks(): SlotLock[] {
     const now = Date.now();
+    const maxValidExpiresAt = now + HOLD_TTL_MS + MAX_CLOCK_SKEW_TOLERANCE_MS;
     const locks = store.getSlotLocks();
-    const validLocks = locks.filter(l => l.expires_at > now);
-    if (validLocks.length !== locks.length) {
+    let changed = false;
+    const validLocks: SlotLock[] = [];
+    const invalidLocks: SlotLock[] = [];
+
+    for (const l of locks) {
+      const exp = Number(l.expires_at);
+      // Drop expired locks and corrupt/clock-skewed far-future locks so they cannot reset forever
+      if (!Number.isFinite(exp) || exp <= now || exp > maxValidExpiresAt) {
+        changed = true;
+        invalidLocks.push(l);
+        continue;
+      }
+      validLocks.push(l);
+    }
+
+    if (changed) {
       store.setSlotLocks(validLocks);
+      for (const l of invalidLocks) {
+        SupabaseSyncService.deleteSlotLockFromSupabase(l.court_id, l.date, l.start_time).catch(() => {});
+      }
     }
     return validLocks;
   }
@@ -140,6 +161,8 @@ export class RedisLockService {
         }
       }
     }
+    // Also purge any remote Supabase locks for this session even if not yet hydrated locally
+    SupabaseSyncService.deleteSlotLocksBySessionFromSupabase(sessionId).catch(() => {});
   }
 
   /**
@@ -193,7 +216,10 @@ export class RedisLockService {
   public static checkAdminConflict(courtId: string, date: string, startTime: string): { hasLock: boolean; lock?: SlotLock; remainingSeconds: number } {
     const lock = this.getLock(courtId, date, startTime);
     if (lock) {
-      const remainingSeconds = Math.max(0, Math.ceil((lock.expires_at - Date.now()) / 1000));
+      const remainingSeconds = Math.min(
+        HOLD_TTL_SECONDS,
+        Math.max(0, Math.ceil((lock.expires_at - Date.now()) / 1000))
+      );
       return {
         hasLock: true,
         lock,
@@ -209,8 +235,17 @@ export class RedisLockService {
       b.status === 'pending_payment'
     );
     if (pending) {
-      const expiresAt = new Date(pending.created_at).getTime() + 300 * 1000;
-      const remainingSeconds = Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
+      const now = Date.now();
+      const createdMs = new Date(pending.created_at).getTime();
+      if (!Number.isFinite(createdMs) || now - createdMs >= HOLD_TTL_MS || createdMs - now > 60 * 1000) {
+        return { hasLock: false, remainingSeconds: 0 };
+      }
+      const rawExpiresAt = createdMs + HOLD_TTL_MS;
+      const expiresAt = Math.min(rawExpiresAt, now + HOLD_TTL_MS);
+      const remainingSeconds = Math.min(
+        HOLD_TTL_SECONDS,
+        Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000))
+      );
       if (remainingSeconds > 0) {
         return {
           hasLock: true,
