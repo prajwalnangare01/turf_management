@@ -13,6 +13,8 @@ import { AuditLogViewer } from './AuditLogViewer';
 import { SettingsPanel } from './SettingsPanel';
 import { WhatsAppManagerTab } from './WhatsAppManagerTab';
 import { OfflineBookingModal } from './OfflineBookingModal';
+import { ConfirmModal } from '../common/ConfirmModal';
+import { getVenueDateString } from '../../utils/venueTime';
 import { 
   Calendar, ListFilter, Settings, Users, BarChart3, History, 
   Sliders, PlusCircle, UserCheck, ArrowLeft, Lock, ShieldCheck, Zap, LogOut, ShieldAlert,
@@ -45,6 +47,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onSwitchToCustomer }) => {
   };
 
   const [activeTab, setActiveTab] = useState<'calendar' | 'bookings' | 'courts' | 'crm' | 'reports' | 'audit' | 'settings' | 'whatsapp'>(getInitialTab);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const handleTabChange = (tab: 'calendar' | 'bookings' | 'courts' | 'crm' | 'reports' | 'audit' | 'settings' | 'whatsapp') => {
     setActiveTab(tab);
@@ -102,7 +105,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onSwitchToCustomer }) => {
 
   // Compute metrics
   const bookings = store.getBookings();
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getVenueDateString(0);
   const todayBookings = bookings.filter(b => b.booking_date === todayStr && b.status !== 'cancelled');
   const todayRevenue = todayBookings.reduce((sum, b) => sum + b.total_amount, 0);
 
@@ -161,7 +164,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onSwitchToCustomer }) => {
 
             {/* Mobile Logout Button (Visible top-right on mobile) */}
             <button
-              onClick={handleLogout}
+              onClick={() => setShowLogoutConfirm(true)}
               title="Logout from Admin Portal"
               className="md:hidden btn-secondary text-[11px] px-2.5 py-1.5 text-error hover:bg-error/10 border-error/20 flex items-center gap-1 font-headline font-bold shrink-0"
             >
@@ -210,7 +213,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onSwitchToCustomer }) => {
 
             {/* Desktop Logout Button */}
             <button
-              onClick={handleLogout}
+              onClick={() => setShowLogoutConfirm(true)}
               title="Logout from Admin Portal"
               className="hidden md:flex btn-secondary text-xs px-3 py-2 text-error hover:bg-error/10 border-error/20 items-center gap-1.5 font-headline font-bold shrink-0"
             >
@@ -380,6 +383,21 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onSwitchToCustomer }) => {
           onClose={() => setPendingSwitchAdmin(null)}
         />
       )}
+
+      {/* Logout Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showLogoutConfirm}
+        title="Confirm Admin Sign Out"
+        message="Are you sure you want to log out from the Admin Management Portal?"
+        confirmText="Yes, Log Out"
+        cancelText="Cancel"
+        variant="danger"
+        onConfirm={() => {
+          setShowLogoutConfirm(false);
+          handleLogout();
+        }}
+        onCancel={() => setShowLogoutConfirm(false)}
+      />
     </div>
   );
 };

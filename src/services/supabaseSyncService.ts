@@ -105,7 +105,11 @@ export class SupabaseSyncService {
           if (raw) deletedCourtIds = JSON.parse(raw);
         } catch (e) {}
 
-        const activeRemoteCourts = courts.filter((c: any) => !deletedCourtIds.includes(c.id) && c.status !== 'inactive');
+        const activeRemoteCourts = courts.filter((c: any) => 
+          !deletedCourtIds.includes(c.id) && 
+          c.status !== 'inactive' &&
+          !['test', 'test2', 'test3'].includes(c.name?.toLowerCase()?.trim())
+        );
         const existingCourts = store.getCourts();
         const enrichedCourts: Court[] = activeRemoteCourts.map((c: any) => {
           const matchingSports = (courtSports || [])
@@ -157,15 +161,7 @@ export class SupabaseSyncService {
           };
         });
 
-        // Also merge any local courts that haven't been committed to Supabase yet (excluding blacklisted deleted courts)
-        for (const locCourt of existingCourts) {
-          if (!deletedCourtIds.includes(locCourt.id) && locCourt.status !== 'inactive' && !enrichedCourts.some(ec => ec.id === locCourt.id)) {
-            enrichedCourts.push(locCourt);
-            this.syncCourtToSupabase(locCourt).catch(() => {});
-          }
-        }
-
-        store.setCourts(enrichedCourts);
+        store.setCourts(enrichedCourts, false);
       }
 
       // 4. Fetch Customers
@@ -547,6 +543,12 @@ export class SupabaseSyncService {
         ? `${booking.end_time}:00` 
         : booking.end_time;
 
+      const otpCode = booking.gate_pass_otp || getBookingGatePassOtp(booking);
+      let notes = booking.notes || '';
+      if (otpCode && otpCode !== '----' && !notes.includes('OTP:')) {
+        notes = notes ? `${notes} | [OTP: ${otpCode}]` : `[OTP: ${otpCode}]`;
+      }
+
       const payload = {
         id: booking.id,
         booking_ref: booking.booking_ref,
@@ -562,7 +564,7 @@ export class SupabaseSyncService {
         discount_amount: booking.discount_amount || 0,
         coupon_id: booking.coupon_id || null,
         created_by_admin_id: booking.created_by_admin_id || null,
-        notes: booking.notes || null,
+        notes: notes || null,
         refund_amount: booking.refund_amount || 0,
         refund_reason: booking.refund_reason || null,
         refunded_at: booking.refunded_at || null,
@@ -844,6 +846,22 @@ export class SupabaseSyncService {
    * Persist or update pitch (court) configuration in Supabase
    */
   public static async syncCourtToSupabase(court: Court): Promise<boolean> {
+    if (!court || !court.id || court.status === 'inactive') return false;
+    const lowerName = court.name?.toLowerCase()?.trim() || '';
+    if (['test', 'test2', 'test3'].includes(lowerName) || lowerName.startsWith('test')) {
+      console.log(`🛡️ [Supabase Sync] Blocked sync of test court: ${court.name} (${court.id})`);
+      return false;
+    }
+
+    try {
+      const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('TURFFLOW_DELETED_COURTS') : null;
+      const deletedList: string[] = raw ? JSON.parse(raw) : [];
+      if (deletedList.includes(court.id)) {
+        console.log(`🛡️ [Supabase Sync] Blocked sync of deleted court: ${court.name} (${court.id})`);
+        return false;
+      }
+    } catch (e) {}
+
     const supabase = getSupabase();
     if (!supabase) return false;
 
@@ -955,6 +973,12 @@ export class SupabaseSyncService {
         return false;
       }
       console.log(`✅ [Supabase Sync] Court ${courtId} deleted from Supabase.`);
+
+      // 4. Notify WhatsApp server API
+      if (typeof window !== 'undefined' && typeof fetch === 'function') {
+        fetch(`/api/courts/${courtId}`, { method: 'DELETE' }).catch(() => {});
+      }
+
       return true;
     } catch (err: any) {
       console.error('❌ [Supabase Sync] Exception deleting court from Supabase:', err.message);

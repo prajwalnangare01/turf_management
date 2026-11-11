@@ -6,6 +6,7 @@ import { Customer, Booking, BookingStatus } from '../../types/schema';
 import { formatTimeRange12h, formatTime12hPlain, formatTimeRange12hPlain, formatDateDDMMYYYY, formatPhoneNumber, getBookingGatePassOtp, getBookingGroupRef } from '../../utils/formatters';
 import { TimeOfDayIcon, getTimeOfDaySvg } from '../common/TimeOfDayIcon';
 import { CancelBookingConfirmModal } from './CancelBookingConfirmModal';
+import { ConfirmModal } from '../common/ConfirmModal';
 import { 
   User, Phone, Mail, Calendar, ArrowLeft, ShieldCheck, Ticket, 
   XCircle, CheckCircle2, Clock, Award, LogOut, Edit2, Save, X, KeyRound, RotateCcw,
@@ -33,6 +34,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'all' | 'upcoming' | 'completed' | 'cancelled'>('all');
   const [isEditing, setIsEditing] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   // Edit form state
   const [nameInput, setNameInput] = useState(currentCustomer.name);
@@ -897,16 +899,18 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
   return (
     <div className="bg-background text-on-surface min-h-screen pb-20">
       {/* Top Navbar */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-outline-variant/40 shadow-xs px-4 py-3">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
+      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-outline-variant/40 shadow-xs px-3 sm:px-4 py-2.5 sm:py-3">
+        <div className="max-w-6xl mx-auto flex items-center justify-between gap-2">
           <button
             onClick={onBackToBooking}
-            className="btn-secondary text-xs px-3.5 py-2 flex items-center gap-2 font-bold hover:shadow-xs"
+            className="btn-secondary text-xs px-3 sm:px-3.5 py-1.5 sm:py-2 flex items-center gap-1.5 sm:gap-2 font-bold hover:shadow-xs shrink-0"
           >
-            <ArrowLeft className="w-4 h-4 text-primary" /> Back to Turf Booking
+            <ArrowLeft className="w-4 h-4 text-primary" />
+            <span className="hidden xs:inline">Back to Turf Booking</span>
+            <span className="xs:hidden">Back</span>
           </button>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {onNavigateToPolicies && (
               <button
                 onClick={() => onNavigateToPolicies('cancellation')}
@@ -914,58 +918,65 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
                 title="Cancellation Policy & Owner Helpline"
               >
                 <RotateCcw className="w-3.5 h-3.5 text-red-600" />
-                <span className="hidden sm:inline">Cancellation Policy & Helpline</span>
+                <span className="hidden md:inline">Cancellation & Helpline</span>
+                <span className="md:hidden">Policy</span>
               </button>
             )}
-            <span className="text-xs font-headline font-bold text-primary flex items-center gap-1.5 bg-surface-container-low px-3 py-1.5 rounded-full border border-outline-variant/40">
-              <ShieldCheck className="w-4 h-4 text-emerald-600" /> Account Dashboard
+            <span className="hidden sm:inline-flex text-xs font-headline font-bold text-primary items-center gap-1.5 bg-surface-container-low px-3 py-1.5 rounded-full border border-outline-variant/40">
+              <ShieldCheck className="w-4 h-4 text-emerald-600" /> Dashboard
             </span>
             <button
-              onClick={onLogout}
-              className="btn-secondary text-xs px-3 py-1.5 text-error hover:bg-error/10 border-error/20 flex items-center gap-1 font-bold cursor-pointer"
+              onClick={() => setShowLogoutConfirm(true)}
+              className="btn-secondary text-xs px-2.5 sm:px-3 py-1.5 text-error hover:bg-error/10 border-error/20 flex items-center gap-1 font-bold cursor-pointer"
+              title="Sign Out"
             >
-              <LogOut className="w-3.5 h-3.5" /> Sign Out
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden xs:inline">Sign Out</span>
             </button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 pt-6 space-y-6">
+      <main className="max-w-6xl mx-auto px-3 sm:px-4 pt-4 sm:pt-6 space-y-4 sm:space-y-6">
         
         {/* Customer Profile Card Header */}
-        <section className="bg-white rounded-3xl p-6 md:p-8 border border-outline-variant/50 shadow-sm space-y-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-full bg-primary text-white flex items-center justify-center font-headline font-extrabold text-2xl shadow-md ring-4 ring-primary/10">
+        <section className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 border border-outline-variant/50 shadow-sm space-y-4 sm:space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 sm:gap-6">
+            <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0 flex-1">
+              <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-primary text-white flex items-center justify-center font-headline font-extrabold text-lg sm:text-2xl shadow-md ring-4 ring-primary/10 shrink-0">
                 {currentCustomer.name.charAt(0).toUpperCase()}
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="font-headline font-extrabold text-2xl text-primary">{currentCustomer.name}</h1>
-                  <span className="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-mono font-extrabold px-2.5 py-0.5 rounded-full flex items-center gap-1">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="font-headline font-extrabold text-lg sm:text-2xl text-primary truncate max-w-[200px] sm:max-w-none">
+                    {currentCustomer.name}
+                  </h1>
+                  <span className="bg-amber-100 text-amber-900 border border-amber-300 text-[9.5px] sm:text-[10px] font-mono font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0">
                     <Award className="w-3 h-3 text-amber-600" /> GOLD MEMBER
                   </span>
                 </div>
-                <div className="flex flex-wrap items-center gap-4 text-xs text-on-surface-variant mt-1 font-medium">
-                  <span className="flex items-center gap-1">
+                <div className="flex flex-col xs:flex-row xs:flex-wrap items-start xs:items-center gap-1.5 xs:gap-3 sm:gap-4 text-xs text-on-surface-variant mt-1.5 font-medium">
+                  <span className="flex items-center gap-1 shrink-0">
                     <Phone className="w-3.5 h-3.5 text-primary" /> {currentCustomer.phone.startsWith('+91') ? currentCustomer.phone : `+91 ${currentCustomer.phone}`}
                   </span>
                   {currentCustomer.email ? (
                     <span className="flex items-center gap-1.5 flex-wrap">
-                      <Mail className="w-3.5 h-3.5 text-primary" /> {currentCustomer.email}
+                      <span className="flex items-center gap-1 truncate max-w-[190px] sm:max-w-none">
+                        <Mail className="w-3.5 h-3.5 text-primary shrink-0" /> {currentCustomer.email}
+                      </span>
                       {currentCustomer.email_verified ? (
-                        <span className="bg-emerald-50 text-emerald-800 border border-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                        <span className="bg-emerald-50 text-emerald-800 border border-emerald-300 text-[9.5px] sm:text-[10px] font-bold px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full flex items-center gap-0.5 sm:gap-1 shadow-2xs shrink-0">
                           <ShieldCheck className="w-3 h-3 text-emerald-600" /> Verified
                         </span>
                       ) : (
-                        <span className="bg-amber-50 text-amber-900 border border-amber-200 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <span className="bg-amber-50 text-amber-900 border border-amber-200 text-[9.5px] sm:text-[10px] font-bold px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full flex items-center gap-0.5 sm:gap-1 shrink-0">
                           Unverified
                         </span>
                       )}
                       <button
                         type="button"
                         onClick={openEmailUpdateModal}
-                        className="text-[10.5px] font-bold text-primary hover:underline ml-1 inline-flex items-center gap-1 cursor-pointer bg-primary/10 hover:bg-primary/20 px-2 py-0.5 rounded-lg transition"
+                        className="text-[10.5px] font-bold text-primary hover:underline inline-flex items-center gap-1 cursor-pointer bg-primary/10 hover:bg-primary/20 px-2 py-0.5 rounded-lg transition shrink-0"
                         title="Update your email address with OTP verification"
                       >
                         <Edit2 className="w-2.5 h-2.5" /> Update Email
@@ -977,7 +988,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
                       onClick={openEmailUpdateModal}
                       className="text-[11px] font-bold text-primary hover:underline inline-flex items-center gap-1 cursor-pointer bg-primary/10 hover:bg-primary/20 px-2.5 py-1 rounded-lg transition"
                     >
-                      <Mail className="w-3 h-3" /> + Add & Verify Email Address
+                      <Mail className="w-3 h-3" /> + Add &amp; Verify Email Address
                     </button>
                   )}
                 </div>
@@ -986,7 +997,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
 
             <button
               onClick={() => setIsEditing(!isEditing)}
-              className="btn-secondary text-xs px-4 py-2 font-headline font-bold flex items-center gap-1.5 self-start md:self-auto"
+              className="btn-secondary text-xs py-2 px-3.5 sm:px-4 font-headline font-bold flex items-center justify-center gap-1.5 w-full sm:w-auto shrink-0"
             >
               {isEditing ? <X className="w-4 h-4" /> : <Edit2 className="w-4 h-4 text-primary" />}
               {isEditing ? 'Cancel Edit' : 'Edit Profile'}
@@ -1211,31 +1222,31 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
           )}
 
           {/* Quick Metrics Bar */}
-          <div className="grid grid-cols-2 gap-3 pt-4 border-t border-outline-variant/40">
-            <div className="bg-surface-container-low p-4 rounded-2xl border border-outline-variant/30 space-y-1">
-              <span className="text-[11px] font-headline font-bold text-on-surface-variant uppercase tracking-wider block">
+          <div className="grid grid-cols-2 gap-2.5 sm:gap-3 pt-3 sm:pt-4 border-t border-outline-variant/40">
+            <div className="bg-surface-container-low p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-outline-variant/30 space-y-0.5 sm:space-y-1">
+              <span className="text-[10px] sm:text-[11px] font-headline font-bold text-on-surface-variant uppercase tracking-wider block">
                 Total Bookings
               </span>
-              <p className="text-2xl font-headline font-extrabold text-primary">{bookingsList.length}</p>
+              <p className="text-xl sm:text-2xl font-headline font-extrabold text-primary">{bookingsList.length}</p>
             </div>
-            <div className="bg-surface-container-low p-4 rounded-2xl border border-outline-variant/30 space-y-1">
-              <span className="text-[11px] font-headline font-bold text-on-surface-variant uppercase tracking-wider block">
+            <div className="bg-surface-container-low p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-outline-variant/30 space-y-0.5 sm:space-y-1">
+              <span className="text-[10px] sm:text-[11px] font-headline font-bold text-on-surface-variant uppercase tracking-wider block">
                 Active Reservations
               </span>
-              <p className="text-2xl font-headline font-extrabold text-emerald-700">{upcomingBookings.length}</p>
+              <p className="text-xl sm:text-2xl font-headline font-extrabold text-emerald-700">{upcomingBookings.length}</p>
             </div>
           </div>
         </section>
 
         {/* Tab Navigation for Bookings */}
-        <section className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-outline-variant/40 pb-2 gap-2">
-            <div className="flex gap-2 flex-wrap">
+        <section className="space-y-3 sm:space-y-4">
+          <div className="flex flex-col gap-2 border-b border-outline-variant/40 pb-2">
+            <div className="overflow-x-auto no-scrollbar flex items-center gap-1.5 sm:gap-2 pb-1">
               {[
-                { id: 'all', label: `All Bookings (${bookingsList.length})`, icon: Layers },
-                { id: 'upcoming', label: `Upcoming (${upcomingBookings.length})`, icon: Calendar },
-                { id: 'completed', label: `Past Matches (${completedBookings.length})`, icon: CheckCircle2 },
-                { id: 'cancelled', label: `Cancelled (${cancelledBookings.length})`, icon: XCircle }
+                { id: 'all', label: `All (${bookingsList.length})`, fullLabel: `All Bookings (${bookingsList.length})`, icon: Layers },
+                { id: 'upcoming', label: `Upcoming (${upcomingBookings.length})`, fullLabel: `Upcoming (${upcomingBookings.length})`, icon: Calendar },
+                { id: 'completed', label: `Past (${completedBookings.length})`, fullLabel: `Past Matches (${completedBookings.length})`, icon: CheckCircle2 },
+                { id: 'cancelled', label: `Cancelled (${cancelledBookings.length})`, fullLabel: `Cancelled (${cancelledBookings.length})`, icon: XCircle }
               ].map(tab => {
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.id;
@@ -1243,22 +1254,23 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id as any)}
-                    className={`px-4 py-2.5 rounded-2xl text-xs font-headline font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                    className={`px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl text-xs font-headline font-bold flex items-center gap-1.5 sm:gap-2 transition-all cursor-pointer shrink-0 ${
                       isActive
                         ? 'bg-primary text-white shadow-md'
                         : 'bg-white text-on-surface-variant hover:text-on-surface border border-outline-variant/40'
                     }`}
                   >
-                    <Icon className="w-4 h-4" />
-                    {tab.label}
+                    <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                    <span className="sm:hidden">{tab.label}</span>
+                    <span className="hidden sm:inline">{tab.fullLabel}</span>
                   </button>
                 );
               })}
             </div>
 
             {activeTab !== 'upcoming' && (
-              <div className="flex items-center gap-1.5 text-[11px] text-on-surface-variant font-medium px-1">
-                <Clock className="w-3.5 h-3.5 text-primary" />
+              <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] text-on-surface-variant font-medium px-0.5">
+                <Clock className="w-3.5 h-3.5 text-primary shrink-0" />
                 <span>Showing history for the last 30 days. Full records are safely archived in venue backups.</span>
               </div>
             )}
@@ -1311,15 +1323,15 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
                 return (
                   <div
                     key={b.id}
-                    className="bg-white rounded-3xl p-5 border border-outline-variant/60 shadow-xs space-y-4 hover:border-primary/50 transition"
+                    className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-5 border border-outline-variant/60 shadow-xs space-y-3 sm:space-y-4 hover:border-primary/50 transition"
                   >
                     {/* Header bar of booking card */}
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-mono font-extrabold text-xs text-primary">{b.group_ref || b.booking_ref}</span>
+                    <div className="flex justify-between items-start gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                          <span className="font-mono font-extrabold text-xs text-primary truncate">{b.group_ref || b.booking_ref}</span>
                           <span
-                            className={`badge ${
+                            className={`badge text-[9.5px] sm:text-[10px] px-2 py-0.5 ${
                               b.status === 'confirmed'
                                 ? 'badge-online'
                                 : b.status === 'completed'
@@ -1331,50 +1343,48 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
                                 : 'badge-warning'
                             }`}
                           >
-                            {isRainout ? '🌧️ RAINOUT (OWNER CANCEL)' : b.status.replace('_', ' ').toUpperCase()}
+                            {isRainout ? '🌧️ RAINOUT' : b.status.replace('_', ' ').toUpperCase()}
                           </span>
                         </div>
-                        <h4 className="font-headline font-bold text-base text-on-surface mt-1 flex items-center gap-1.5">
-                          <span>{sport?.icon || '⚽'}</span> {court?.name || 'Turf Court'}
+                        <h4 className="font-headline font-bold text-sm sm:text-base text-on-surface mt-1 flex items-center gap-1.5 truncate">
+                          <span>{sport?.icon || '⚽'}</span> <span className="truncate">{court?.name || 'Turf Court'}</span>
                         </h4>
                       </div>
-                      <div className="text-right">
-                        <p className="font-headline font-extrabold text-lg text-primary">₹{b.total_amount}</p>
+                      <div className="text-right shrink-0">
+                        <p className="font-headline font-extrabold text-base sm:text-lg text-primary">₹{b.total_amount}</p>
                         {b.status === 'refunded' && b.refund_amount !== undefined && (
-                          <span className="block text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 mt-0.5">
+                          <span className="block text-[10px] sm:text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 mt-0.5">
                             Refund: ₹{b.refund_amount}
                           </span>
                         )}
-                        <span className="text-[10px] text-on-surface-variant font-bold uppercase bg-surface-container-low px-2 py-0.5 rounded-full border border-outline-variant/30 mt-0.5 inline-block">
+                        <span className="text-[9.5px] sm:text-[10px] text-on-surface-variant font-bold uppercase bg-surface-container-low px-1.5 sm:px-2 py-0.5 rounded-full border border-outline-variant/30 mt-0.5 inline-block">
                           {b.source.replace('_', ' ')}
                         </span>
                       </div>
                     </div>
 
                     {/* Date & Time Slot Pill */}
-                    <div className="bg-surface-container-low p-3 rounded-2xl border border-outline-variant/30 flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-primary shrink-0" />
-                        <div>
-                          <span className="text-[10px] font-headline font-bold text-on-surface-variant uppercase block">Date</span>
-                          <span className="font-bold text-on-surface">{formatDateDDMMYYYY(b.booking_date)}</span>
+                    <div className="bg-surface-container-low p-2.5 sm:p-3 rounded-xl sm:rounded-2xl border border-outline-variant/30 grid grid-cols-2 gap-2 text-xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary shrink-0" />
+                        <div className="min-w-0">
+                          <span className="text-[9.5px] sm:text-[10px] font-headline font-bold text-on-surface-variant uppercase block">Date</span>
+                          <span className="font-bold text-on-surface text-[11px] sm:text-xs truncate block">{formatDateDDMMYYYY(b.booking_date)}</span>
                         </div>
                       </div>
-                      <div className="h-6 border-r border-outline-variant/40" />
-                      <div className="flex items-center gap-2">
-                        <Clock className="w-4 h-4 text-primary shrink-0" />
-                        <div>
-                          <span className="text-[10px] font-headline font-bold text-on-surface-variant uppercase block">
+                      <div className="flex items-center gap-2 min-w-0 pl-2 border-l border-outline-variant/40">
+                        <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary shrink-0" />
+                        <div className="min-w-0">
+                          <span className="text-[9.5px] sm:text-[10px] font-headline font-bold text-on-surface-variant uppercase block">
                             Slot Session
                           </span>
-                          <div className="font-bold text-on-surface flex items-center gap-1">
+                          <div className="font-bold text-on-surface text-[10.5px] sm:text-xs truncate">
                             <span className="inline-flex items-center gap-1">
-                                <TimeOfDayIcon time24={b.start_time} className="w-3.5 h-3.5" />
-                                <span>{formatTime12hPlain(b.start_time)}</span>
-                                <span>–</span>
-                                <TimeOfDayIcon time24={b.end_time} className="w-3.5 h-3.5" />
-                                <span>{formatTime12hPlain(b.end_time)}</span>
-                              </span>
+                              <TimeOfDayIcon time24={b.start_time} className="w-3.5 h-3.5 shrink-0" />
+                              <span>{formatTime12hPlain(b.start_time)}</span>
+                              <span>–</span>
+                              <span>{formatTime12hPlain(b.end_time)}</span>
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -1468,20 +1478,18 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
                     )}
 
                     {/* Actions Bar */}
-                    <div className="pt-2 border-t border-outline-variant/30 flex flex-wrap items-center justify-between gap-2 text-xs">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setPassModalBooking(b)}
-                          className="btn-secondary text-[11px] px-3.5 py-1.5 font-bold flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <Ticket className="w-3.5 h-3.5 text-primary" /> {b.status === 'cancelled' || b.status === 'refunded' ? 'View Cancellation Receipt' : 'View Entry Pass'}
-                        </button>
-                      </div>
+                    <div className="pt-2 border-t border-outline-variant/30 flex flex-col xs:flex-row items-stretch xs:items-center justify-between gap-2 text-xs">
+                      <button
+                        onClick={() => setPassModalBooking(b)}
+                        className="btn-secondary text-[11px] px-3.5 py-2 font-bold flex items-center justify-center gap-1.5 cursor-pointer w-full xs:w-auto"
+                      >
+                        <Ticket className="w-3.5 h-3.5 text-primary" /> {b.status === 'cancelled' || b.status === 'refunded' ? 'View Cancellation Receipt' : 'View Entry Pass'}
+                      </button>
 
                       {isUpcoming && b.status === 'confirmed' && (
                         <button
                           onClick={() => handleCancelBooking(b)}
-                          className="px-3 py-1.5 rounded-xl bg-error/10 text-error hover:bg-error/20 font-headline font-bold text-[11px] flex items-center gap-1 transition cursor-pointer"
+                          className="px-3.5 py-2 rounded-xl bg-error/10 text-error hover:bg-error/20 font-headline font-bold text-[11px] flex items-center justify-center gap-1 transition cursor-pointer w-full xs:w-auto"
                         >
                           <XCircle className="w-3.5 h-3.5" /> Cancel Reservation
                         </button>
@@ -1545,10 +1553,10 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
 
         return (
           <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4">
-            <div className="bg-white rounded-3xl max-w-md w-full border border-outline-variant/60 shadow-2xl overflow-hidden animate-in zoom-in-95 my-auto">
+            <div className="bg-white rounded-2xl sm:rounded-3xl max-w-md w-full border border-outline-variant/60 shadow-2xl overflow-hidden animate-in zoom-in-95 my-auto max-h-[92vh] flex flex-col">
               
               {/* Header with Title & Close Button */}
-              <div className={`${isViewingActivePass ? 'bg-[#006b30]' : isPassRainout ? 'bg-sky-900' : 'bg-red-800'} text-white px-3.5 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between transition-colors`}>
+              <div className={`${isViewingActivePass ? 'bg-[#006b30]' : isPassRainout ? 'bg-sky-900' : 'bg-red-800'} text-white px-3.5 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between transition-colors shrink-0`}>
                 <div className="flex items-center gap-2">
                   <div className="w-8 h-8 rounded-xl bg-white/15 flex items-center justify-center text-white">
                     {isPassRainout ? <CloudRain className="w-4 h-4 text-white" /> : <Ticket className="w-4 h-4 text-white" />}
@@ -1589,7 +1597,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
               </div>
 
               {/* Modal Body: Clean Structured Ticket Card */}
-              <div className="p-3 sm:p-4 space-y-2.5 text-xs overflow-hidden">
+              <div className="p-3 sm:p-4 space-y-2.5 text-xs overflow-y-auto flex-1">
                 
                 {/* 4-Digit Gate Check-in OTP Box */}
                 {isViewingActivePass ? (
@@ -1599,7 +1607,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
                       <span>4-Digit Common Gate Pass</span>
                       <Ticket className="w-3 h-3 text-[#b45309]" />
                     </span>
-                    <div className="text-2xl sm:text-3xl font-mono font-black tracking-[6px] text-[#b45309] my-0.5">
+                    <div className="text-2xl sm:text-3xl font-mono font-black tracking-[4px] sm:tracking-[6px] text-[#b45309] my-0.5">
                       {passOtpCode}
                     </div>
                     <p className="text-[10px] text-[#92400e] font-medium leading-tight">
@@ -1804,8 +1812,8 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
 
       {/* Resend Email OTP Verification Modal for Profile Update */}
       {isVerifyingEmail && (
-        <div className="modal-overlay">
-          <div className="bg-white border border-outline-variant rounded-3xl w-full max-w-sm p-4 sm:p-5 shadow-2xl animate-modalScaleIn text-on-surface space-y-3 overflow-hidden">
+        <div className="modal-overlay p-3">
+          <div className="bg-white border border-outline-variant rounded-2xl sm:rounded-3xl w-full max-w-sm p-4 sm:p-5 shadow-2xl animate-modalScaleIn text-on-surface space-y-3 overflow-y-auto max-h-[92vh]">
             <div className="flex justify-between items-center pb-2 border-b border-outline-variant/40">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold text-sm">
@@ -1980,6 +1988,21 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
           // If on 'all', stay on 'all' so the customer sees their freshly cancelled booking right at the top
           setActiveTab(prev => (prev === 'all' ? 'all' : 'cancelled'));
         }}
+      />
+
+      {/* Logout Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showLogoutConfirm}
+        title="Confirm Sign Out"
+        message="Are you sure you want to sign out of your TurfFlow account?"
+        confirmText="Yes, Sign Out"
+        cancelText="Cancel"
+        variant="danger"
+        onConfirm={() => {
+          setShowLogoutConfirm(false);
+          onLogout();
+        }}
+        onCancel={() => setShowLogoutConfirm(false)}
       />
 
     </div>

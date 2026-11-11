@@ -106,6 +106,7 @@ export const getBookingGatePassOtp = (booking?: {
   group_ref?: string | null;
   booking_ref?: string | null;
   id?: string | null;
+  notes?: string | null;
 } | null): string => {
   if (!booking) return '----';
 
@@ -114,27 +115,30 @@ export const getBookingGatePassOtp = (booking?: {
     return String(booking.gate_pass_otp).trim();
   }
 
-  // 2. Derive from group_ref or base booking_ref (strip sibling suffix like -2, -3 if present)
+  // 2. Check if OTP is tagged in notes (e.g. "[OTP: 7341]" or "OTP: 7341")
+  if (booking.notes) {
+    const notesMatch = String(booking.notes).match(/\bOTP[:\s-]+([0-9]{4})\b/i);
+    if (notesMatch) {
+      return notesMatch[1];
+    }
+  }
+
+  // 3. Derive directly from group_ref or base booking_ref trailing 4 digits
   const rawRef = (booking.group_ref || booking.booking_ref || booking.id || '').toString().trim();
-  if (!rawRef) return '----';
-
-  // If reference has a sibling suffix after a 4-digit code (e.g. "TRF-20261110-2221-2"), strip the suffix
-  const siblingMatch = rawRef.match(/^(.*-\d{4})-\d+$/);
-  const baseRef = siblingMatch ? siblingMatch[1] : rawRef;
-
-  // Extract trailing 4 numeric digits of baseRef
-  const trailingDigitsMatch = baseRef.match(/\d{4}$/);
-  if (trailingDigitsMatch) {
-    return trailingDigitsMatch[0];
+  if (rawRef) {
+    const siblingMatch = rawRef.match(/^(.*-\d{4})-\d+$/);
+    const baseRef = siblingMatch ? siblingMatch[1] : rawRef;
+    const trailingDigitsMatch = baseRef.match(/\d{4}$/);
+    if (trailingDigitsMatch) {
+      return trailingDigitsMatch[0];
+    }
+    const allDigits = baseRef.replace(/\D/g, '');
+    if (allDigits.length >= 4) {
+      return allDigits.slice(-4);
+    }
   }
 
-  // Fallback: extract all digits and grab the last 4
-  const allDigits = baseRef.replace(/\D/g, '');
-  if (allDigits.length >= 4) {
-    return allDigits.slice(-4);
-  }
-
-  return baseRef.slice(-4) || '----';
+  return rawRef.slice(-4) || '----';
 };
 
 /**

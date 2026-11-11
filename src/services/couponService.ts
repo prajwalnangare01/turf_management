@@ -1,6 +1,7 @@
 import { store } from './store';
 import { Coupon } from '../types/schema';
 import { AuditLogger } from './auditLogger';
+import { getVenueDateString } from '../utils/venueTime';
 
 export interface CouponValidationResult {
   valid: boolean;
@@ -35,7 +36,7 @@ export class CouponService {
     }
 
     // Expiry check
-    const today = new Date().toISOString().split('T')[0];
+    const today = getVenueDateString(0);
     if (coupon.valid_to && coupon.valid_to < today) {
       return { valid: false, discountAmount: 0, message: `Coupon '${cleanCode}' expired on ${coupon.valid_to}.` };
     }

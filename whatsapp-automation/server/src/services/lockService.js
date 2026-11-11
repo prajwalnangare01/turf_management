@@ -34,7 +34,7 @@ export class LockService {
       }
       return {
         success: false,
-        message: `Slot is temporarily held by another customer until ${new Date(existing.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`
+        message: `Slot is temporarily held by another customer until ${new Date(existing.expiresAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}.`
       };
     }
 
@@ -55,7 +55,7 @@ export class LockService {
       }
       return {
         success: false,
-        message: `Slot is temporarily held for checkout until ${new Date(new Date(activeBooking.created_at).getTime() + 300000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`
+        message: `Slot is temporarily held for checkout until ${new Date(new Date(activeBooking.created_at).getTime() + 300000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}.`
       };
     }
 

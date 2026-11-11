@@ -7,6 +7,7 @@ import { AuditLogger } from '../../services/auditLogger';
 import { AdminUser, Court, Booking } from '../../types/schema';
 import { CloudRain, AlertTriangle, ShieldCheck, CheckCircle2, Users, X, Send, Sun, Moon, AlertCircle } from 'lucide-react';
 import { formatTime12hPlain, formatDateDDMMYYYY } from '../../utils/formatters';
+import { getVenueDateString } from '../../utils/venueTime';
 
 interface EmergencyWeatherModalProps {
   isOpen: boolean;
@@ -24,7 +25,7 @@ export const EmergencyWeatherModal: React.FC<EmergencyWeatherModalProps> = ({
   onSuccess
 }) => {
   const courts = store.getCourts();
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getVenueDateString(0);
 
   const [dateStr, setDateStr] = useState(initialDate || todayStr);
   const [selectedCourtId, setSelectedCourtId] = useState<string>('all');

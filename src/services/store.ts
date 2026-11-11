@@ -3,6 +3,7 @@ import {
   Payment, SlotLock, BlockedSlot, CancellationPolicy, CancellationSettings, Coupon, 
   NotificationLog, AuditLog, DataArchiveSettings 
 } from '../types/schema';
+import { getVenueDateString } from '../utils/venueTime';
 
 // Initial Mock Seed Data
 const DEFAULT_VENUE: Venue = {
@@ -172,7 +173,7 @@ const DEFAULT_ADMIN_USERS: AdminUser[] = [
 
 const DEFAULT_BOOKINGS: Booking[] = [];
 
-const TODAY = new Date().toISOString().split('T')[0];
+const TODAY = getVenueDateString(0);
 
 const DEFAULT_BLOCKED_SLOTS: BlockedSlot[] = [
   {
@@ -389,10 +390,19 @@ class AppStore {
         try {
           const raw = localStorage.getItem('TURFFLOW_DELETED_COURTS');
           if (raw) deletedCourtIds = JSON.parse(raw);
+          const testCourtIds = (parsed.courts || [])
+            .filter((c: Court) => ['test', 'test2', 'test3'].includes(c.name?.toLowerCase()?.trim()))
+            .map((c: Court) => c.id);
+          if (testCourtIds.length > 0) {
+            deletedCourtIds = Array.from(new Set([...deletedCourtIds, ...testCourtIds]));
+            localStorage.setItem('TURFFLOW_DELETED_COURTS', JSON.stringify(deletedCourtIds));
+          }
         } catch (e) {}
 
         const rawCourts: Court[] = (parsed.courts || DEFAULT_COURTS).filter(
-          (c: Court) => !deletedCourtIds.includes(c.id) && c.status !== 'inactive'
+          (c: Court) => !deletedCourtIds.includes(c.id) && 
+                        c.status !== 'inactive' &&
+                        !['test', 'test2', 'test3'].includes(c.name?.toLowerCase()?.trim())
         );
         this.courts = rawCourts.map(c => {
           if (!c.original_price_per_hour) {
@@ -502,7 +512,23 @@ class AppStore {
   }
   public setVenue(venue: Venue) { this.venue = venue; this.saveToStorage(); }
   public setSports(sports: Sport[]) { this.sports = sports; this.saveToStorage(); }
-  public setCourts(courts: Court[]) { this.courts = courts; this.saveToStorage(); }
+  private lastSyncedCourtsHash = '';
+
+  public setCourts(courts: Court[], syncServer = true) { 
+    this.courts = courts; 
+    this.saveToStorage(); 
+    if (syncServer && typeof window !== 'undefined' && typeof fetch === 'function') {
+      const courtsHash = courts.map(c => `${c.id}:${c.status}:${c.name}`).join('|');
+      if (courtsHash && courtsHash !== this.lastSyncedCourtsHash) {
+        this.lastSyncedCourtsHash = courtsHash;
+        fetch('/api/courts/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ courts })
+        }).catch(() => {});
+      }
+    }
+  }
   public setPricingRules(rules: PricingRule[]) { this.pricingRules = rules; this.saveToStorage(); }
   public setCustomers(customers: Customer[]) { this.customers = customers; this.saveToStorage(); }
   public addCustomer(customer: Customer) { 

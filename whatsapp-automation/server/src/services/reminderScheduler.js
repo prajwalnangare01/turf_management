@@ -25,6 +25,7 @@ export class ReminderScheduler {
     // 1. Auto-complete confirmed bookings whose slot has elapsed
     for (const booking of bookings) {
       if (booking.status !== 'confirmed') continue;
+      if (!booking.booking_date || !booking.end_time) continue;
       const [bY, bM, bD] = (booking.booking_date || '').split('-').map(Number);
       const [bH, bMin] = (booking.end_time || '00:00').split(':').map(Number);
       if (!bY || !bM || !bD || isNaN(bH) || isNaN(bMin)) continue;
@@ -50,8 +51,9 @@ export class ReminderScheduler {
     // 2. Dispatch 1-Hour matchday kickoff reminders
     for (const booking of bookings) {
       if (booking.status !== 'confirmed') continue;
-      const [bY, bM, bD] = booking.booking_date.split('-').map(Number);
-      const [bH, bMin] = booking.start_time.split(':').map(Number);
+      if (!booking.booking_date || !booking.start_time) continue;
+      const [bY, bM, bD] = (booking.booking_date || '').split('-').map(Number);
+      const [bH, bMin] = (booking.start_time || '00:00').split(':').map(Number);
       const bookingStartTime = new Date(bY, bM - 1, bD, bH, bMin, 0);
       const diffMins = Math.round((bookingStartTime.getTime() - now.getTime()) / (60 * 1000));
 

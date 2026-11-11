@@ -8,6 +8,7 @@ import { ConfirmModal } from '../common/ConfirmModal';
 import { PitchGridSkeleton } from '../common/SkeletonLoaders';
 import { Settings, ShieldAlert, Trash2, PlusCircle, Edit3, X, Check, Calendar, Zap, Clock, AlertTriangle, Tag, Sparkles, Percent, RotateCcw, Image as ImageIcon } from 'lucide-react';
 import { formatTime12hPlain, formatDateDDMMYYYY } from '../../utils/formatters';
+import { getVenueDateString, getVenueNow } from '../../utils/venueTime';
 import { CustomSportCreator } from './CustomSportCreator';
 import { SportsImageManagerModal } from './SportsImageManagerModal';
 
@@ -136,9 +137,9 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
   // Block slot form state (Start Date & Time + End Date & Time)
   const [showBlockModal, setShowBlockModal] = useState(false);
   const [blockCourtId, setBlockCourtId] = useState(courts[0]?.id || '');
-  const [blockStartDate, setBlockStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [blockStartDate, setBlockStartDate] = useState(() => getVenueDateString(0));
   const [blockStartTime, setBlockStartTime] = useState('06:00');
-  const [blockEndDate, setBlockEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [blockEndDate, setBlockEndDate] = useState(() => getVenueDateString(0));
   const [blockEndTime, setBlockEndTime] = useState('23:00');
   const [blockReason, setBlockReason] = useState<'maintenance' | 'private_event' | 'owner_block'>('maintenance');
 
@@ -156,20 +157,17 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
   });
   const [isApplyingOffer, setIsApplyingOffer] = useState(false);
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getVenueDateString(0);
 
   const getUpcomingSundayDate = () => {
-    const d = new Date();
+    const d = getVenueNow();
     const day = d.getDay();
     const diff = (7 - day) % 7;
-    d.setDate(d.getDate() + (diff === 0 ? 7 : diff));
-    return d.toISOString().split('T')[0];
+    return getVenueDateString(diff === 0 ? 7 : diff);
   };
 
   const getFutureDateString = (daysAhead: number) => {
-    const d = new Date();
-    d.setDate(d.getDate() + daysAhead);
-    return d.toISOString().split('T')[0];
+    return getVenueDateString(daysAhead);
   };
 
   // Helper: check if a court currently has any promotional offer active
@@ -639,6 +637,18 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
           await SupabaseSyncService.deleteCourtFromSupabase(courtId);
         } catch (err) {
           console.warn('❌ [CourtPricingManager] Error deleting court from Supabase:', err);
+        }
+
+        // 4. Immediately notify WhatsApp Automation Server so it removes the pitch in real-time
+        try {
+          await fetch(`/api/courts/${courtId}`, { method: 'DELETE' });
+          await fetch('/api/courts/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ courts: updatedCourts })
+          });
+        } catch (err) {
+          console.warn('❌ [CourtPricingManager] Error syncing deleted court with WhatsApp server:', err);
         }
       }
     });

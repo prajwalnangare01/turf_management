@@ -34,7 +34,9 @@ export class SlotEngine {
     const venue = store.getVenue();
 
     const now = new Date();
+    if (!dateStr || typeof dateStr !== 'string') return [];
     const [y, m, d] = dateStr.split('-').map(Number);
+    if (isNaN(y) || isNaN(m) || isNaN(d)) return [];
     const slotDate = new Date(y, m - 1, d);
     const dayOfWeek = slotDate.getDay(); // 0 = Sun, 6 = Sat
 
@@ -142,18 +144,22 @@ export class SlotEngine {
       // Check Confirmed Bookings (permanently booked)
       const confirmedBooking = bookings.find(b => {
         if (b.status !== 'confirmed') return false;
+        if (!b.start_time || !b.end_time) return false;
         const bStart = this.timeToMinutes(b.start_time);
-        const bEnd = this.timeToMinutes(b.end_time);
+        let bEnd = this.timeToMinutes(b.end_time);
+        if (bEnd <= bStart) bEnd += 1440;
         return cursor < bEnd && (cursor + stepMins) > bStart;
       });
 
       // Check Active 5-minute Pending Payment Holds (temporary hold)
       const pendingHold = bookings.find(b => {
         if (b.status !== 'pending_payment') return false;
+        if (!b.start_time || !b.end_time) return false;
         const ageMs = Date.now() - new Date(b.created_at).getTime();
         if (ageMs >= 300 * 1000) return false; // 5-minute hold expired!
         const bStart = this.timeToMinutes(b.start_time);
-        const bEnd = this.timeToMinutes(b.end_time);
+        let bEnd = this.timeToMinutes(b.end_time);
+        if (bEnd <= bStart) bEnd += 1440;
         return cursor < bEnd && (cursor + stepMins) > bStart;
       });
 
@@ -217,10 +223,13 @@ export class SlotEngine {
     const result = [];
     for (const court of courts) {
       const slots = this.computeSlotsForCourt(court, dateStr, currentSessionId);
+      const courtSports = sports.filter(s => court.sport_ids && court.sport_ids.includes(s.id));
       result.push({
         court_id: court.id,
         court_name: court.name,
         sport_ids: court.sport_ids,
+        sports: courtSports,
+        sport_name: courtSports.map(s => `${s.icon ? s.icon + ' ' : ''}${s.name}`).join(', '),
         date: dateStr,
         slots: slots.filter(s => s.status === 'available'),
         all_slots: slots

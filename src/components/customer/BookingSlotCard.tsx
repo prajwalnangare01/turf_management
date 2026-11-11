@@ -212,9 +212,14 @@ export const BookingSlotCard: React.FC<BookingSlotCardProps> = ({
             <span>In Checkout</span>
           </span>
         )}
-        {(isBooked || slot.status === 'past') && (
+        {isBooked && (
           <span className="text-xs text-gray-400 font-medium shrink-0 leading-none">
             Booked
+          </span>
+        )}
+        {slot.status === 'past' && !isBooked && (
+          <span className="text-xs text-gray-400 font-medium shrink-0 leading-none">
+            Past
           </span>
         )}
         {isBlocked && (

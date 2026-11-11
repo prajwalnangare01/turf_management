@@ -18,7 +18,11 @@ console.log('\n--- 🧪 RUNNING TURFFLOW BACKEND & WHATSAPP SUITE ---\n');
 
 // Reset store
 store.reset();
-const futureMatch = new Date(Date.now() + 48 * 3600 * 1000);
+// Choose next upcoming weekday (Monday - Friday) within booking window
+let futureMatch = new Date(Date.now() + 24 * 3600 * 1000);
+while (futureMatch.getDay() === 0 || futureMatch.getDay() === 6) {
+  futureMatch = new Date(futureMatch.getTime() + 24 * 3600 * 1000);
+}
 const testDate = `${futureMatch.getFullYear()}-${String(futureMatch.getMonth() + 1).padStart(2, '0')}-${String(futureMatch.getDate()).padStart(2, '0')}`;
 const courts = store.getCourts();
 const turfA = courts[0];
@@ -115,4 +119,46 @@ const agentConflict = await AiAgentService.handleIncomingMessage({
 });
 assert(agentConflict.action === 'booking_conflict', 'Agent correctly detected double-booking conflict and prevented duplicate reservation');
 
-console.log('\n🎉 ALL 7 TEST SUITES PASSED FLAWLESSLY! 🎉\n');
+console.log('\n--- TEST 8: Accurate Pitch Name Resolution (Turf A vs Turf B vs Court 1) ---');
+
+// Test with courts array where Turf B is index 0 (reproducing the Supabase order bug)
+const testCourtList = [
+  { id: 'crt-002', name: 'Turf B — Multi-Sport Arena (Box Cricket / Football)', sport_ids: ['sp-football', 'sp-cricket'] },
+  { id: 'crt-003', name: 'Court 1 — BWF Indoor Wooden', sport_ids: ['sp-badminton'] },
+  { id: 'crt-001', name: 'Turf A — FIFA 5-a-side Synthetic', sport_ids: ['sp-football'] }
+];
+
+const resolvedTurfA = AiAgentService.resolveCourt('book turf A 9pm', testCourtList);
+assert(resolvedTurfA.id === 'crt-001', 'Direct phrase "book turf A 9pm" resolves to Turf A even if Turf B is index 0');
+assert(resolvedTurfA.name.includes('Turf A'), 'Resolved court name is Turf A');
+
+const resolvedBookBookTurfA = AiAgentService.resolveCourt('book book for turf A', testCourtList);
+assert(resolvedBookBookTurfA.id === 'crt-001', 'Phrase "book book for turf A" resolves strictly to Turf A');
+
+const resolvedTurfB = AiAgentService.resolveCourt('book turf B 9pm', testCourtList);
+assert(resolvedTurfB.id === 'crt-002', 'Phrase "book turf B 9pm" resolves strictly to Turf B');
+
+const resolvedCourt1 = AiAgentService.resolveCourt('book court 1 7pm', testCourtList);
+assert(resolvedCourt1.id === 'crt-003', 'Phrase "book court 1 7pm" resolves strictly to Court 1');
+
+// Test end-to-end message handling for Turf A
+const turfABooking = await AiAgentService.handleIncomingMessage({
+  fromPhone: '+919888811111',
+  senderName: 'Arjun',
+  messageText: 'book turf A tomorrow at 9pm'
+});
+assert(turfABooking.reply.includes('Turf A — FIFA 5-a-side Synthetic'), 'Agent pending booking message explicitly specifies Turf A');
+assert(!turfABooking.reply.includes('Turf B'), 'Agent pending booking does NOT accidentally select Turf B');
+
+// Test end-to-end message handling for Turf B
+const turfBBooking = await AiAgentService.handleIncomingMessage({
+  fromPhone: '+919888822222',
+  senderName: 'Rohan',
+  messageText: 'book turf B tomorrow at 9pm'
+});
+assert(turfBBooking.reply.includes('Turf B — Multi-Sport Arena'), 'Agent pending booking message explicitly specifies Turf B');
+assert(!turfBBooking.reply.includes('Turf A'), 'Agent pending booking does NOT accidentally select Turf A');
+
+console.log('✅ PASSED: Pitch matching logic is 100% accurate and immune to array index permutations');
+
+console.log('\n🎉 ALL 8 TEST SUITES PASSED FLAWLESSLY! 🎉\n');

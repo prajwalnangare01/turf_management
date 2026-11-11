@@ -1,5 +1,6 @@
 // Supabase Synchronization & Realtime Service for TurfFlow
 import { getSupabase, isSupabaseConfigured } from '../data/supabaseClient.js';
+import { WhatsAppFormatter } from '../utils/whatsappFormatter.js';
 
 export class SupabaseService {
   static realtimeChannel = null;
@@ -38,7 +39,18 @@ export class SupabaseService {
       const { data: courts, error: cErr } = await supabase.from('courts').select('*');
       const { data: courtSports, error: csErr } = await supabase.from('court_sports').select('*');
       if (!cErr && courts?.length > 0) {
-        store.courts = courts.map(c => {
+        store.courts = courts
+          .filter(c => c.status !== 'inactive')
+          .sort((a, b) => {
+            if (a.id === 'crt-001') return -1;
+            if (b.id === 'crt-001') return 1;
+            if (a.id === 'crt-002') return -1;
+            if (b.id === 'crt-002') return 1;
+            if (a.id === 'crt-003') return -1;
+            if (b.id === 'crt-003') return 1;
+            return String(a.created_at || a.id).localeCompare(String(b.created_at || b.id));
+          })
+          .map(c => {
           const matchingSports = (courtSports || [])
             .filter(cs => cs.court_id === c.id)
             .map(cs => cs.sport_id);
@@ -94,6 +106,7 @@ export class SupabaseService {
           const customer = store.customers.find(c => c.id === b.customer_id);
           return {
             ...b,
+            gate_pass_otp: b.gate_pass_otp || WhatsAppFormatter.getBookingGatePassOtp(b),
             customer_name: b.customer_name || customer?.name || 'Customer',
             customer_phone: b.customer_phone || customer?.phone || '',
             court_name: b.court_name || court?.name || (b.court_id === 'crt-001' ? 'Turf A - FIFA 5-a-side' : b.court_id),
@@ -229,6 +242,23 @@ export class SupabaseService {
             }
           }
         )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'courts' },
+          async (payload) => {
+            console.log(`⚡ [Realtime DB Change] Courts ${payload.eventType}:`, payload.new?.name || payload.old?.id);
+            if (payload.eventType === 'DELETE' && payload.old) {
+              const deletedId = payload.old.id;
+              store.courts = store.courts.filter(c => c.id !== deletedId);
+              for (const [k, lock] of store.locks.entries()) {
+                if (lock.courtId === deletedId) store.locks.delete(k);
+              }
+              console.log(`🗑️ [Realtime DB Change] Court ${deletedId} removed from WhatsApp server store. Remaining: ${store.courts.length}`);
+            } else {
+              await SupabaseService.refreshCourts(store);
+            }
+          }
+        )
         .subscribe((status) => {
           console.log(`📡 Supabase Realtime status: ${status}`);
         });
@@ -247,6 +277,15 @@ export class SupabaseService {
       const supabase = getSupabase();
       if (!supabase) return null;
 
+      let notes = booking.notes || null;
+      const otpCode = booking.gate_pass_otp || WhatsAppFormatter.getBookingGatePassOtp(booking);
+      if (otpCode && otpCode !== '0000') {
+        const strNotes = notes || '';
+        if (!strNotes.includes('OTP:')) {
+          notes = strNotes ? `${strNotes} | [OTP: ${otpCode}]` : `[OTP: ${otpCode}]`;
+        }
+      }
+
       const payload = {
         id: booking.id,
         booking_ref: booking.booking_ref,
@@ -262,7 +301,7 @@ export class SupabaseService {
         discount_amount: booking.discount_amount || 0,
         coupon_id: booking.coupon_id || null,
         created_by_admin_id: booking.created_by_admin_id || null,
-        notes: booking.notes || null,
+        notes: notes,
         refund_amount: booking.refund_amount || 0,
         refund_reason: booking.refund_reason || null,
         refunded_at: booking.refunded_at || null,
@@ -457,6 +496,141 @@ export class SupabaseService {
     } catch (err) {
       console.warn('⚠️ Supabase deleteSlotLock exception:', err.message);
       return null;
+    }
+  }
+
+  /**
+   * Re-fetch and refresh courts & junction sports from Supabase
+   */
+  static async refreshCourts(store) {
+    if (!isSupabaseConfigured()) return;
+    try {
+      const supabase = getSupabase();
+      if (!supabase) return;
+
+      const { data: courts, error: cErr } = await supabase.from('courts').select('*');
+      const { data: courtSports, error: csErr } = await supabase.from('court_sports').select('*');
+
+      if (!cErr && courts) {
+        store.courts = courts
+          .filter(c => c.status !== 'inactive')
+          .sort((a, b) => {
+            if (a.id === 'crt-001') return -1;
+            if (b.id === 'crt-001') return 1;
+            if (a.id === 'crt-002') return -1;
+            if (b.id === 'crt-002') return 1;
+            if (a.id === 'crt-003') return -1;
+            if (b.id === 'crt-003') return 1;
+            return String(a.created_at || a.id).localeCompare(String(b.created_at || b.id));
+          })
+          .map(c => {
+            const matchingSports = (courtSports || [])
+              .filter(cs => cs.court_id === c.id)
+              .map(cs => cs.sport_id);
+
+            return {
+              id: c.id,
+              venue_id: c.venue_id,
+              name: c.name,
+              slot_duration_minutes: c.slot_duration_minutes || 60,
+              opening_time: typeof c.opening_time === 'string' ? c.opening_time.slice(0, 5) : '06:00',
+              closing_time: typeof c.closing_time === 'string' ? c.closing_time.slice(0, 5) : '23:00',
+              buffer_minutes: c.buffer_minutes || 0,
+              status: c.status || 'active',
+              base_price_per_hour: Number(c.base_price_per_hour) || 1200,
+              original_price_per_hour: c.original_price_per_hour ? Number(c.original_price_per_hour) : undefined,
+              saturday_price_per_hour: Number(c.saturday_price_per_hour) || 1600,
+              saturday_offer_price_per_hour: c.saturday_offer_price_per_hour ? Number(c.saturday_offer_price_per_hour) : undefined,
+              sunday_price_per_hour: Number(c.sunday_price_per_hour) || 1600,
+              sunday_offer_price_per_hour: c.sunday_offer_price_per_hour ? Number(c.sunday_offer_price_per_hour) : undefined,
+              peak_enabled: Boolean(c.peak_enabled),
+              peak_start_time: typeof c.peak_start_time === 'string' ? c.peak_start_time.slice(0, 5) : '18:00',
+              peak_end_time: typeof c.peak_end_time === 'string' ? c.peak_end_time.slice(0, 5) : '23:00',
+              peak_price_per_hour: Number(c.peak_price_per_hour) || 1800,
+              peak_offer_price_per_hour: c.peak_offer_price_per_hour ? Number(c.peak_offer_price_per_hour) : undefined,
+              offer_end_date: c.offer_end_date ? String(c.offer_end_date).slice(0, 10) : undefined,
+              sport_ids: matchingSports.length > 0 ? matchingSports : ['sp-football']
+            };
+          });
+        console.log(`🏟️ [SupabaseService] Refreshed courts count: ${store.courts.length}`);
+      }
+    } catch (err) {
+      console.warn('⚠️ SupabaseService.refreshCourts error:', err.message);
+    }
+  }
+
+  /**
+   * Delete a court and all its child associations from Supabase
+   */
+  static async deleteCourt(courtId) {
+    if (!isSupabaseConfigured()) return true;
+    try {
+      const supabase = getSupabase();
+      if (!supabase) return true;
+
+      // Delete child records first to satisfy FK constraints
+      await Promise.allSettled([
+        supabase.from('court_sports').delete().eq('court_id', courtId),
+        supabase.from('pricing_rules').delete().eq('court_id', courtId),
+        supabase.from('blocked_slots').delete().eq('court_id', courtId),
+        supabase.from('slot_locks').delete().eq('court_id', courtId)
+      ]);
+
+      const { error } = await supabase.from('courts').delete().eq('id', courtId);
+      if (error && error.code === '23503') {
+        // If historical bookings prevent hard delete, mark inactive
+        await supabase.from('courts').update({ status: 'inactive' }).eq('id', courtId);
+      }
+      return true;
+    } catch (err) {
+      console.warn('⚠️ SupabaseService.deleteCourt error:', err.message);
+      return false;
+    }
+  }
+
+  /**
+   * Upsert a court and its sports junction into Supabase
+   */
+  static async upsertCourt(court) {
+    if (!isSupabaseConfigured()) return true;
+    try {
+      const supabase = getSupabase();
+      if (!supabase) return true;
+
+      const payload = {
+        id: court.id,
+        venue_id: court.venue_id || 'ven-001',
+        name: court.name,
+        slot_duration_minutes: court.slot_duration_minutes || 60,
+        opening_time: court.opening_time || '06:00',
+        closing_time: court.closing_time || '23:00',
+        buffer_minutes: court.buffer_minutes || 0,
+        status: court.status || 'active',
+        base_price_per_hour: court.base_price_per_hour || 1200,
+        original_price_per_hour: court.original_price_per_hour || null,
+        saturday_price_per_hour: court.saturday_price_per_hour || 1600,
+        saturday_offer_price_per_hour: court.saturday_offer_price_per_hour || null,
+        sunday_price_per_hour: court.sunday_price_per_hour || 1600,
+        sunday_offer_price_per_hour: court.sunday_offer_price_per_hour || null,
+        peak_enabled: Boolean(court.peak_enabled),
+        peak_start_time: court.peak_start_time || '18:00',
+        peak_end_time: court.peak_end_time || '23:00',
+        peak_price_per_hour: court.peak_price_per_hour || 1800,
+        peak_offer_price_per_hour: court.peak_offer_price_per_hour || null,
+        offer_end_date: court.offer_end_date || null
+      };
+
+      await supabase.from('courts').upsert([payload], { onConflict: 'id' });
+
+      if (Array.isArray(court.sport_ids) && court.sport_ids.length > 0) {
+        await supabase.from('court_sports').delete().eq('court_id', court.id);
+        const junction = court.sport_ids.map(sid => ({ court_id: court.id, sport_id: sid }));
+        await supabase.from('court_sports').upsert(junction);
+      }
+      return true;
+    } catch (err) {
+      console.warn('⚠️ SupabaseService.upsertCourt error:', err.message);
+      return false;
     }
   }
 }

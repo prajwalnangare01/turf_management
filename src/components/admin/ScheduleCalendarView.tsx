@@ -26,7 +26,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
   const courts = store.getCourts();
   const sports = store.getSports();
   const [selectedSportId, setSelectedSportId] = useState<string>('all');
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(() => getVenueDateString(0));
   const [isCalendarLoading, setIsCalendarLoading] = useState(false);
 
   useEffect(() => {
@@ -197,9 +197,12 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
   };
 
   const changeDate = (days: number) => {
-    const d = new Date(selectedDate);
-    d.setDate(d.getDate() + days);
-    setSelectedDate(d.toISOString().split('T')[0]);
+    const [y, m, dNum] = selectedDate.split('-').map(Number);
+    const d = new Date(y, m - 1, dNum + days);
+    const nextY = d.getFullYear();
+    const nextM = String(d.getMonth() + 1).padStart(2, '0');
+    const nextD = String(d.getDate()).padStart(2, '0');
+    setSelectedDate(`${nextY}-${nextM}-${nextD}`);
   };
 
   // CC-ADV: Venue advance days calculation for admin schedule matrix
@@ -210,7 +213,10 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
   const maxCustomerDateStr = `${maxCustomerDate.getFullYear()}-${String(maxCustomerDate.getMonth() + 1).padStart(2, '0')}-${String(maxCustomerDate.getDate()).padStart(2, '0')}`;
   const isBeyondCustomerLimit = selectedDate > maxCustomerDateStr;
 
-  const activeSportFilter = selectedSportId !== 'all' && sports.some(s => s.id === selectedSportId)
+  // Only include sports that currently have at least 1 pitch configured (hide sports with 0 pitches)
+  const sportsWithCourts = sports.filter(sport => courts.some(c => c.sport_ids.includes(sport.id)));
+
+  const activeSportFilter = selectedSportId !== 'all' && sportsWithCourts.some(s => s.id === selectedSportId)
     ? selectedSportId
     : 'all';
   const filteredCourts = activeSportFilter === 'all'
@@ -358,8 +364,8 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
         </div>
       )}
 
-      {/* Sport Hierarchy Dropdown Filter */}
-      {sports.length > 0 && (
+      {/* Sport Hierarchy Dropdown Filter (Only sports with configured pitches) */}
+      {sportsWithCourts.length > 0 && (
         <div className="bg-white border border-outline-variant/40 rounded-xl px-4 py-3 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2.5">
             <label
@@ -377,7 +383,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
               <option value="all">
                 All Sports ({courts.length} {courts.length === 1 ? 'pitch' : 'pitches'})
               </option>
-              {sports.map(sport => {
+              {sportsWithCourts.map(sport => {
                 const sportCourtsCount = courts.filter(c => c.sport_ids.includes(sport.id)).length;
                 return (
                   <option key={sport.id} value={sport.id}>

@@ -1,7 +1,32 @@
 // WhatsApp Message Formatter & Interactive Message Payloads
 // Formats plain text for standard chats & interactive JSON for Meta WhatsApp Cloud API
+import { store } from '../data/store.js';
 
 export class WhatsAppFormatter {
+  /**
+   * Helper to format human-readable sport label (with emoji) for a court
+   */
+  static getCourtSportsLabel(court) {
+    if (!court) return '';
+    if (court.sport_name) return court.sport_name;
+    if (Array.isArray(court.sports) && court.sports.length > 0) {
+      return court.sports.map(s => `${s.icon ? s.icon + ' ' : ''}${s.name}`).join(', ');
+    }
+    const allSports = store.getSports();
+    let ids = court.sport_ids;
+    if (!ids && court.court_id) {
+      const found = store.getCourts().find(c => c.id === court.court_id);
+      ids = found?.sport_ids;
+    }
+    if (Array.isArray(ids) && ids.length > 0) {
+      const matched = allSports.filter(s => ids.includes(s.id));
+      if (matched.length > 0) {
+        return matched.map(s => `${s.icon ? s.icon + ' ' : ''}${s.name}`).join(', ');
+      }
+    }
+    return '';
+  }
+
   /**
    * Convert any date (YYYY-MM-DD, ISO string, Date) to DD/MM/YYYY
    */
@@ -52,7 +77,11 @@ export class WhatsAppFormatter {
     let totalAvailable = 0;
 
     for (const c of courts) {
+      const sportLabel = this.getCourtSportsLabel(c);
       out += `🏟️ *${c.court_name}*\n`;
+      if (sportLabel) {
+        out += `🏅 *Sport:* ${sportLabel}\n`;
+      }
       if (c.slots.length === 0) {
         out += `  _No slots open on this date_\n\n`;
         continue;
@@ -116,21 +145,25 @@ export class WhatsAppFormatter {
       const isConfirmed = b.status === 'confirmed';
       const otpCode = WhatsAppFormatter.getBookingGatePassOtp(b);
       const formattedDate = this.formatDate(b.booking_date);
-      const start12 = this.formatTime(b.start_time);
-      const end12 = this.formatTime(b.end_time);
+      const validSlots = Array.isArray(b.all_slots) ? b.all_slots.filter(s => s.start_time && s.end_time) : [];
+      const slotTimeStr = (b.start_time && b.end_time)
+        ? `${this.formatTime(b.start_time)} — ${this.formatTime(b.end_time)}`
+        : (validSlots.length > 0
+            ? validSlots.map(s => `${this.formatTime(s.start_time)} — ${this.formatTime(s.end_time)}`).join(', ')
+            : (b.formatted_slots && !b.formatted_slots.includes('undefined') && b.formatted_slots.trim() !== '–' ? b.formatted_slots : 'Time slot confirmed'));
 
       if (isConfirmed) {
         out += `✅ *CONFIRMED MATCH RESERVATION*\n`;
         out += `🏟️ ${b.court_name}\n`;
-        out += `📅 ${formattedDate} | ⏰ ${start12} — ${end12}\n`;
+        out += `📅 ${formattedDate} | ⏰ ${slotTimeStr}\n`;
         out += `🔑 *Gate Pass OTP:* *${otpCode}*\n`;
-        out += `💰 ₹${b.total_amount} (PAID)\n`;
+        out += `💰 ₹${b.total_order_amount || b.total_amount || 0} (PAID)\n`;
         out += `📄 *Download PDF Pass:* http://localhost:5000/api/bookings/${b.booking_ref}/pass\n`;
         out += `⚙️ _To cancel/reschedule, reply: "Cancel ${otpCode}"_\n`;
       } else {
         out += `⏳ *PENDING RESERVATION*\n`;
         out += `🏟️ ${b.court_name}\n`;
-        out += `📅 ${formattedDate} | ⏰ ${start12} — ${end12}\n`;
+        out += `📅 ${formattedDate} | ⏰ ${slotTimeStr}\n`;
         out += `💰 ₹${b.total_amount} (5-min hold active)\n`;
         const baseUrl = (process.env.BASE_URL || 'http://localhost:5000').replace(/\/$/, '');
         const payKey = b.id || b.booking_ref;
@@ -177,7 +210,8 @@ export class WhatsAppFormatter {
       const effectivePeak = (pkOffer && pkOffer !== peakRate)
         ? `~₹${Math.max(peakRate, pkOffer)}~ ₹${Math.min(peakRate, pkOffer)}`
         : `₹${peakRate}`;
-      out += `  • *${c.name}:*${origText} ₹${c.base_price_per_hour}/hr (Weekday) | ${effectivePeak}/hr (Peak 6:00 PM - 11:00 PM)\n`;
+      const sportLabel = this.getCourtSportsLabel(c);
+      out += `  • *${c.name}*${sportLabel ? ` (${sportLabel})` : ''}:${origText} ₹${c.base_price_per_hour}/hr (Weekday) | ${effectivePeak}/hr (Peak 6:00 PM - 11:00 PM)\n`;
     }
 
     out += `\n🔄 *Cancellation Policy:*\n` +
@@ -240,18 +274,26 @@ export class WhatsAppFormatter {
    */
   static getBookingGatePassOtp(booking) {
     if (!booking) return '0000';
+    // 1. If explicit gate_pass_otp exists and is valid 4 digits
     if (booking.gate_pass_otp && /^\d{4}$/.test(String(booking.gate_pass_otp).trim())) {
       return String(booking.gate_pass_otp).trim();
     }
+    // 2. Check if OTP is tagged in notes (e.g. "[OTP: 7341]" or "OTP: 7341")
+    if (booking.notes) {
+      const match = String(booking.notes).match(/\bOTP[:\s-]+([0-9]{4})\b/i);
+      if (match) return match[1];
+    }
+    // 3. Derive directly from group_ref or base booking_ref trailing 4 digits
     const rawRef = (booking.group_ref || booking.booking_ref || booking.id || '').toString().trim();
-    if (!rawRef) return '0000';
-    const siblingMatch = rawRef.match(/^(.*-\d{4})-\d+$/);
-    const baseRef = siblingMatch ? siblingMatch[1] : rawRef;
-    const trailingDigitsMatch = baseRef.match(/\d{4}$/);
-    if (trailingDigitsMatch) return trailingDigitsMatch[0];
-    const allDigits = baseRef.replace(/\D/g, '');
-    if (allDigits.length >= 4) return allDigits.slice(-4);
-    return baseRef.slice(-4) || '0000';
+    if (rawRef) {
+      const siblingMatch = rawRef.match(/^(.*-\d{4})-\d+$/);
+      const baseRef = siblingMatch ? siblingMatch[1] : rawRef;
+      const trailingDigitsMatch = baseRef.match(/\d{4}$/);
+      if (trailingDigitsMatch) return trailingDigitsMatch[0];
+      const allDigits = baseRef.replace(/\D/g, '');
+      if (allDigits.length >= 4) return allDigits.slice(-4);
+    }
+    return rawRef.slice(-4) || '0000';
   }
 
   /**

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { store } from '../../services/store';
 import { AdminUser } from '../../types/schema';
 import { formatTime12hPlain, formatDateDDMMYYYY, formatPhoneNumber, getBookingGatePassOtp } from '../../utils/formatters';
+import { getVenueDateString } from '../../utils/venueTime';
 import { DataArchiveService, ArchiveDispatchResult } from '../../services/dataArchiveService';
 import { EmailService } from '../../services/emailService';
 import { 
@@ -41,7 +42,7 @@ export const ReportsAnalytics: React.FC<ReportsAnalyticsProps> = ({ currentAdmin
   const bookings = store.getBookings();
   const courts = store.getCourts();
   const customers = store.getCustomers();
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getVenueDateString(0);
 
   // Financial calculations
   const confirmedBookings = bookings.filter(b => b.status === 'confirmed' || b.status === 'completed');

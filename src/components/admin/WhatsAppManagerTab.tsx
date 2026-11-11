@@ -232,7 +232,7 @@ export const WhatsAppManagerTab: React.FC<Props> = ({ currentAdmin }) => {
           ...prev,
           {
             sender: 'agent',
-            text: `🎉 *PAYMENT CAPTURED:* Booking *${bookingRef}* is confirmed! Official pass dispatched.`,
+            text: `🎉 *PAYMENT CAPTURED:* Booking is confirmed! Official pass dispatched.`,
             time: formatChatTimestamp()
           }
         ]);

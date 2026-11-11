@@ -42,6 +42,13 @@ export class NotificationService {
     const sport = sports.find(s => s.id === booking.sport_id);
     const otpCode = WhatsAppFormatter.getBookingGatePassOtp(booking);
 
+    const validSlots = Array.isArray(booking.all_slots) ? booking.all_slots.filter(s => s.start_time && s.end_time) : [];
+    const slotTimeStr = (booking.start_time && booking.end_time)
+      ? `${WhatsAppFormatter.formatTime(booking.start_time)} — ${WhatsAppFormatter.formatTime(booking.end_time)} (${court?.slot_duration_minutes || 60} mins)`
+      : (validSlots.length > 0
+          ? validSlots.map(s => `${WhatsAppFormatter.formatTime(s.start_time)} — ${WhatsAppFormatter.formatTime(s.end_time)}`).join(', ')
+          : (booking.formatted_slots && !booking.formatted_slots.includes('undefined') && booking.formatted_slots.trim() !== '–' ? booking.formatted_slots : 'Time slot confirmed'));
+
     const message = `✅ *PAYMENT CONFIRMED — TURFFLOW ARENA* ✅\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `🎉 *Payment Received & Booking Confirmed!*\n\n` +
@@ -49,8 +56,8 @@ export class NotificationService {
       `🏟️ *Court:* ${court?.name || 'Main Turf'}\n` +
       `🏅 *Sport:* ${sport?.icon || '⚽'} ${sport?.name || 'Football'}\n` +
       `📅 *Date:* ${WhatsAppFormatter.formatDate(booking.booking_date)}\n` +
-      `⏰ *Time:* ${WhatsAppFormatter.formatTime(booking.start_time)} — ${WhatsAppFormatter.formatTime(booking.end_time)} (${court?.slot_duration_minutes || 60} mins)\n` +
-      `💰 *Amount Paid:* ₹${booking.total_amount} (via Razorpay UPI)\n` +
+      `⏰ *Time:* ${slotTimeStr}\n` +
+      `💰 *Amount Paid:* ₹${booking.total_order_amount || booking.total_amount || 0} (via Razorpay UPI)\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `📍 *Venue Address:* ${venue.address}\n` +
       `🗺️ *Google Maps:* ${venue.google_maps_link}\n` +

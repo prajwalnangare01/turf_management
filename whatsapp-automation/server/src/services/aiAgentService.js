@@ -165,7 +165,7 @@ export class AiAgentService {
 
     // 4. Number with MANDATORY prefix "at", "for", "slot" or court name, e.g. "at 7", "for 8", "slot 6", "turf a 7"
     // MUST NOT match isolated numbers without prefix!
-    const matchPrefixed = lower.match(/\b(?:at|for|slot|turf\s+[ab]|court\s+\d)\s+([1-9]|1[0-2])(?::([0-5]\d))?(?:\s*(?:in the\s*(?:morning|evening|night)))?\b/);
+    const matchPrefixed = lower.match(/\b(?:at|for|slot|turf\s*[ab12]|pitch\s*[ab12]|court\s*\d|running\s*pitch)\s+([1-9]|1[0-2])(?::([0-5]\d))?(?:\s*(?:in the\s*(?:morning|evening|night)))?\b/);
     if (matchPrefixed && matchPrefixed[1]) {
       let h = parseInt(matchPrefixed[1], 10);
       const min = matchPrefixed[2] ? matchPrefixed[2] : '00';
@@ -179,6 +179,81 @@ export class AiAgentService {
     }
 
     return null;
+  }
+
+  /**
+   * Helper to resolve the most appropriate court from user text
+   * @param {string} text - user input text
+   * @param {Array} courts - list of active courts
+   * @param {boolean} fallbackToDefault - if true, returns primary court when no specific court matched
+   * @returns {Object|null} matched court
+   */
+  static resolveCourt(text, courts, fallbackToDefault = true) {
+    if (!courts || courts.length === 0) return null;
+    const lower = (text || '').toLowerCase().trim();
+
+    // 1. Explicit match for Turf A / Pitch A / 5-a-side / FIFA
+    if (/\b(turf\s*[a1]|pitch\s*[a1]|court\s*a|fifa|5[- ]?a[- ]?side)\b/i.test(lower)) {
+      const match = courts.find(c => c.id === 'crt-001' || /\bturf\s*a\b/i.test(c.name));
+      if (match) return match;
+    }
+
+    // 2. Explicit match for Turf B / Pitch B / Multi-Sport / Cricket
+    if (/\b(turf\s*[b2]|pitch\s*[b2]|court\s*[b2]|multi[- ]?sport|box\s*cricket|cricket)\b/i.test(lower)) {
+      const match = courts.find(c => c.id === 'crt-002' || /\bturf\s*b\b/i.test(c.name));
+      if (match) return match;
+    }
+
+    // 3. Explicit match for Badminton / Court 1 / Wooden / BWF
+    if (/\b(court\s*1|badminton|bwf|indoor\s*wooden|wooden)\b/i.test(lower)) {
+      const match = courts.find(c => 
+        c.sport_ids?.includes('sp-badminton') || 
+        c.id === 'crt-003' || 
+        /badminton|wooden/i.test(c.name)
+      );
+      if (match) return match;
+    }
+
+    // 4. Explicit match for Pickleball
+    if (/\b(pickleball|paddle|pickle)\b/i.test(lower)) {
+      const match = courts.find(c => 
+        c.sport_ids?.includes('sp-pickleball') || 
+        /pickleball/i.test(c.name)
+      );
+      if (match) return match;
+    }
+
+    // 5. Match by Court Name prefix or distinct keywords for custom/dynamically added courts
+    for (const c of courts) {
+      const baseName = c.name.split(/[—–\-]/)[0].trim().toLowerCase();
+      // Match base name if length >= 3
+      if (baseName.length >= 3 && lower.includes(baseName)) {
+        return c;
+      }
+      // Check distinctive keywords (e.g. "running", "volly")
+      const words = baseName.split(/\s+/).filter(w => w.length >= 4 && !['turf', 'court', 'pitch', 'arena'].includes(w));
+      for (const w of words) {
+        const regex = new RegExp(`\\b${w}\\b`, 'i');
+        if (regex.test(lower)) {
+          return c;
+        }
+      }
+    }
+
+    // 6. Match by sport keyword if mentioned (e.g. "football", "soccer")
+    if (/\b(football|soccer)\b/i.test(lower)) {
+      const footballCourt = courts.find(c => c.id === 'crt-001' || c.sport_ids?.includes('sp-football'));
+      if (footballCourt) return footballCourt;
+    }
+
+    if (!fallbackToDefault) return null;
+
+    // 7. Default fallback:
+    // If user didn't specify a court, default to primary Turf A ('crt-001') if available, otherwise first active court
+    const defaultCourt = courts.find(c => c.id === 'crt-001') || 
+                          courts.find(c => /\bturf\s*a\b/i.test(c.name)) || 
+                          courts[0];
+    return defaultCourt;
   }
 
   /**
@@ -291,7 +366,7 @@ export class AiAgentService {
             reply: `🏟️ *Available Slots for Tomorrow (${WhatsAppFormatter.formatDate(tomorrowStr)}):*\n\n` +
               slotsFormatted + `\n\n` +
               (totalAvail > 0
-                ? `👉 *To reserve:* Reply with your court and time (e.g. *"Turf A at 7pm"* or *"Court 1 at 19:00"*).\n_(Or reply *1* to choose another date)_`
+                ? `👉 *To reserve:* Reply with your court and time (e.g. *"Turf A at 7pm"* or *"Court 1 at 7:00 PM"*).\n_(Or reply *1* to choose another date)_`
                 : `👉 _Reply *1* for Today, *3* for another date, or *menu* for main options._`),
             action: 'slots_for_tomorrow',
             date: tomorrowStr
@@ -479,17 +554,31 @@ export class AiAgentService {
         }
 
         // Identify court
-        const courts = store.getCourts();
-        let court = courts[0];
-        if (lower.includes('turf b') || lower.includes('court 2') || lower.includes('multi-sport') || lower.includes('cricket')) {
-          court = courts[1] || courts[0];
-        } else if (lower.includes('badminton') || lower.includes('court 1') || lower.includes('wooden')) {
-          court = courts[2] || courts[0];
+        const courts = store.getCourts().filter(c => c.status === 'active');
+        const explicitlySpecified = this.resolveCourt(text, courts, false);
+        let court = explicitlySpecified;
+        if (!court && session.courtId) {
+          court = courts.find(c => c.id === session.courtId);
+        }
+        if (!court) {
+          court = this.resolveCourt(text, courts, true);
+        }
+
+        let sportId = court.sport_ids?.[0] || 'sp-football';
+        if (court.sport_ids && court.sport_ids.length > 1) {
+          const sports = store.getSports();
+          for (const sId of court.sport_ids) {
+            const sportObj = sports.find(s => s.id === sId);
+            if (sportObj && lower.includes(sportObj.name.toLowerCase())) {
+              sportId = sId;
+              break;
+            }
+          }
         }
 
         const bookingRes = BookingService.initiateBooking({
           courtId: court.id,
-          sportId: court.sport_ids[0],
+          sportId: sportId,
           date: session.date,
           startTime: parsedTime,
           customerName: name,
@@ -497,14 +586,15 @@ export class AiAgentService {
         });
 
         if (!bookingRes.success) {
-          const freshAvail = SlotEngine.getAvailableSlots(court.sport_ids[0], session.date, phone);
-          const courtData = freshAvail.courts?.find(c => c.id === court.id);
+          const freshAvail = SlotEngine.getAvailableSlots(sportId, session.date, phone);
+          const courtData = freshAvail.courts?.find(c => c.court_id === court.id || c.id === court.id);
           const openSlots = courtData?.slots?.filter(s => s.status === 'available') || [];
           const timesText = openSlots.slice(0, 4).map(s => `• \`${WhatsAppFormatter.formatTime(s.start_time)}\` to \`${WhatsAppFormatter.formatTime(s.end_time)}\` (₹${s.price})`).join('\n');
+          const sportLabel = WhatsAppFormatter.getCourtSportsLabel(court);
 
           return {
             reply: `⚠️ *Slot Unavailable:*\n${bookingRes.message}\n\n` +
-              (timesText ? `🏟️ *Remaining open timings on ${court.name} for ${WhatsAppFormatter.formatDate(session.date)}:*\n${timesText}\n\n` : '') +
+              (timesText ? `🏟️ *Remaining open timings on ${court.name}${sportLabel ? ` (${sportLabel})` : ''} for ${WhatsAppFormatter.formatDate(session.date)}:*\n${timesText}\n\n` : '') +
               `👉 Reply with any of the available times above, or reply *1* to pick another date! ⚽`,
             action: 'booking_conflict'
           };
@@ -569,11 +659,16 @@ export class AiAgentService {
         sport = sports.find(s => s.name.toLowerCase().includes('cricket'));
       }
       const availData = SlotEngine.getAvailableSlots(sport?.id, parsedDate, phone);
+      const courts = store.getCourts().filter(c => c.status === 'active');
+      const requestedCourt = this.resolveCourt(text, courts, false);
+      if (requestedCourt) {
+        availData.courts = availData.courts.filter(c => c.court_id === requestedCourt.id || c.id === requestedCourt.id);
+      }
       const slotsFormatted = WhatsAppFormatter.formatAvailableSlots(availData);
       const totalAvail = availData.courts.reduce((sum, c) => sum + c.slots.length, 0);
 
       if (totalAvail > 0) {
-        dialogSessions.set(phone, { step: 'awaiting_slot_selection', date: parsedDate, updatedAt: Date.now() });
+        dialogSessions.set(phone, { step: 'awaiting_slot_selection', date: parsedDate, courtId: requestedCourt?.id, updatedAt: Date.now() });
       } else {
         dialogSessions.set(phone, { step: 'awaiting_date_choice', updatedAt: Date.now() });
       }
@@ -582,7 +677,7 @@ export class AiAgentService {
         reply: `🏟️ *Available Slots for ${WhatsAppFormatter.formatDate(parsedDate)}:*\n\n` +
           slotsFormatted + `\n\n` +
           (totalAvail > 0
-            ? `👉 *To reserve:* Reply with your court and time (e.g. *"Turf A at 7pm"* or *"Court 1 at 19:00"*).`
+            ? `👉 *To reserve:* Reply with your court and time (e.g. *"Turf A at 7pm"* or *"Court 1 at 7:00 PM"*).`
             : `👉 Reply *1* to pick another date, or *menu* to return to main options.`),
         action: 'check_availability',
         data: availData
@@ -606,8 +701,14 @@ export class AiAgentService {
     }
 
     // 4. DIRECT BOOKING SHORTCUT (e.g. "Book Turf A tomorrow at 8pm", "Reserve Turf B today at 6pm", "Turf A at 7pm")
+    const activeCourts = store.getCourts().filter(c => c.status === 'active');
+    const hasCourtMention = activeCourts.some(c => {
+      const baseName = c.name.split(/[—–\-]/)[0].trim().toLowerCase();
+      return baseName.length >= 3 && lower.includes(baseName);
+    });
     const hasBookingIntent = lower.includes('book') || lower.includes('reserve') || lower.includes('block') ||
-      lower.includes('turf a') || lower.includes('turf b') || lower.includes('court 1');
+      /\b(turf\s*[ab12]|pitch\s*[ab12]|court\s*\d|badminton|cricket|pickleball|football)\b/i.test(lower) ||
+      hasCourtMention;
     if (hasBookingIntent) {
       const parsedTime = this.parseTime(text);
       if (parsedTime) {
@@ -623,17 +724,23 @@ export class AiAgentService {
           };
         }
 
-        const courts = store.getCourts();
-        let court = courts[0];
-        if (lower.includes('turf b') || lower.includes('court 2') || lower.includes('multi-sport') || lower.includes('cricket')) {
-          court = courts[1] || courts[0];
-        } else if (lower.includes('badminton') || lower.includes('court 1') || lower.includes('wooden')) {
-          court = courts[2] || courts[0];
+        const court = this.resolveCourt(text, activeCourts, true);
+
+        let sportId = court.sport_ids?.[0] || 'sp-football';
+        if (court.sport_ids && court.sport_ids.length > 1) {
+          const sports = store.getSports();
+          for (const sId of court.sport_ids) {
+            const sportObj = sports.find(s => s.id === sId);
+            if (sportObj && lower.includes(sportObj.name.toLowerCase())) {
+              sportId = sId;
+              break;
+            }
+          }
         }
 
         const bookingRes = BookingService.initiateBooking({
           courtId: court.id,
-          sportId: court.sport_ids[0],
+          sportId: sportId,
           date: parsedDate,
           startTime: parsedTime,
           customerName: name,
@@ -641,14 +748,15 @@ export class AiAgentService {
         });
 
         if (!bookingRes.success) {
-          const freshAvail = SlotEngine.getAvailableSlots(court.sport_ids[0], parsedDate, phone);
-          const courtData = freshAvail.courts?.find(c => c.id === court.id);
+          const freshAvail = SlotEngine.getAvailableSlots(sportId, parsedDate, phone);
+          const courtData = freshAvail.courts?.find(c => c.court_id === court.id || c.id === court.id);
           const openCourtSlots = courtData?.slots?.filter(s => s.status === 'available') || [];
           const timesText = openCourtSlots.slice(0, 4).map(s => `• \`${WhatsAppFormatter.formatTime(s.start_time)}\` to \`${WhatsAppFormatter.formatTime(s.end_time)}\` (₹${s.price})`).join('\n');
+          const sportLabel = WhatsAppFormatter.getCourtSportsLabel(court);
 
           return {
             reply: `⚠️ *Slot Unavailable:*\n${bookingRes.message}\n\n` +
-              (timesText ? `🏟️ *Remaining open timings on ${court.name} for ${WhatsAppFormatter.formatDate(parsedDate)}:*\n${timesText}\n\n` : '') +
+              (timesText ? `🏟️ *Remaining open timings on ${court.name}${sportLabel ? ` (${sportLabel})` : ''} for ${WhatsAppFormatter.formatDate(parsedDate)}:*\n${timesText}\n\n` : '') +
               `👉 Reply with any of the available times above, or reply *1* to pick another date! ⚽`,
             action: 'booking_conflict'
           };
@@ -663,6 +771,35 @@ export class AiAgentService {
           }),
           action: 'booking_initiated',
           data: bookingRes
+        };
+      }
+
+      // If user typed a court name but did not specify time (e.g. "book turf A", "book for turf A", "reserve turf B")
+      const explicitlySpecified = this.resolveCourt(text, activeCourts, false);
+      if (explicitlySpecified) {
+        const parsedDate = this.parseDate(text, true) || getVenueDateString(0);
+        dialogSessions.set(phone, {
+          step: 'awaiting_slot_selection',
+          courtId: explicitlySpecified.id,
+          date: parsedDate,
+          updatedAt: Date.now()
+        });
+
+        const availData = SlotEngine.getAvailableSlots(explicitlySpecified.sport_ids?.[0], parsedDate, phone);
+        const courtData = availData.courts?.find(c => c.court_id === explicitlySpecified.id || c.id === explicitlySpecified.id);
+        const openSlots = courtData?.slots?.filter(s => s.status === 'available') || [];
+        const timesText = openSlots.slice(0, 5).map(s => `• \`${WhatsAppFormatter.formatTime(s.start_time)}\` to \`${WhatsAppFormatter.formatTime(s.end_time)}\` (₹${s.price})`).join('\n');
+        const sportLabel = WhatsAppFormatter.getCourtSportsLabel(explicitlySpecified);
+
+        return {
+          reply: `🏟️ *${explicitlySpecified.name}*${sportLabel ? ` (${sportLabel})` : ''}\n` +
+            `📅 *Date:* ${WhatsAppFormatter.formatDate(parsedDate)}\n\n` +
+            (timesText
+              ? `⚡ *Available timings:*\n${timesText}\n\n👉 *To reserve:* Reply with your desired time (e.g. *"7:00 PM"* or *"8pm"*).`
+              : `⚠️ No slots open for this date. Reply *1* to choose another date!`),
+          action: 'court_selected_need_time',
+          courtId: explicitlySpecified.id,
+          date: parsedDate
         };
       }
     }
@@ -722,7 +859,8 @@ export class AiAgentService {
         if (matchOtp) {
           booking = userConfirmed.find(b => 
             (b.booking_ref && b.booking_ref.endsWith(matchOtp[0])) ||
-            b.gate_pass_otp === matchOtp[0]
+            b.gate_pass_otp === matchOtp[0] ||
+            WhatsAppFormatter.getBookingGatePassOtp(b) === matchOtp[0]
           );
         } else if (userConfirmed.length === 1) {
           booking = userConfirmed[0];
@@ -793,7 +931,8 @@ export class AiAgentService {
         if (matchOtp) {
           const matched = userConfirmed.find(b => 
             (b.booking_ref && b.booking_ref.endsWith(matchOtp[0])) ||
-            b.gate_pass_otp === matchOtp[0]
+            b.gate_pass_otp === matchOtp[0] ||
+            WhatsAppFormatter.getBookingGatePassOtp(b) === matchOtp[0]
           );
           if (matched) bookingRef = matched.booking_ref;
         } else if (userConfirmed.length === 1) {

@@ -29,7 +29,7 @@ export const OfflineBookingModal: React.FC<OfflineBookingModalProps> = ({
 }) => {
   const courts = store.getCourts();
   const sports = store.getSports();
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getVenueDateString(0);
 
   const [courtId, setCourtId] = useState(initialCourtId || courts[0]?.id || '');
   const [dateStr, setDateStr] = useState(initialDate || todayStr);

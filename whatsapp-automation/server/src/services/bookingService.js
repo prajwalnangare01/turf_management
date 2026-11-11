@@ -40,7 +40,7 @@ export class BookingService {
     if (startMins < openMins || startMins >= closeMins) {
       return {
         success: false,
-        message: `Time ${startTime} is outside venue operating hours (${court.opening_time || '06:00'} — ${court.closing_time || '23:00'}).`
+        message: `Time ${WhatsAppFormatter.formatTime(startTime)} is outside venue operating hours (${WhatsAppFormatter.formatTime(court.opening_time || '06:00')} — ${WhatsAppFormatter.formatTime(court.closing_time || '23:00')}).`
       };
     }
 
@@ -50,15 +50,15 @@ export class BookingService {
     if (!slotData) {
       return {
         success: false,
-        message: `Slot at ${startTime} on ${date} does not exist for ${court.name}.`
+        message: `Slot at ${WhatsAppFormatter.formatTime(startTime)} on ${WhatsAppFormatter.formatDate(date)} does not exist for ${court.name}.`
       };
     }
     if (slotData.status !== 'available') {
       return {
         success: false,
         message: slotData.status === 'locked'
-          ? `Slot ${startTime} is temporarily held by another player. Please select another time.`
-          : `Slot ${startTime} is already booked or past.`
+          ? `Slot ${WhatsAppFormatter.formatTime(startTime)} is temporarily held by another player. Please select another time.`
+          : `Slot ${WhatsAppFormatter.formatTime(startTime)} is already booked or past.`
       };
     }
 
@@ -67,7 +67,7 @@ export class BookingService {
     if (!lockResult.success) {
       return {
         success: false,
-        message: lockResult.message || `Slot ${startTime} on ${date} is already locked or booked.`
+        message: lockResult.message || `Slot ${WhatsAppFormatter.formatTime(startTime)} on ${WhatsAppFormatter.formatDate(date)} is already locked or booked.`
       };
     }
 
@@ -84,8 +84,8 @@ export class BookingService {
       return {
         success: false,
         message: activeConflict.status === 'confirmed'
-          ? `Slot is already booked.`
-          : `Slot is temporarily held for another player's payment. Please try another timing.`
+          ? `Slot ${WhatsAppFormatter.formatTime(startTime)} is already booked.`
+          : `Slot ${WhatsAppFormatter.formatTime(startTime)} is temporarily held for another player's payment. Please try another timing.`
       };
     }
 
@@ -238,10 +238,18 @@ export class BookingService {
     booking.status = 'confirmed';
     booking.updated_at = new Date().toISOString();
     booking.gateway_payment_id = paymentId || `pay_${Date.now()}`;
-    // Securely mint unpredictable 4-digit Gate Pass OTP ONLY upon verified payment
+    // Securely resolve 4-digit Gate Pass OTP matching the booking reference code
     if (!booking.gate_pass_otp) {
-      booking.gate_pass_otp = Math.floor(1000 + Math.random() * 9000).toString();
+      booking.gate_pass_otp = WhatsAppFormatter.getBookingGatePassOtp(booking);
     }
+
+    // Persist OTP tag into notes so it is permanently synchronized in PostgreSQL database
+    const otpCode = booking.gate_pass_otp;
+    let currentNotes = booking.notes || '';
+    if (otpCode && otpCode !== '0000' && !currentNotes.includes('OTP:')) {
+      currentNotes = currentNotes ? `${currentNotes} | [OTP: ${otpCode}]` : `[OTP: ${otpCode}]`;
+    }
+    booking.notes = currentNotes;
 
     // Release lock (now permanently guarded by status = 'confirmed')
     LockService.releaseLock(booking.court_id, booking.booking_date, booking.start_time, booking.customer_phone);
@@ -258,6 +266,7 @@ export class BookingService {
     SupabaseService.updateBooking(booking.id, {
       status: 'confirmed',
       gateway_payment_id: booking.gateway_payment_id,
+      notes: booking.notes,
       updated_at: booking.updated_at
     }).catch(err => console.warn('Supabase updateBooking error:', err.message));
 
@@ -353,8 +362,9 @@ export class BookingService {
    * Calculate tiered refund for a booking
    */
   static calculateRefund(booking) {
-    const [y, m, d] = booking.booking_date.split('-').map(Number);
-    const [hr, min] = booking.start_time.split(':').map(Number);
+    if (!booking?.booking_date || !booking?.start_time) return { refundAmount: 0, refundPct: 0, hoursRemaining: 0 };
+    const [y, m, d] = (booking.booking_date || '').split('-').map(Number);
+    const [hr, min] = (booking.start_time || '00:00').split(':').map(Number);
     const matchTime = new Date(y, m - 1, d, hr, min).getTime();
     const now = Date.now();
     const hoursRemaining = (matchTime - now) / (1000 * 60 * 60);
@@ -449,7 +459,7 @@ export class BookingService {
     if (!newSlot || newSlot.status !== 'available') {
       return {
         success: false,
-        message: `Slot ${newStartTime} on ${newDate} is not available.`
+        message: `Slot ${WhatsAppFormatter.formatTime(newStartTime)} on ${WhatsAppFormatter.formatDate(newDate)} is not available.`
       };
     }
 

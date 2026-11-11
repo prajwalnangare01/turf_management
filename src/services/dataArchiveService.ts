@@ -4,6 +4,7 @@ import { ExcelExportService } from './excelExportService';
 import { EmailService } from './emailService';
 import { AuditLogger } from './auditLogger';
 import { formatDateDDMMYYYY, formatTime12hPlain, formatPhoneNumber } from '../utils/formatters';
+import { getVenueDateString } from '../utils/venueTime';
 
 export interface ArchiveDispatchResult {
   success: boolean;
@@ -56,7 +57,7 @@ export class DataArchiveService {
     const customers = store.getCustomers();
     const venue = store.getVenue();
 
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getVenueDateString(0);
     const periodLabel = periodDays 
       ? `Last ${periodDays} Days (${formatDateDDMMYYYY(new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000))} – ${formatDateDDMMYYYY(new Date())})`
       : 'All-Time Master Archive';
@@ -88,7 +89,7 @@ export class DataArchiveService {
     const customers = store.getCustomers();
     const venue = store.getVenue();
 
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getVenueDateString(0);
     const csv = ExcelExportService.generateCsv(bookings, courts, customers);
     const fileSuffix = periodDays ? `${periodDays}d` : 'all-time';
     const filename = `${venue.name.toLowerCase().replace(/\s+/g, '-')}-bookings-${fileSuffix}-${todayStr}.csv`;

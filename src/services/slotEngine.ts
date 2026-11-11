@@ -207,6 +207,7 @@ export class SlotEngine {
       // Check Existing DB Confirmed Bookings (permanently booked)
       const confirmedBooking = bookings.find(b => {
         if (b.status !== 'confirmed') return false;
+        if (!b.start_time || !b.end_time) return false;
         const bStart = this.timeToMinutes(b.start_time);
         let bEnd = this.timeToMinutes(b.end_time);
         if (bEnd <= bStart) bEnd += 1440;
@@ -216,6 +217,7 @@ export class SlotEngine {
       // Check Active 5-minute Pending Payment Holds (temporary hold)
       const pendingHold = bookings.find(b => {
         if (b.status !== 'pending_payment') return false;
+        if (!b.start_time || !b.end_time) return false;
         const nowMs = Date.now();
         const createdMs = new Date(b.created_at).getTime();
         const ageMs = nowMs - createdMs;

@@ -31,8 +31,12 @@ async function findOrResolveBooking(ref, fallbackData = {}) {
     (b.id && b.id.toUpperCase() === cleanRef)
   );
   if (booking) {
-    if (fallbackData && Object.keys(fallbackData).length > 0) {
-      Object.assign(booking, fallbackData);
+    if (fallbackData && typeof fallbackData === 'object') {
+      for (const [key, val] of Object.entries(fallbackData)) {
+        if (val !== undefined && val !== null && val !== '') {
+          booking[key] = val;
+        }
+      }
     }
     // Aggregate siblings if this is part of a multi-slot order
     const parentRef = WhatsAppFormatter.getBookingGroupRef(booking);
@@ -43,15 +47,19 @@ async function findOrResolveBooking(ref, fallbackData = {}) {
         (WhatsAppFormatter.getBookingGroupRef(b) === parentRef ||
          (b.gateway_payment_id && booking.gateway_payment_id && b.gateway_payment_id === booking.gateway_payment_id))
       );
-      if (siblings.length > 0) {
-        booking.all_slots = Array.from(new Map(siblings.map(s => [`${s.start_time}-${s.end_time}`, {
+      const validSiblings = siblings.filter(s => s.start_time && s.end_time);
+      if (validSiblings.length > 0) {
+        booking.all_slots = Array.from(new Map(validSiblings.map(s => [`${s.start_time}-${s.end_time}`, {
           start_time: s.start_time,
           end_time: s.end_time,
           price: s.total_amount
-        }])).values()).sort((a, b) => a.start_time.localeCompare(b.start_time));
-        booking.total_order_amount = siblings.reduce((sum, s) => sum + (Number(s.total_amount) || 0), 0);
+        }])).values()).sort((a, b) => String(a.start_time).localeCompare(String(b.start_time)));
+        booking.total_order_amount = validSiblings.reduce((sum, s) => sum + (Number(s.total_amount) || 0), 0);
         booking.formatted_slots = booking.all_slots.map(s => `${WhatsAppFormatter.formatTime(s.start_time)} – ${WhatsAppFormatter.formatTime(s.end_time)}`).join(', ');
       }
+    }
+    if (!booking.gate_pass_otp) {
+      booking.gate_pass_otp = WhatsAppFormatter.getBookingGatePassOtp(booking);
     }
     return booking;
   }
@@ -63,14 +71,37 @@ async function findOrResolveBooking(ref, fallbackData = {}) {
       const { data, error } = await supabase
         .from('bookings')
         .select('*')
-        .or(`booking_ref.ilike.${cleanRef},group_ref.ilike.${cleanRef},id.ilike.${cleanRef}`)
+        .or(`booking_ref.ilike.${cleanRef},id.ilike.${cleanRef}`)
         .maybeSingle();
       if (!error && data) {
-        if (!store.getBookings().some(b => b.id === data.id)) {
-          store.getBookings().push(data);
+        const court = store.getCourts().find(c => c.id === data.court_id);
+        const customer = store.getCustomers().find(c => c.id === data.customer_id);
+        const normalized = {
+          ...data,
+          customer_name: data.customer_name || customer?.name || 'Customer',
+          customer_phone: data.customer_phone || customer?.phone || '',
+          court_name: data.court_name || court?.name || 'Turf Court',
+          start_time: typeof data.start_time === 'string' ? data.start_time.slice(0, 5) : data.start_time,
+          end_time: typeof data.end_time === 'string' ? data.end_time.slice(0, 5) : data.end_time,
+          total_amount: Number(data.total_amount || 0)
+        };
+        if (fallbackData && typeof fallbackData === 'object') {
+          for (const [key, val] of Object.entries(fallbackData)) {
+            if (val !== undefined && val !== null && val !== '') {
+              normalized[key] = val;
+            }
+          }
         }
-        const finalBooking = { ...data, ...(fallbackData || {}) };
-        return finalBooking;
+        if (!normalized.gate_pass_otp) {
+          normalized.gate_pass_otp = WhatsAppFormatter.getBookingGatePassOtp(normalized);
+        }
+        const existingIdx = store.getBookings().findIndex(b => b.id === normalized.id || b.booking_ref === normalized.booking_ref);
+        if (existingIdx === -1) {
+          store.getBookings().push(normalized);
+        } else {
+          store.getBookings()[existingIdx] = { ...store.getBookings()[existingIdx], ...normalized };
+        }
+        return normalized;
       }
     }
   } catch (err) {
@@ -95,6 +126,9 @@ async function findOrResolveBooking(ref, fallbackData = {}) {
       status: fallbackData.status || 'confirmed',
       source: fallbackData.source || 'online'
     };
+    if (!synthetic.gate_pass_otp) {
+      synthetic.gate_pass_otp = WhatsAppFormatter.getBookingGatePassOtp(synthetic);
+    }
     if (!store.getBookings().some(b => b.booking_ref === synthetic.booking_ref)) {
       store.getBookings().push(synthetic);
     }
@@ -121,6 +155,9 @@ async function findOrResolveBooking(ref, fallbackData = {}) {
       created_at: new Date().toISOString(),
       ...(fallbackData || {})
     };
+    if (!synthetic.gate_pass_otp) {
+      synthetic.gate_pass_otp = WhatsAppFormatter.getBookingGatePassOtp(synthetic);
+    }
     store.getBookings().push(synthetic);
     return synthetic;
   }
@@ -161,10 +198,86 @@ apiRouter.get('/sports', (req, res) => {
 });
 
 /**
- * 3. Courts List
+ * 3. Courts List & Management
  */
 apiRouter.get('/courts', (req, res) => {
   res.json({ success: true, courts: store.getCourts() });
+});
+
+apiRouter.post('/courts', async (req, res) => {
+  const courtData = req.body;
+  if (!courtData || !courtData.id || !courtData.name) {
+    return res.status(400).json({ success: false, message: 'Invalid court payload: id and name are required' });
+  }
+
+  const existingIdx = store.courts.findIndex(c => c.id === courtData.id);
+  if (existingIdx !== -1) {
+    store.courts[existingIdx] = { ...store.courts[existingIdx], ...courtData };
+  } else {
+    store.courts.push(courtData);
+  }
+
+  SupabaseService.upsertCourt(courtData).catch(err => console.warn('Supabase upsert court error:', err.message));
+  console.log(`🏟️ [API] Court '${courtData.name}' (${courtData.id}) saved to server store.`);
+  res.json({ success: true, court: courtData, courts: store.getCourts() });
+});
+
+apiRouter.put('/courts/:id', async (req, res) => {
+  const { id } = req.params;
+  const updates = req.body;
+  const existingIdx = store.courts.findIndex(c => c.id === id);
+  let savedCourt;
+
+  if (existingIdx !== -1) {
+    store.courts[existingIdx] = { ...store.courts[existingIdx], ...updates, id };
+    savedCourt = store.courts[existingIdx];
+  } else {
+    savedCourt = { ...updates, id };
+    store.courts.push(savedCourt);
+  }
+
+  SupabaseService.upsertCourt(savedCourt).catch(err => console.warn('Supabase update court error:', err.message));
+  console.log(`🏟️ [API] Court '${savedCourt.name}' (${id}) updated in server store.`);
+  res.json({ success: true, court: savedCourt, courts: store.getCourts() });
+});
+
+apiRouter.delete('/courts/:id', async (req, res) => {
+  const { id } = req.params;
+  const courtIdx = store.courts.findIndex(c => c.id === id);
+  let courtName = id;
+
+  if (courtIdx !== -1) {
+    courtName = store.courts[courtIdx].name;
+    store.courts.splice(courtIdx, 1);
+  }
+
+  // Release any active locks for this court
+  for (const [key, lock] of store.locks.entries()) {
+    if (lock.courtId === id) store.locks.delete(key);
+  }
+
+  // Delete from Supabase
+  SupabaseService.deleteCourt(id).catch(err => console.warn('Supabase delete court error:', err.message));
+
+  console.log(`🗑️ [API] Court '${courtName}' (${id}) deleted from server store. Remaining: ${store.courts.length}`);
+  res.json({ success: true, message: `Court '${courtName}' deleted successfully.`, courts: store.getCourts() });
+});
+
+apiRouter.post('/courts/sync', async (req, res) => {
+  const { courts } = req.body;
+  if (Array.isArray(courts) && courts.length > 0) {
+    const active = courts.filter(c => c && c.id && c.status !== 'inactive');
+    const prevKey = store.courts.map(c => c.id).sort().join(',');
+    const newKey = active.map(c => c.id).sort().join(',');
+    store.courts = active;
+    if (prevKey !== newKey) {
+      console.log(`🔄 [API] Updated server courts array with ${store.courts.length} active courts from admin client.`);
+    }
+    return res.json({ success: true, count: store.courts.length, courts: store.getCourts() });
+  }
+
+  await SupabaseService.refreshCourts(store);
+  res.json({ success: true, count: store.courts.length, courts: store.getCourts() });
 });
 
 /**
@@ -426,12 +539,12 @@ apiRouter.post('/whatsapp/disconnect', async (req, res) => {
 apiRouter.get('/bookings/:ref/pass.pdf', async (req, res) => {
   try {
     const ref = req.params.ref;
-    const fallback = {
-      start_time: req.query.start_time || req.query.start,
-      end_time: req.query.end_time || req.query.end,
-      court_name: req.query.court,
-      total_amount: req.query.amount ? Number(req.query.amount) : undefined
-    };
+    const fallback = {};
+    if (req.query.start_time || req.query.start) fallback.start_time = req.query.start_time || req.query.start;
+    if (req.query.end_time || req.query.end) fallback.end_time = req.query.end_time || req.query.end;
+    if (req.query.court) fallback.court_name = req.query.court;
+    if (req.query.amount) fallback.total_amount = Number(req.query.amount);
+
     const booking = await findOrResolveBooking(ref, fallback);
     if (!booking) {
       return res.status(404).send('Booking not found');
@@ -475,12 +588,12 @@ apiRouter.post('/bookings/generate-pass-pdf', async (req, res) => {
 apiRouter.get('/bookings/:ref/pass', async (req, res) => {
   try {
     const ref = req.params.ref;
-    const fallback = {
-      start_time: req.query.start_time || req.query.start,
-      end_time: req.query.end_time || req.query.end,
-      court_name: req.query.court,
-      total_amount: req.query.amount ? Number(req.query.amount) : undefined
-    };
+    const fallback = {};
+    if (req.query.start_time || req.query.start) fallback.start_time = req.query.start_time || req.query.start;
+    if (req.query.end_time || req.query.end) fallback.end_time = req.query.end_time || req.query.end;
+    if (req.query.court) fallback.court_name = req.query.court;
+    if (req.query.amount) fallback.total_amount = Number(req.query.amount);
+
     const booking = await findOrResolveBooking(ref, fallback);
     if (!booking) {
       return res.status(404).send('Booking not found');

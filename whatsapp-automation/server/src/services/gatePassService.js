@@ -125,11 +125,15 @@ export class GatePassService {
             .text(value, xPos, yPos + 12);
         };
 
-        const slotTimeDisplay = booking.formatted_slots || 
-          (Array.isArray(booking.all_slots) && booking.all_slots.length > 0
-            ? booking.all_slots.map(s => `${WhatsAppFormatter.formatTime(s.start_time)} — ${WhatsAppFormatter.formatTime(s.end_time)}`).join(', ')
-            : `${WhatsAppFormatter.formatTime(booking.start_time)} — ${WhatsAppFormatter.formatTime(booking.end_time)}`);
-        const totalAmountDisplay = `INR ${booking.total_order_amount || booking.total_amount} (PAID)`;
+        const validSlots = Array.isArray(booking.all_slots) ? booking.all_slots.filter(s => s.start_time && s.end_time) : [];
+        const slotTimeDisplay = booking.formatted_slots && !booking.formatted_slots.includes('undefined') && booking.formatted_slots.trim() !== '–'
+          ? booking.formatted_slots
+          : (validSlots.length > 0
+            ? validSlots.map(s => `${WhatsAppFormatter.formatTime(s.start_time)} — ${WhatsAppFormatter.formatTime(s.end_time)}`).join(', ')
+            : (booking.start_time && booking.end_time
+                ? `${WhatsAppFormatter.formatTime(booking.start_time)} — ${WhatsAppFormatter.formatTime(booking.end_time)}`
+                : 'Confirmed Match Slot'));
+        const totalAmountDisplay = `INR ${booking.total_order_amount || booking.total_amount || 0} (PAID)`;
 
         drawField('Booking Reference', booking.booking_ref, 70, y + 15, true);
         drawField('Reserved Pitch', courtName, 310, y + 15);
@@ -340,9 +344,11 @@ export class GatePassService {
             Reserved Slots
           </span>
           <span class="info-value" style="color: #006b30; font-weight: 700;">${
-            Array.isArray(booking.all_slots) && booking.all_slots.length > 0
-              ? booking.all_slots.map(s => `${getTimeOfDaySvg(s.start_time)}${WhatsAppFormatter.formatTime(s.start_time)} – ${getTimeOfDaySvg(s.end_time)}${WhatsAppFormatter.formatTime(s.end_time)}`).join(', ')
-              : `${getTimeOfDaySvg(booking.start_time)}${WhatsAppFormatter.formatTime(booking.start_time)} – ${getTimeOfDaySvg(booking.end_time)}${WhatsAppFormatter.formatTime(booking.end_time)}`
+            Array.isArray(booking.all_slots) && booking.all_slots.filter(s => s.start_time && s.end_time).length > 0
+              ? booking.all_slots.filter(s => s.start_time && s.end_time).map(s => `${getTimeOfDaySvg(s.start_time)}${WhatsAppFormatter.formatTime(s.start_time)} – ${getTimeOfDaySvg(s.end_time)}${WhatsAppFormatter.formatTime(s.end_time)}`).join(', ')
+              : (booking.start_time && booking.end_time
+                  ? `${getTimeOfDaySvg(booking.start_time)}${WhatsAppFormatter.formatTime(booking.start_time)} – ${getTimeOfDaySvg(booking.end_time)}${WhatsAppFormatter.formatTime(booking.end_time)}`
+                  : 'Confirmed Match Slot')
           }</span>
         </div>
         <div class="info-item">

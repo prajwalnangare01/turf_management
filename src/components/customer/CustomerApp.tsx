@@ -15,7 +15,9 @@ import { CheckoutModal } from './CheckoutModal';
 import { BookingConfirmationModal } from './BookingConfirmationModal';
 import { BookingLookupModal } from './BookingLookupModal';
 import { ActiveCustomerHoldModal } from '../common/ActiveCustomerHoldModal';
+import { ConfirmModal } from '../common/ConfirmModal';
 import { formatTimeRange12h, formatTime12hPlain, formatTimeRange12hPlain, formatDateDDMMYYYY } from '../../utils/formatters';
+import { getVenueDateString, getVenueNow } from '../../utils/venueTime';
 import { DEFAULT_SPORT_FALLBACK_IMAGE } from '../../utils/imageUpload';
 import { CustomerPortalSkeleton, PitchGridSkeleton, SportCardsSkeleton } from '../common/SkeletonLoaders';
 import { ChevronRight, Search, UserCheck, User, LogOut, ShieldCheck, Clock, Calendar, Lock, MapPin, Phone, FileText, RotateCcw, X } from 'lucide-react';
@@ -56,6 +58,7 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
   // View state: 'booking' vs 'profile' vs 'policies'
   const [customerView, setCustomerView] = useState<'booking' | 'profile' | 'policies'>('booking');
   const [initialPolicySection, setInitialPolicySection] = useState<PolicySection>('helpline');
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   // Filter sports to only those that have active courts configured at this venue
   const activeCourts = allCourts.filter(c => c.status === 'active');
@@ -153,16 +156,19 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
   const [authPromptMessage, setAuthPromptMessage] = useState<string | null>(null);
   const [pendingSlotToSelect, setPendingSlotToSelect] = useState<DynamicSlot | null>(null);
 
-  // Date strip setup (next 14 days)
-  const todayStr = new Date().toISOString().split('T')[0];
+  // Date strip setup (next 14 days in Asia/Kolkata timezone)
+  const todayStr = getVenueDateString(0);
   const [selectedDate, setSelectedDate] = useState<string>(() => {
-    return preservedDate || todayStr;
+    if (preservedDate && preservedDate >= todayStr) {
+      return preservedDate;
+    }
+    return todayStr;
   });
 
   const dateStrip = Array.from({ length: 14 }, (_, i) => {
-    const d = new Date();
+    const iso = getVenueDateString(i);
+    const d = getVenueNow();
     d.setDate(d.getDate() + i);
-    const iso = d.toISOString().split('T')[0];
     const dayName = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : d.toLocaleDateString('en-US', { weekday: 'short' });
     const dayNum = d.getDate();
     const monthName = d.toLocaleDateString('en-US', { month: 'short' });
@@ -511,19 +517,15 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
 
   const handleFilterClick = (filter: 'today' | 'tomorrow' | 'weekend' | 'all') => {
     setActiveFilter(filter);
-    const now = new Date();
     if (filter === 'today') {
       setSelectedDate(todayStr);
     } else if (filter === 'tomorrow') {
-      const tom = new Date();
-      tom.setDate(tom.getDate() + 1);
-      setSelectedDate(tom.toISOString().split('T')[0]);
+      setSelectedDate(getVenueDateString(1));
     } else if (filter === 'weekend') {
-      const day = now.getDay();
+      const vNow = getVenueNow();
+      const day = vNow.getDay();
       const diffToSat = (6 - day + 7) % 7;
-      const sat = new Date();
-      sat.setDate(sat.getDate() + diffToSat);
-      setSelectedDate(sat.toISOString().split('T')[0]);
+      setSelectedDate(getVenueDateString(diffToSat));
     }
     // Release locks for previously selected slots on date switch
     if (selectedCourt && selectedSlots.length > 0) {
@@ -701,7 +703,7 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
               </button>
 
               <button
-                onClick={handleCustomerLogout}
+                onClick={() => setShowLogoutConfirm(true)}
                 title="Sign Out"
                 className="w-9 h-9 rounded-full text-on-surface-variant hover:text-error hover:bg-error/10 transition border border-outline-variant/40 flex items-center justify-center cursor-pointer shadow-xs shrink-0"
               >
@@ -1066,6 +1068,21 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
           onClose={() => setSelectedHoldSlot(null)}
         />
       )}
+
+      {/* Logout Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showLogoutConfirm}
+        title="Confirm Sign Out"
+        message="Are you sure you want to sign out of your TurfFlow account?"
+        confirmText="Yes, Sign Out"
+        cancelText="Cancel"
+        variant="danger"
+        onConfirm={() => {
+          setShowLogoutConfirm(false);
+          handleCustomerLogout();
+        }}
+        onCancel={() => setShowLogoutConfirm(false)}
+      />
     </div>
   );
 };

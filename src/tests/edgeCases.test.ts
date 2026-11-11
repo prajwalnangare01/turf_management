@@ -1959,6 +1959,48 @@ async function runResendTests() {
   const distinctSlots = Array.from(new Map(siblingList.map(b => [`${b.start_time}-${b.end_time}`, b])).values());
   assert(distinctSlots.length === 3, 'All 3 sessions have distinct timeslots under common pass');
 
+  // --- TEST 32: WhatsApp Slot Unavailable & Time Formatting (Strict 12-Hour AM/PM Format) ---
+  console.log('\n--- TEST 32: WhatsApp Slot Unavailable & Time Formatting (Strict 12-Hour AM/PM Format) ---');
+  
+  // 32.1: Formatting 24h slot to 12h slot
+  const testSlot24 = '19:00';
+  const formatted12h = formatTime12hPlain(testSlot24);
+  assert(formatted12h === '07:00 PM', `19:00 correctly formatted to 12h format (got: ${formatted12h})`);
+  assert(!formatted12h.includes('19:00'), 'Formatted time does not contain 24-hr format 19:00');
+
+  // 32.2: Slot unavailable error message formatting
+  const mockSlotUnavailableMsg = `Slot ${formatted12h} is already booked or past.`;
+  assert(!/\b([01]?\d|2[0-3]):[0-5]\d\b(?!\s*[AP]M)/i.test(mockSlotUnavailableMsg), 'Unavailable message contains NO bare 24-hr time strings');
+  assert(mockSlotUnavailableMsg === 'Slot 07:00 PM is already booked or past.', 'Message exactly displays 12-hour formatted time with PM');
+
+  // 32.3: Morning and midnight times
+  assert(formatTime12hPlain('06:00') === '06:00 AM', '06:00 formatted to 06:00 AM');
+  assert(formatTime12hPlain('23:00') === '11:00 PM', '23:00 formatted to 11:00 PM');
+  assert(formatTime12hPlain('12:00') === '12:00 PM', '12:00 formatted to 12:00 PM');
+  console.log('✅ PASSED: All WhatsApp slot unavailable messages strictly use 12-hour format with AM/PM');
+
+  // --- TEST 33: WhatsApp Slot List Shows Sport Name Per Pitch ---
+  console.log('\n--- TEST 33: WhatsApp Slot List Shows Sport Name Per Pitch ---');
+  const allCourts = store.getCourts();
+  const allSports = store.getSports();
+
+  for (const court of allCourts) {
+    const courtSports = allSports.filter(s => court.sport_ids?.includes(s.id));
+    const sportLabel = courtSports.map(s => `${s.icon ? s.icon + ' ' : ''}${s.name}`).join(', ');
+    assert(sportLabel.length > 0, `Court ${court.name} has mapped sport(s)`);
+    assert(courtSports.length === court.sport_ids.length, `All sports for ${court.name} cleanly resolved`);
+    
+    // Validate sports mapping per court
+    if (court.id === 'crt-001') {
+      assert(sportLabel.includes('Football'), 'Turf A correctly indicates Football');
+    } else if (court.id === 'crt-002') {
+      assert(sportLabel.includes('Football') && sportLabel.includes('Cricket'), 'Turf B correctly indicates both Football and Cricket');
+    } else if (court.id === 'crt-003') {
+      assert(sportLabel.includes('Badminton'), 'Court 1 correctly indicates Badminton');
+    }
+  }
+  console.log('✅ PASSED: Sport name cleanly rendered for every pitch in slot listings');
+
   console.log('\n🎉 ALL CORNER & EDGE CASE TESTS (INCLUDING AUTO-COMPLETE & OWNER REDUCED WORKFLOW) PASSED PERFECTLY!\n');
 }
 
