@@ -82,6 +82,14 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onSwitchToCustomer }) => {
     }
   };
 
+  // Re-render when store updates via Supabase Realtime (must run before any early return)
+  const [, setStoreVersion] = useState(0);
+  useEffect(() => {
+    return store.subscribe(() => {
+      setStoreVersion(v => v + 1);
+    });
+  }, []);
+
   // If not authenticated, render Login Page Guard
   if (!currentAdmin) {
     return (
@@ -91,14 +99,6 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onSwitchToCustomer }) => {
       />
     );
   }
-
-  // Re-render when store updates via Supabase Realtime
-  const [, setStoreVersion] = useState(0);
-  useEffect(() => {
-    return store.subscribe(() => {
-      setStoreVersion(v => v + 1);
-    });
-  }, []);
 
   // Compute metrics
   const bookings = store.getBookings();
