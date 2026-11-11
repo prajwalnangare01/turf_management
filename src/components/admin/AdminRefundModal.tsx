@@ -134,8 +134,9 @@ export const AdminRefundModal: React.FC<AdminRefundModalProps> = ({
 
     setIsSubmitting(true);
     const finalReason = reason.trim();
+    const targetStatus = refundAmount > 0 ? 'refunded' : 'cancelled';
 
-    const result = PostgresEngine.updateBookingStatus(booking.id, 'refunded', {
+    const result = PostgresEngine.updateBookingStatus(booking.id, targetStatus, {
       refundAmount,
       refundReason: finalReason,
       adminId: currentAdmin.id,
@@ -471,7 +472,7 @@ export const AdminRefundModal: React.FC<AdminRefundModalProps> = ({
               className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-headline font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs disabled:opacity-50 transition-colors"
             >
               <RotateCcw className="w-4 h-4" />
-              {isSubmitting ? 'Processing Refund...' : `Confirm Refund of ₹${refundAmount}`}
+              {isSubmitting ? 'Processing Refund...' : refundAmount > 0 ? `Authorize & Issue Refund of ₹${refundAmount}` : 'Confirm Zero Refund (Keep Cancelled)'}
             </button>
           </div>
         </form>

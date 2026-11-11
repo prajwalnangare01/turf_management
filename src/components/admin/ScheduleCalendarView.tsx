@@ -710,7 +710,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
               </div>
 
               {/* Refund Info Banner (if applicable) */}
-              {selectedBooking.refund_amount !== undefined && (
+              {selectedBooking.status === 'refunded' && selectedBooking.refund_amount !== undefined && selectedBooking.refund_amount > 0 && (
                 <div className="bg-red-50 border border-red-200 p-2.5 rounded-xl text-red-900 space-y-1">
                   <div className="flex justify-between font-bold text-xs">
                     <span>Refunded Amount:</span>

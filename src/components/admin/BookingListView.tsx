@@ -298,7 +298,7 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
                     }`}>
                       {(b.status || 'unknown').replace('_', ' ')}
                     </span>
-                    {b.refund_amount !== undefined && b.refund_amount > 0 && (
+                    {b.status === 'refunded' && b.refund_amount !== undefined && b.refund_amount > 0 && (
                       <span className="text-[10px] font-bold text-purple-700 block mt-0.5 font-mono">
                         Refund: ₹{b.refund_amount}
                       </span>
@@ -383,11 +383,11 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
                   {['confirmed', 'completed', 'cancelled', 'refunded'].includes(b.status) && (
                     <button
                       onClick={() => setRefundModalBooking(b)}
-                      className="px-2 py-1.5 bg-purple-50 text-purple-900 border border-purple-300 rounded-lg font-bold text-[10px] hover:bg-purple-100 flex items-center justify-center gap-1"
-                      title={b.status === 'refunded' ? 'Adjust Refund Amount' : 'Process Refund'}
+                      className="px-2 py-1.5 bg-purple-50 text-purple-900 border border-purple-300 rounded-lg font-bold text-[10px] hover:bg-purple-100 flex items-center justify-center gap-1 shadow-2xs transition-colors"
+                      title={b.status === 'refunded' ? 'Adjust Refund Amount' : 'Open Refund Manager to Set Amount'}
                     >
                       <RotateCcw className="w-3.5 h-3.5 text-purple-700" />
-                      {b.status === 'refunded' ? 'Adjust Refund' : 'Refund'}
+                      {b.status === 'refunded' ? `Adjust (₹${b.refund_amount || 0})` : b.status === 'cancelled' ? 'Issue Refund' : 'Refund'}
                     </button>
                   )}
                 </div>
@@ -484,7 +484,7 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
                       }`}>
                         {b.status === 'pending_payment' ? 'Pending Payment' : (b.status || 'unknown').replace('_', ' ')}
                       </span>
-                      {b.refund_amount !== undefined && b.refund_amount > 0 && (
+                      {b.status === 'refunded' && b.refund_amount !== undefined && b.refund_amount > 0 && (
                         <div className="text-[10px] font-bold text-purple-700 font-mono mt-0.5">
                           Refund: ₹{b.refund_amount}
                         </div>
@@ -528,10 +528,10 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
                           <button
                             onClick={() => setRefundModalBooking(b)}
                             className="px-2.5 py-1 bg-purple-50 text-purple-900 border border-purple-300 rounded-lg font-bold text-[10px] hover:bg-purple-100 flex items-center gap-1 transition-colors shadow-2xs"
-                            title={b.status === 'refunded' ? 'Adjust Refund Amount / Details' : 'Process Refund for Booking'}
+                            title={b.status === 'refunded' ? 'Adjust Refund Amount / Details' : 'Open Refund Manager to Set Amount'}
                           >
                             <RotateCcw className="w-3.5 h-3.5 text-purple-700" />
-                            {b.status === 'refunded' ? 'Adjust' : 'Refund'}
+                            {b.status === 'refunded' ? `Adjust (₹${b.refund_amount || 0})` : b.status === 'cancelled' ? 'Issue Refund' : 'Refund'}
                           </button>
                         )}
                         {!['confirmed', 'completed', 'cancelled', 'refunded'].includes(b.status) && (

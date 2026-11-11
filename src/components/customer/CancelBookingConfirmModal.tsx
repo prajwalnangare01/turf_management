@@ -74,10 +74,10 @@ export const CancelBookingConfirmModal: React.FC<CancelBookingConfirmModalProps>
     setErrorMessage(null);
     try {
       const reason = metTerms
-        ? `Customer cancellation (${diffHours.toFixed(1)}h notice, met >= ${cutoffHours}h terms, ${refundPercentage}% refund)`
-        : `Customer cancellation (${diffHours.toFixed(1)}h notice, terms not met (< ${cutoffHours}h), ₹0 refund)`;
+        ? `Customer cancellation (${diffHours.toFixed(1)}h notice, met >= ${cutoffHours}h terms). Pending admin review.`
+        : `Customer cancellation (${diffHours.toFixed(1)}h notice, terms not met (< ${cutoffHours}h)). Non-refundable.`;
 
-      const res = await onConfirmed(refundAmount, reason, metTerms, Math.max(0, diffHours));
+      const res = await onConfirmed(0, reason, metTerms, Math.max(0, diffHours));
       if (res && typeof res === 'object' && res.success === false) {
         setErrorMessage(res.message || 'Unable to cancel reservation. Please try again.');
         setIsSubmitting(false);
@@ -115,17 +115,17 @@ export const CancelBookingConfirmModal: React.FC<CancelBookingConfirmModalProps>
             </div>
           </div>
 
-          {/* Refund Breakdown Card */}
-          {refundAmount > 0 ? (
+          {/* Refund Review Card */}
+          {metTerms ? (
             <div className="bg-emerald-50/90 border border-emerald-200 rounded-2xl p-4 text-center space-y-1.5 shadow-2xs">
               <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 block">
-                Refund Initiated
+                Cancellation Request Confirmed
               </span>
-              <div className="font-headline font-black text-3xl text-emerald-700">
-                ₹{refundAmount}
+              <div className="font-headline font-bold text-base text-emerald-900">
+                Eligible for Refund (Up to ₹{refundAmount})
               </div>
               <p className="text-xs text-emerald-950/80 font-medium pt-0.5">
-                Credited back to your original payment method within <strong className="font-bold text-emerald-950">{businessDays} business days</strong>.
+                You met the advance notice cut-off policy. Any refund is reviewed, authorized, and processed directly by venue management.
               </p>
             </div>
           ) : (
@@ -133,11 +133,11 @@ export const CancelBookingConfirmModal: React.FC<CancelBookingConfirmModalProps>
               <span className="text-[11px] font-bold uppercase tracking-wider text-gray-600 block">
                 Non-Refundable Cancellation
               </span>
-              <div className="font-headline font-black text-2xl text-gray-700">
-                ₹0 Refund
+              <div className="font-headline font-bold text-base text-gray-700">
+                Inside {cutoffHours}h Window
               </div>
               <p className="text-xs text-gray-600 font-medium pt-0.5">
-                Cancelled within the {cutoffHours}-hour matchday cut-off window. As per venue policy, no refund is applicable.
+                Cancelled within the {cutoffHours}-hour matchday cut-off window. As per venue policy, match cancellations inside this window are non-refundable.
               </p>
             </div>
           )}
@@ -271,15 +271,15 @@ export const CancelBookingConfirmModal: React.FC<CancelBookingConfirmModalProps>
               <span>Cancellation Terms Met ({cutoffHours}h Policy)</span>
             </div>
 
-            {/* Refund Highlight */}
+            {/* Refund Eligibility Highlight */}
             <div className="bg-white/90 p-2 rounded-lg border border-emerald-200/60 flex items-center justify-between">
               <div>
-                <span className="text-[10px] text-on-surface-variant font-medium block">Refund ({refundPercentage}%)</span>
-                <span className="font-headline font-black text-lg text-emerald-700">₹{refundAmount}</span>
+                <span className="text-[10px] text-on-surface-variant font-medium block">Refund Policy Eligibility ({refundPercentage}%)</span>
+                <span className="font-headline font-black text-lg text-emerald-700">Up to ₹{refundAmount}</span>
               </div>
               <div className="text-right">
-                <span className="text-[10px] text-on-surface-variant block font-bold">Original Payment Method</span>
-                <span className="text-[10px] text-emerald-800 font-medium">{businessDays} business days</span>
+                <span className="text-[10px] text-on-surface-variant block font-bold">Admin Authorization</span>
+                <span className="text-[10px] text-emerald-800 font-medium">Reviewed by Venue</span>
               </div>
             </div>
           </div>
@@ -293,7 +293,7 @@ export const CancelBookingConfirmModal: React.FC<CancelBookingConfirmModalProps>
             {/* Refund Zero Highlight */}
             <div className="bg-white/90 p-2 rounded-lg border border-amber-200/60 flex items-center justify-between">
               <div>
-                <span className="text-[10px] text-on-surface-variant font-medium block">Refund Amount</span>
+                <span className="text-[10px] text-on-surface-variant font-medium block">Refund Policy</span>
                 <span className="font-headline font-black text-lg text-red-600">₹0</span>
               </div>
               <div className="text-right">
@@ -333,7 +333,7 @@ export const CancelBookingConfirmModal: React.FC<CancelBookingConfirmModalProps>
               }`}
             >
               <RotateCcw className="w-3 h-3" />
-              {isSubmitting ? 'Cancelling...' : metTerms ? `Cancel (₹${refundAmount})` : 'Cancel (₹0)'}
+              {isSubmitting ? 'Cancelling...' : 'Cancel Reservation'}
             </button>
           )}
         </div>

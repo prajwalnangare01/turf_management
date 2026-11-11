@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
 import { store } from '../../services/store';
 import { PostgresEngine } from '../../services/postgresEngine';
-import { Customer, Booking } from '../../types/schema';
+import { Customer, Booking, BookingStatus } from '../../types/schema';
 import { formatTimeRange12h, formatTime12hPlain, formatTimeRange12hPlain, formatDateDDMMYYYY, formatPhoneNumber, getBookingGatePassOtp, getBookingGroupRef } from '../../utils/formatters';
-import { TimeOfDayIcon } from '../common/TimeOfDayIcon';
+import { TimeOfDayIcon, getTimeOfDaySvg } from '../common/TimeOfDayIcon';
 import { CancelBookingConfirmModal } from './CancelBookingConfirmModal';
 import { 
   User, Phone, Mail, Calendar, ArrowLeft, ShieldCheck, Ticket, 
@@ -242,17 +242,19 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
   };
 
   const handleExecuteCancellation = (
-    refundAmount: number, 
+    _refundAmount: number, 
     refundReason: string, 
     metTerms: boolean, 
     noticeHours: number
   ) => {
     if (!cancelModalBooking) return { success: false, message: 'No reservation selected' };
     const targetBooking = cancelModalBooking;
-    const nextStatus: 'refunded' | 'cancelled' = refundAmount > 0 ? 'refunded' : 'cancelled';
+    // Cancellations always set status to 'cancelled' with refund_amount: 0.
+    // Refunds are never issued automatically — an admin must review and issue refunds from the Booking Directory.
+    const nextStatus: BookingStatus = 'cancelled';
 
     const result = PostgresEngine.updateBookingStatus(targetBooking.id, nextStatus, {
-      refundAmount,
+      refundAmount: 0,
       refundReason,
       cancelledBy: 'customer',
       noticeHours,
@@ -265,7 +267,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
         const updated = prev.map(b => b.id === targetBooking.id ? { 
           ...b, 
           status: nextStatus,
-          refund_amount: refundAmount,
+          refund_amount: 0,
           refund_reason: refundReason,
           cancelled_by: 'customer' as const,
           cancellation_notice_hours: noticeHours,
@@ -551,6 +553,261 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
     }
   };
 
+  const handlePrintPass = (booking: Booking) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const allBookings = store.getBookings();
+    const groupRef = getBookingGroupRef(booking);
+    const siblingBookings = allBookings.filter(b => 
+      getBookingGroupRef(b) === groupRef ||
+      (b.group_ref && b.group_ref === groupRef) || 
+      b.booking_ref === groupRef || 
+      (booking.gateway_payment_id && booking.gateway_payment_id !== '' && b.gateway_payment_id === booking.gateway_payment_id)
+    );
+    const isActiveBooking = booking.status !== 'cancelled' && booking.status !== 'refunded';
+    const validSiblings = isActiveBooking
+      ? siblingBookings.filter(b => b.status !== 'cancelled' && b.status !== 'refunded')
+      : siblingBookings.filter(b => b.id === booking.id);
+
+    const allSlots = Array.from(new Map(validSiblings.map(b => [`${b.start_time}-${b.end_time}`, {
+      start_time: b.start_time,
+      end_time: b.end_time,
+      price: b.total_amount,
+      booking_ref: b.booking_ref
+    }])).values()).sort((a, b) => a.start_time.localeCompare(b.start_time));
+
+    const grandTotal = validSiblings.length > 0 
+      ? validSiblings.reduce((sum, b) => sum + (b.total_amount || 0), 0)
+      : booking.total_amount;
+
+    const otpCode = getBookingGatePassOtp(booking);
+    const court = courts.find(c => c.id === booking.court_id);
+    const cleanPhone = formatPhoneNumber(currentCustomer.phone);
+    const hasMultipleSlots = allSlots.length > 1;
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Venue Entry Pass - ${booking.booking_ref}</title>
+        <meta charset="utf-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+        <style>
+          body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background: #f8fafc; color: #0f172a; margin: 0; padding: 24px; }
+          .ticket-card { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 16px; border: 2px solid #006b30; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+          .ticket-header { background: #006b30; color: #ffffff; padding: 24px; text-align: center; }
+          .ticket-header h1 { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.5px; }
+          .ticket-header p { margin: 6px 0 0 0; font-size: 12px; font-weight: 700; opacity: 0.9; text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+          .ticket-body { padding: 24px; }
+          .otp-box { background: #fffbeb; color: #92400e; text-align: center; padding: 20px; border-radius: 14px; margin: 16px 0; border: 2px dashed #f59e0b; }
+          .otp-title { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+          .otp-code { font-size: 42px; font-weight: 900; font-family: monospace; letter-spacing: 12px; margin: 8px 0; color: #b45309; }
+          .slot-hero { margin: 16px 0; border: 2px solid #006b30; border-radius: 12px; background: #f0fdf4; padding: 14px; text-align: center; }
+          .slot-hero-title { font-size: 11px; font-weight: 800; color: #166534; text-transform: uppercase; letter-spacing: 0.8px; }
+          .slot-hero-time { font-size: 20px; font-weight: 900; color: #006b30; margin: 6px 0; display: flex; align-items: center; justify-content: center; gap: 6px; }
+          .slot-hero-sub { font-size: 11.5px; color: #15803d; font-weight: 700; }
+          .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 20px; border-top: 1px solid #e2e8f0; padding-top: 20px; }
+          .info-item { font-size: 13px; }
+          .info-label { color: #64748b; font-size: 11px; text-transform: uppercase; font-weight: 700; display: flex; align-items: center; gap: 5px; margin-bottom: 3px; }
+          .info-value { font-weight: 700; color: #0f172a; }
+          .ticket-footer { background: #f1f4f6; text-align: center; padding: 16px; font-size: 11px; color: #64748b; border-top: 1px solid #e2e8f0; }
+          .no-print-bar { max-width: 600px; margin: 0 auto 16px auto; display: flex; justify-content: space-between; align-items: center; }
+          .btn-print { background: #006b30; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: bold; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; font-size: 13px; }
+          @media print {
+            body { background: white; padding: 0; }
+            .no-print { display: none !important; }
+            .ticket-card { box-shadow: none; border-color: #006b30; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="no-print no-print-bar">
+          <span style="font-size: 13px; color: #64748b; font-weight: 600;">Turf Official Gate Pass & Payment Receipt</span>
+          <button onclick="window.print()" class="btn-print">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>
+            Save as PDF / Print Pass
+          </button>
+        </div>
+
+        <div class="ticket-card">
+          <div class="ticket-header">
+            <h1>${venue.name}</h1>
+            <p>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              OFFICIAL VENUE ENTRY PASS & RECEIPT
+            </p>
+          </div>
+
+          <div class="ticket-body">
+            <!-- 4-Digit Common Gate Check-in Pass -->
+            <div class="otp-box">
+              <div class="otp-title">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>
+                <span>4-Digit Common Gate Check-in Pass</span>
+              </div>
+              <div class="otp-code">${otpCode}</div>
+              <div style="font-size: 11px; font-weight: 700;">
+                ${hasMultipleSlots ? `Common Gate Pass valid for all ${allSlots.length} reserved sessions` : 'Show this 4-digit code to the gate manager for check-in'}
+              </div>
+            </div>
+
+            <!-- Primary Reserved Slot Callout (Exact Timing of THIS Booking) -->
+            <div class="slot-hero">
+              <div class="slot-hero-title">RESERVED SLOT TIMING</div>
+              <div class="slot-hero-time">
+                ${getTimeOfDaySvg(booking.start_time)}
+                <span>${formatTime12hPlain(booking.start_time)} – ${formatTime12hPlain(booking.end_time)}</span>
+              </div>
+              <div class="slot-hero-sub">
+                ${court?.name || 'Pitch'} &bull; ${formatDateDDMMYYYY(booking.booking_date)}
+              </div>
+            </div>
+
+            ${hasMultipleSlots ? `
+            <!-- All Sessions under Common Gate Pass -->
+            <div style="margin: 16px 0; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
+              <div style="background: #f1f5f9; padding: 10px 14px; font-size: 11px; font-weight: 800; color: #1e293b; display: flex; justify-content: space-between; letter-spacing: 0.5px;">
+                <span>ALL SESSIONS UNDER THIS COMMON GATE PASS (${allSlots.length} SESSIONS)</span>
+                <span style="color: #006b30; font-weight: 700;">COMMON PASS</span>
+              </div>
+              <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                <tbody>
+                  ${allSlots.map((s, idx) => {
+                    const isThis = (s.start_time === booking.start_time && s.end_time === booking.end_time) || (s.booking_ref && s.booking_ref === booking.booking_ref);
+                    return `
+                      <tr style="border-top: 1px solid #f1f5f9; background: ${isThis ? '#ecfdf5' : idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+                        <td style="padding: 10px 14px; font-weight: 700; color: ${isThis ? '#006b30' : '#475569'}; width: 30%;">
+                          Slot ${idx + 1}
+                          ${isThis ? '<span style="background: #006b30; color: #ffffff; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 800; margin-left: 6px;">THIS TICKET</span>' : ''}
+                        </td>
+                        <td style="padding: 10px 14px; font-weight: 800; color: ${isThis ? '#006b30' : '#0f172a'};">
+                          ${getTimeOfDaySvg(s.start_time)} ${formatTime12hPlain(s.start_time)} – ${getTimeOfDaySvg(s.end_time)} ${formatTime12hPlain(s.end_time)}
+                        </td>
+                        <td style="padding: 10px 14px; color: #64748b; text-align: right;">
+                          ₹${s.price || court?.base_price_per_hour || 0}
+                        </td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+            ` : ''}
+
+            <div class="info-grid">
+              <div class="info-item">
+                <span class="info-label">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 17v2"/><path d="M13 11v2"/></svg>
+                  Booking Reference
+                </span>
+                <span class="info-value" style="color: #006b30; font-family: monospace;">${booking.booking_ref}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+                  Reserved Pitch
+                </span>
+                <span class="info-value">${court?.name || 'Pitch'}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+                  Booking Date
+                </span>
+                <span class="info-value">${formatDateDDMMYYYY(booking.booking_date)}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  Reserved Slot
+                </span>
+                <span class="info-value" style="color: #006b30; font-weight: 800;">
+                  ${formatTime12hPlain(booking.start_time)} – ${formatTime12hPlain(booking.end_time)}
+                </span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                  Customer Name
+                </span>
+                <span class="info-value">${currentCustomer.name || 'Customer'}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                  Mobile Phone
+                </span>
+                <span class="info-value">${cleanPhone}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+                  Total Amount Paid
+                </span>
+                <span class="info-value" style="font-size: 15px; color: #006b30;">₹${booking.total_amount} (PAID)</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                  Payment Status
+                </span>
+                <span class="info-value" style="color: #006b30;">VERIFIED (Razorpay Live)</span>
+              </div>
+              ${hasMultipleSlots ? `
+              <div class="info-item" style="grid-column: span 2; background: #f8fafc; padding: 8px 12px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                <span class="info-label" style="margin-bottom: 2px;">Common Gate Pass Group</span>
+                <span style="font-family: monospace; font-size: 12px; color: #334155; font-weight: 700;">${groupRef} &bull; Total Order: ₹${grandTotal} for ${allSlots.length} sessions</span>
+              </div>
+              ` : ''}
+            </div>
+
+            <div style="margin-top: 20px; padding: 14px; background: #f8fafc; border-radius: 12px; font-size: 11px; color: #475569; border: 1px solid #e2e8f0; display: flex; gap: 16px; align-items: center;">
+              ${passLocationQrDataUrl ? `
+              <div style="text-align: center; flex-shrink: 0; background: #ffffff; padding: 6px; border-radius: 8px; border: 1px solid #cbd5e1;">
+                <img src="${passLocationQrDataUrl}" alt="Turf Location QR" style="width: 82px; height: 82px; display: block;" />
+                <span style="display: block; font-size: 8px; font-weight: 800; color: #006b30; text-transform: uppercase; margin-top: 4px; letter-spacing: 0.5px;">Scan Location</span>
+              </div>
+              ` : ''}
+              <div style="flex: 1; line-height: 1.6;">
+                <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+                  <strong>Venue Location:</strong> ${venue.address}
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                  <strong>GSTIN:</strong> ${venue.gst_number || '27AABCT1234F1Z0'} &bull; <strong>Contact:</strong> ${venue.contact_phone}
+                </div>
+                <div style="margin-top: 6px;">
+                  <a href="${venueLocationUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; gap: 5px; color: #006b30; font-weight: 800; text-decoration: none; background: #e8f5e9; padding: 4px 10px; border-radius: 6px; border: 1px solid #a5d6a7; font-size: 11px;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+                    Open Directions in Google Maps &rarr;
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="ticket-footer">
+            Thank you for booking with ${venue.name}. Please arrive 10 minutes prior to your slot time.
+          </div>
+        </div>
+
+        <script>
+          window.onload = function() {
+            setTimeout(function() {
+              window.print();
+            }, 300);
+          }
+        </script>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+  };
+
   const handleDownloadPdf = async (booking: Booking) => {
     setIsDownloadingPdf(true);
     try {
@@ -577,35 +834,37 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
         ? validSiblings.reduce((sum, b) => sum + (b.total_amount || 0), 0)
         : booking.total_amount;
 
-      const formattedSlots = allSlots.map(s => formatTimeRange12hPlain(s.start_time, s.end_time)).join(', ');
+      const singleSlotDisplay = `${formatTime12hPlain(booking.start_time)} – ${formatTime12hPlain(booking.end_time)}`;
       const otpCode = getBookingGatePassOtp(booking);
       const court = courts.find(c => c.id === booking.court_id);
 
       const fullPayload = {
         ...booking,
-        booking_ref: groupRef,
+        booking_ref: booking.booking_ref,
         group_ref: groupRef,
         court_name: court?.name || 'Turf Pitch',
         sport_name: court?.sport_ids?.join(' / ') || 'Football',
         customer_name: currentCustomer.name,
         customer_phone: currentCustomer.phone,
         gate_pass_otp: otpCode,
-        total_amount: grandTotal,
+        start_time: booking.start_time,
+        end_time: booking.end_time,
+        total_amount: booking.total_amount,
         total_order_amount: grandTotal,
-        all_slots: allSlots,
-        formatted_slots: formattedSlots
+        all_slots: [{ start_time: booking.start_time, end_time: booking.end_time, price: booking.total_amount }],
+        formatted_slots: singleSlotDisplay
       };
 
-      // 1. Try POST /api/bookings/generate-pass-pdf with complete multi-slot payload
+      // 1. Try POST /api/bookings/generate-pass-pdf with specific slot payload
       let res = await fetch('/api/bookings/generate-pass-pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ booking: fullPayload })
       });
 
-      // 2. Fallback to GET endpoint
+      // 2. Fallback to GET endpoint with specific booking ref and slot query params
       if (!res.ok) {
-        res = await fetch(`/api/bookings/${groupRef}/pass.pdf`);
+        res = await fetch(`/api/bookings/${booking.booking_ref}/pass.pdf?start_time=${encodeURIComponent(booking.start_time)}&end_time=${encodeURIComponent(booking.end_time)}`);
       }
 
       if (res.ok) {
@@ -613,7 +872,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `GatePass-${groupRef}.pdf`;
+        a.download = `GatePass-${booking.booking_ref}.pdf`;
         document.body.appendChild(a);
         a.click();
         setTimeout(() => {
@@ -624,8 +883,8 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
       }
       throw new Error(`PDF generation response status ${res.status}`);
     } catch (err) {
-      console.warn('PDF download failed, opening printable pass fallback:', err);
-      window.open(`/api/bookings/${booking.group_ref || booking.booking_ref}/pass`, '_blank');
+      console.warn('PDF direct download failed, opening printable pass fallback:', err);
+      handlePrintPass(booking);
     } finally {
       setIsDownloadingPdf(false);
     }
@@ -1268,11 +1527,12 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
           ? passSiblingBookings.filter(b => b.status !== 'cancelled' && b.status !== 'refunded')
           : passSiblingBookings.filter(b => b.id === passModalBooking.id);
 
-        const passSlots: Array<{ start_time: string; end_time: string; price?: number }> = 
+        const passSlots: Array<{ start_time: string; end_time: string; price?: number; booking_ref?: string }> = 
           Array.from(new Map(activeSiblingBookings.map(b => [`${b.start_time}-${b.end_time}`, {
             start_time: b.start_time,
             end_time: b.end_time,
-            price: b.total_amount
+            price: b.total_amount,
+            booking_ref: b.booking_ref
           }])).values()).sort((a, b) => a.start_time.localeCompare(b.start_time));
 
         const passGrandTotal = activeSiblingBookings.length > 0 
@@ -1408,20 +1668,30 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
 
                   <div>
                     <span className="text-[9.5px] font-bold text-on-surface-variant uppercase tracking-wider flex items-center gap-1">
-                      <Clock className="w-3 h-3 text-primary" /> Timing
+                      <Clock className="w-3 h-3 text-primary" /> Reserved Timing
                     </span>
-                    <span className="font-medium text-primary text-xs block mt-0.5 truncate">
-                      {passSlots.length > 1 ? `${passSlots.length} Sessions` : formatTime12hPlain(passModalBooking.start_time)}
+                    <span className="font-bold text-primary text-xs block mt-0.5 truncate">
+                      {formatTime12hPlain(passModalBooking.start_time)} – {formatTime12hPlain(passModalBooking.end_time)}
                     </span>
+                    {passSlots.length > 1 && (
+                      <span className="text-[9.5px] text-slate-500 font-medium block truncate">
+                        Common Pass ({passSlots.length} sessions)
+                      </span>
+                    )}
                   </div>
 
                   <div>
                     <span className="text-[9.5px] font-bold text-on-surface-variant uppercase tracking-wider flex items-center gap-1">
-                      <CreditCard className="w-3 h-3 text-primary" /> {isViewingActivePass ? 'Total Paid' : 'Amount'}
+                      <CreditCard className="w-3 h-3 text-primary" /> {isViewingActivePass ? 'Slot Amount' : 'Amount'}
                     </span>
                     <span className={`font-headline font-extrabold text-xs sm:text-sm block mt-0.5 ${isViewingActivePass ? 'text-[#006b30]' : 'text-red-700'}`}>
-                      ₹{passGrandTotal} {isViewingActivePass ? '(PAID)' : (passModalBooking.status === 'refunded' ? '(REFUNDED)' : '(CANCELLED)')}
+                      ₹{passModalBooking.total_amount} {isViewingActivePass ? '(PAID)' : (passModalBooking.status === 'refunded' ? '(REFUNDED)' : '(CANCELLED)')}
                     </span>
+                    {passSlots.length > 1 && (
+                      <span className="text-[9.5px] text-slate-500 font-medium block truncate">
+                        Total Order: ₹{passGrandTotal}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -1430,22 +1700,28 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
                   <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/80 space-y-1.5 text-left">
                     <div className="flex items-center justify-between text-[10px] font-headline font-bold text-slate-600 uppercase tracking-wider">
                       <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3 text-[#006b30]" /> Active Reserved Sessions ({passSlots.length})
+                        <Clock className="w-3 h-3 text-[#006b30]" /> All Sessions under Common Pass ({passSlots.length})
                       </span>
-                      <span className="text-[#006b30] font-black">Valid with Single OTP</span>
+                      <span className="text-[#006b30] font-black">Same 4-Digit OTP</span>
                     </div>
                     <div className="space-y-1">
-                      {passSlots.map((s, idx) => (
-                        <div key={idx} className="flex items-center justify-between px-2 py-1 rounded-lg bg-white border border-slate-200/60 text-xs">
-                          <span className="font-semibold text-slate-800 flex items-center gap-1.5">
-                            <TimeOfDayIcon time24={s.start_time} className="w-3.5 h-3.5" />
-                            <span>{formatTime12hPlain(s.start_time)} – {formatTime12hPlain(s.end_time)}</span>
-                          </span>
-                          {s.price != null && (
-                            <span className="font-headline font-bold text-[#006b30] text-xs">₹{s.price}</span>
-                          )}
-                        </div>
-                      ))}
+                      {passSlots.map((s, idx) => {
+                        const isCurrent = (s.start_time === passModalBooking.start_time && s.end_time === passModalBooking.end_time) || ((s as any).booking_ref && (s as any).booking_ref === passModalBooking.booking_ref);
+                        return (
+                          <div key={idx} className={`flex items-center justify-between px-2 py-1 rounded-lg border text-xs ${isCurrent ? 'bg-primary/10 border-primary/40 font-bold text-primary' : 'bg-white border-slate-200/60 text-slate-800'}`}>
+                            <span className="flex items-center gap-1.5">
+                              <span className={`text-[9.5px] font-bold px-1.5 py-0.2 rounded ${isCurrent ? 'bg-primary text-white' : 'bg-[#006b30]/10 text-[#006b30]'}`}>
+                                {isCurrent ? 'This Ticket' : `Slot ${idx + 1}`}
+                              </span>
+                              <TimeOfDayIcon time24={s.start_time} className="w-3.5 h-3.5" />
+                              <span>{formatTime12hPlain(s.start_time)} – {formatTime12hPlain(s.end_time)}</span>
+                            </span>
+                            {s.price != null && (
+                              <span className={`font-headline font-bold text-xs ${isCurrent ? 'text-primary' : 'text-[#006b30]'}`}>₹{s.price}</span>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -1504,12 +1780,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
 
                   <div className="grid grid-cols-2 gap-1.5">
                     <button
-                      onClick={() => {
-                        const printWin = window.open(`/api/bookings/${passGroupRef}/pass`, '_blank');
-                        if (printWin) {
-                          printWin.focus();
-                        }
-                      }}
+                      onClick={() => handlePrintPass(passModalBooking)}
                       className="btn-secondary py-1.5 text-xs font-headline font-bold flex items-center justify-center gap-1 border-slate-300 cursor-pointer"
                     >
                       <Printer className="w-3 h-3 text-slate-700" /> Print

@@ -104,21 +104,22 @@ async function findOrResolveBooking(ref, fallbackData = {}) {
   // 4. If reference matches a known pattern (e.g. TRF-), generate a clean synthetic pass
   if (cleanRef.startsWith('TRF-') || cleanRef.startsWith('BK-')) {
     const synthetic = {
-      id: `bk-${cleanRef}`,
+      id: fallbackData?.id || `bk-${cleanRef}`,
       booking_ref: cleanRef,
-      court_id: 'crt-001',
-      court_name: 'Turf A — FIFA 5-a-side Synthetic',
-      sport_id: 'sp-football',
-      customer_id: 'cust-101',
-      customer_name: 'Player',
-      customer_phone: '+919876543210',
-      booking_date: new Date().toISOString().slice(0, 10),
-      start_time: '18:00',
-      end_time: '19:00',
-      total_amount: 1600,
-      status: 'confirmed',
-      source: 'online',
-      created_at: new Date().toISOString()
+      court_id: fallbackData?.court_id || 'crt-001',
+      court_name: fallbackData?.court_name || 'Turf A — FIFA 5-a-side Synthetic',
+      sport_id: fallbackData?.sport_id || 'sp-football',
+      customer_id: fallbackData?.customer_id || 'cust-101',
+      customer_name: fallbackData?.customer_name || 'Player',
+      customer_phone: fallbackData?.customer_phone || '+919876543210',
+      booking_date: fallbackData?.booking_date || new Date().toISOString().slice(0, 10),
+      start_time: fallbackData?.start_time || '18:00',
+      end_time: fallbackData?.end_time || '19:00',
+      total_amount: fallbackData?.total_amount || 1600,
+      status: fallbackData?.status || 'confirmed',
+      source: fallbackData?.source || 'online',
+      created_at: new Date().toISOString(),
+      ...(fallbackData || {})
     };
     store.getBookings().push(synthetic);
     return synthetic;
@@ -425,7 +426,13 @@ apiRouter.post('/whatsapp/disconnect', async (req, res) => {
 apiRouter.get('/bookings/:ref/pass.pdf', async (req, res) => {
   try {
     const ref = req.params.ref;
-    const booking = await findOrResolveBooking(ref);
+    const fallback = {
+      start_time: req.query.start_time || req.query.start,
+      end_time: req.query.end_time || req.query.end,
+      court_name: req.query.court,
+      total_amount: req.query.amount ? Number(req.query.amount) : undefined
+    };
+    const booking = await findOrResolveBooking(ref, fallback);
     if (!booking) {
       return res.status(404).send('Booking not found');
     }
@@ -468,7 +475,13 @@ apiRouter.post('/bookings/generate-pass-pdf', async (req, res) => {
 apiRouter.get('/bookings/:ref/pass', async (req, res) => {
   try {
     const ref = req.params.ref;
-    const booking = await findOrResolveBooking(ref);
+    const fallback = {
+      start_time: req.query.start_time || req.query.start,
+      end_time: req.query.end_time || req.query.end,
+      court_name: req.query.court,
+      total_amount: req.query.amount ? Number(req.query.amount) : undefined
+    };
+    const booking = await findOrResolveBooking(ref, fallback);
     if (!booking) {
       return res.status(404).send('Booking not found');
     }

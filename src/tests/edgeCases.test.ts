@@ -16,7 +16,7 @@ import { NotificationService } from '../services/notificationService';
 import { ExcelExportService } from '../services/excelExportService';
 import { DataArchiveService } from '../services/dataArchiveService';
 import { AuditLogger } from '../services/auditLogger';
-import { formatTimeRange12h, formatDateDDMMYYYY, getBookingGatePassOtp, getBookingGroupRef } from '../utils/formatters';
+import { formatTimeRange12h, formatTime12hPlain, formatDateDDMMYYYY, getBookingGatePassOtp, getBookingGroupRef } from '../utils/formatters';
 import { Court, DynamicSlot, BlockedSlot, Booking } from '../types/schema';
 
 declare const process: { exit: (code: number) => void };
@@ -1856,6 +1856,108 @@ async function runResendTests() {
   const otherUserAcquire = RedisLockService.acquireLock(inactivityTestCourt.id, inactivityTestDate, testSlotTime, 'sess_other_user_2');
   assert(otherUserAcquire.success === true, 'Another user can immediately select the slot once 5-minute timeout deselects it');
   RedisLockService.releaseLock(inactivityTestCourt.id, inactivityTestDate, testSlotTime, 'sess_other_user_2');
+
+  // ==========================================
+  // TEST 31: Multi-Booking Pass & Print Accuracy — Exact Slot Timing Verification
+  // ==========================================
+  console.log('\n--- TEST 31: Multi-Booking Pass & Print Accuracy — Exact Slot Timing Verification ---');
+
+  const multiTestCommonOtp = '8899';
+  const multiTestGroupRef = 'TRF-GRP-MULTI-ACCURACY';
+  const multiTestDate = '2026-11-20';
+  const multiTestCourtId = 'crt-001';
+
+  const multiBooking1: Booking = {
+    id: 'bk-accuracy-1',
+    booking_ref: 'TRF-ACCURACY-01',
+    group_ref: multiTestGroupRef,
+    court_id: multiTestCourtId,
+    sport_id: 'sp-football',
+    customer_id: 'cust-101',
+    customer_name: 'Rahul Sharma',
+    customer_phone: '+919876543210',
+    booking_date: multiTestDate,
+    start_time: '10:00',
+    end_time: '11:00',
+    total_amount: 1500,
+    discount_amount: 0,
+    status: 'confirmed',
+    source: 'online',
+    gate_pass_otp: multiTestCommonOtp,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+
+  const multiBooking2: Booking = {
+    id: 'bk-accuracy-2',
+    booking_ref: 'TRF-ACCURACY-02',
+    group_ref: multiTestGroupRef,
+    court_id: multiTestCourtId,
+    sport_id: 'sp-football',
+    customer_id: 'cust-101',
+    customer_name: 'Rahul Sharma',
+    customer_phone: '+919876543210',
+    booking_date: multiTestDate,
+    start_time: '11:00',
+    end_time: '12:00',
+    total_amount: 1500,
+    discount_amount: 0,
+    status: 'confirmed',
+    source: 'online',
+    gate_pass_otp: multiTestCommonOtp,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+
+  const multiBooking3: Booking = {
+    id: 'bk-accuracy-3',
+    booking_ref: 'TRF-ACCURACY-03',
+    group_ref: multiTestGroupRef,
+    court_id: multiTestCourtId,
+    sport_id: 'sp-football',
+    customer_id: 'cust-101',
+    customer_name: 'Rahul Sharma',
+    customer_phone: '+919876543210',
+    booking_date: multiTestDate,
+    start_time: '14:00',
+    end_time: '15:00',
+    total_amount: 1500,
+    discount_amount: 0,
+    status: 'confirmed',
+    source: 'online',
+    gate_pass_otp: multiTestCommonOtp,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+
+  store.getBookings().push(multiBooking1, multiBooking2, multiBooking3);
+
+  // 31.1: Common gate pass OTP and group reference verification
+  assert(getBookingGatePassOtp(multiBooking1) === multiTestCommonOtp, 'Booking 1 resolves common gatepass OTP');
+  assert(getBookingGatePassOtp(multiBooking2) === multiTestCommonOtp, 'Booking 2 resolves common gatepass OTP');
+  assert(getBookingGatePassOtp(multiBooking3) === multiTestCommonOtp, 'Booking 3 resolves common gatepass OTP');
+  assert(getBookingGroupRef(multiBooking1) === multiTestGroupRef, 'All 3 bookings belong to common group reference');
+
+  // 31.2: When viewing/printing Booking 1: timing must be strictly 10:00 - 11:00
+  const pass1Time = `${formatTime12hPlain(multiBooking1.start_time)} – ${formatTime12hPlain(multiBooking1.end_time)}`;
+  assert(pass1Time === '10:00 AM – 11:00 AM', `Booking 1 print pass timing is exactly 10:00 AM – 11:00 AM (got ${pass1Time})`);
+  assert(pass1Time !== '06:00 PM – 07:00 PM', 'Booking 1 timing is NOT defaulted to synthetic 6:00 PM - 7:00 PM');
+
+  // 31.3: When viewing/printing Booking 2: timing must be strictly 11:00 - 12:00
+  const pass2Time = `${formatTime12hPlain(multiBooking2.start_time)} – ${formatTime12hPlain(multiBooking2.end_time)}`;
+  assert(pass2Time === '11:00 AM – 12:00 PM', `Booking 2 print pass timing is exactly 11:00 AM – 12:00 PM (got ${pass2Time})`);
+  assert(pass2Time !== '06:00 PM – 07:00 PM', 'Booking 2 timing is NOT defaulted to synthetic 6:00 PM - 7:00 PM');
+
+  // 31.4: When viewing/printing Booking 3: timing must be strictly 02:00 - 03:00
+  const pass3Time = `${formatTime12hPlain(multiBooking3.start_time)} – ${formatTime12hPlain(multiBooking3.end_time)}`;
+  assert(pass3Time === '02:00 PM – 03:00 PM', `Booking 3 print pass timing is exactly 02:00 PM – 03:00 PM (got ${pass3Time})`);
+  assert(pass3Time !== '06:00 PM – 07:00 PM', 'Booking 3 timing is NOT defaulted to synthetic 6:00 PM - 7:00 PM');
+
+  // 31.5: Sibling session aggregation identifies all 3 active sessions under common pass
+  const siblingList = store.getBookings().filter(b => getBookingGroupRef(b) === multiTestGroupRef);
+  assert(siblingList.length === 3, 'Finds exactly 3 sibling sessions under common pass');
+  const distinctSlots = Array.from(new Map(siblingList.map(b => [`${b.start_time}-${b.end_time}`, b])).values());
+  assert(distinctSlots.length === 3, 'All 3 sessions have distinct timeslots under common pass');
 
   console.log('\n🎉 ALL CORNER & EDGE CASE TESTS (INCLUDING AUTO-COMPLETE & OWNER REDUCED WORKFLOW) PASSED PERFECTLY!\n');
 }
