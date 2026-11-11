@@ -1,5 +1,6 @@
 import { Booking, Customer, Court, Venue } from '../types/schema';
 import { formatTimeRange12h, formatTime12hPlain, formatDateDDMMYYYY, getBookingGatePassOtp } from '../utils/formatters';
+import { AuditLogger } from './auditLogger';
 
 export interface EmailDispatchResult {
   success: boolean;
@@ -38,6 +39,27 @@ export class EmailService {
   public static isResendConfigured(): boolean {
     const key = (import.meta as any).env?.VITE_RESEND_API_KEY || (import.meta as any).env?.RESEND_API_KEY;
     return !!key && key.startsWith('re_') && key !== 're_your_resend_api_key';
+  }
+
+  /**
+   * Return the primary sender/account email configured in Resend
+   */
+  public static getResendSenderEmail(): string {
+    const raw = (import.meta as any).env?.VITE_RESEND_FROM_EMAIL || 
+                (import.meta as any).env?.RESEND_FROM_EMAIL || 
+                'rajupainter84688@gmail.com';
+    const match = String(raw).match(/<([^>]+)>/);
+    return (match ? match[1] : String(raw)).trim().toLowerCase();
+  }
+
+  /**
+   * Check if a given email matches the Resend sender/account email
+   */
+  public static isResendSenderEmail(email?: string | null): boolean {
+    if (!email) return false;
+    const clean = email.trim().toLowerCase();
+    const sender = this.getResendSenderEmail();
+    return clean === sender;
   }
 
   /**
@@ -321,13 +343,32 @@ export class EmailService {
 </html>
     `;
 
-    return this.sendEmail({
+    const res = await this.sendEmail({
       to: recipient,
       subject,
       html,
       text,
       from: venue.email_sender || this.DEFAULT_SENDER
     });
+
+    try {
+      AuditLogger.log(
+        'SYSTEM',
+        'SEND_EMAIL_CONFIRMATION',
+        'Booking',
+        booking.booking_ref || booking.id,
+        null,
+        {
+          recipient,
+          customerName: customer.name,
+          bookingRef: booking.booking_ref,
+          slot: `${formatDateDDMMYYYY(booking.booking_date)} ${booking.start_time}-${booking.end_time}`,
+          status: res.success ? 'sent' : 'failed'
+        }
+      );
+    } catch {}
+
+    return res;
   }
 
   /**
@@ -451,13 +492,32 @@ export class EmailService {
 </html>
     `;
 
-    return this.sendEmail({
+    const res = await this.sendEmail({
       to: recipient,
       subject,
       html,
       text,
       from: venue.email_sender || this.DEFAULT_SENDER
     });
+
+    try {
+      AuditLogger.log(
+        'SYSTEM',
+        'SEND_EMAIL_CANCELLATION',
+        'Booking',
+        booking.booking_ref || booking.id,
+        null,
+        {
+          recipient,
+          customerName: customer.name,
+          bookingRef: booking.booking_ref,
+          refundAmount,
+          status: res.success ? 'sent' : 'failed'
+        }
+      );
+    } catch {}
+
+    return res;
   }
 
   /**
@@ -748,6 +808,162 @@ export class EmailService {
   }
 
   /**
+   * 6b. Send Signup Email Verification OTP
+   */
+  public static async sendSignupVerificationOtp(params: {
+    email: string;
+    otpCode: string;
+    customerName?: string;
+    venueName?: string;
+  }): Promise<EmailDispatchResult> {
+    const { email, otpCode, customerName = 'Player', venueName = 'TurfFlow Arena' } = params;
+    const subject = `✨ ${otpCode} is your TurfFlow Signup Verification Code`;
+
+    const text = [
+      `TURFFLOW - SIGNUP VERIFICATION`,
+      `Hi ${customerName},`,
+      ``,
+      `Welcome to TurfFlow! Use the 6-digit code below to verify your email and activate your account:`,
+      `Verification Code: ${otpCode}`,
+      ``,
+      `This code will expire in 10 minutes.`,
+      `If you did not initiate registration at TurfFlow, please disregard this email.`,
+      ``,
+      `Team ${venueName}`
+    ].join('\n');
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${subject}</title>
+</head>
+<body style="margin: 0; padding: 24px; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #0f172a;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 540px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.06); border: 1px solid #e2e8f0;">
+    <tr>
+      <td style="background: linear-gradient(135deg, #006b30 0%, #004d22 100%); padding: 28px 24px; text-align: center; color: #ffffff;">
+        <div style="font-size: 12px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; color: #a7f3d0; margin-bottom: 6px;">New Account Registration</div>
+        <h1 style="margin: 0; font-size: 24px; font-weight: 800;">Verify Your Email Address</h1>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 28px 24px;">
+        <p style="font-size: 15px; margin: 0 0 20px 0; color: #334155;">
+          Welcome to TurfFlow, <strong>${customerName}</strong>!<br/>
+          Use the 6-digit verification code below to complete your player account registration:
+        </p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background: #f0fdf4; border: 2px dashed #006b30; border-radius: 12px; margin-bottom: 24px;">
+          <tr>
+            <td style="padding: 20px; text-align: center;">
+              <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; color: #166534;">Registration Code</div>
+              <div style="font-size: 38px; font-weight: 900; font-family: monospace; letter-spacing: 10px; color: #006b30; margin: 8px 0;">${otpCode}</div>
+              <div style="font-size: 12px; color: #15803d; font-weight: 600;">Valid for 10 minutes &bull; Enter in the signup form to complete</div>
+            </td>
+          </tr>
+        </table>
+        <p style="font-size: 12px; color: #64748b; line-height: 1.5; margin: 0;">
+          If you did not request to create an account at TurfFlow, you can safely ignore this email.
+        </p>
+      </td>
+    </tr>
+    <tr>
+      <td style="background: #f8fafc; padding: 16px 24px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8;">
+        ${venueName} &bull; Powered by Resend Email Delivery
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `;
+
+    return this.sendEmail({
+      to: email,
+      subject,
+      html,
+      text
+    });
+  }
+
+  /**
+   * 6c. Send Password Reset Verification OTP Email
+   */
+  public static async sendPasswordResetVerificationOtp(params: {
+    email: string;
+    otpCode: string;
+    customerName?: string;
+    venueName?: string;
+  }): Promise<EmailDispatchResult> {
+    const { email, otpCode, customerName = 'Player', venueName = 'TurfFlow Arena' } = params;
+    const subject = `🔑 ${otpCode} is your TurfFlow Password Reset Code`;
+
+    const text = [
+      `TURFFLOW - PASSWORD RESET`,
+      `Hi ${customerName},`,
+      ``,
+      `You requested to reset your TurfFlow account password.`,
+      `Your password reset code is: ${otpCode}`,
+      ``,
+      `This code will expire in 10 minutes.`,
+      `If you did not request a password reset, please ignore this email. Your current password remains secure.`,
+      ``,
+      `Team ${venueName}`
+    ].join('\n');
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${subject}</title>
+</head>
+<body style="margin: 0; padding: 24px; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #0f172a;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 540px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.06); border: 1px solid #e2e8f0;">
+    <tr>
+      <td style="background: linear-gradient(135deg, #b45309 0%, #78350f 100%); padding: 28px 24px; text-align: center; color: #ffffff;">
+        <div style="font-size: 12px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; color: #fde68a; margin-bottom: 6px;">Security & Password Reset</div>
+        <h1 style="margin: 0; font-size: 24px; font-weight: 800;">Reset Your Account Password</h1>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 28px 24px;">
+        <p style="font-size: 15px; margin: 0 0 20px 0; color: #334155;">
+          Hi <strong>${customerName}</strong>,<br/>
+          Use the 6-digit verification code below to authorize your password reset:
+        </p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background: #fffbeb; border: 2px dashed #f59e0b; border-radius: 12px; margin-bottom: 24px;">
+          <tr>
+            <td style="padding: 20px; text-align: center;">
+              <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; color: #92400e;">Password Reset Code</div>
+              <div style="font-size: 38px; font-weight: 900; font-family: monospace; letter-spacing: 10px; color: #b45309; margin: 8px 0;">${otpCode}</div>
+              <div style="font-size: 12px; color: #92400e; font-weight: 600;">Valid for 10 minutes &bull; Do not share with anyone</div>
+            </td>
+          </tr>
+        </table>
+        <p style="font-size: 12px; color: #64748b; line-height: 1.5; margin: 0;">
+          If you did not request this password reset, please ignore this email. Your current password remains active and secure.
+        </p>
+      </td>
+    </tr>
+    <tr>
+      <td style="background: #f8fafc; padding: 16px 24px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8;">
+        ${venueName} &bull; Powered by Resend Email Delivery
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `;
+
+    return this.sendEmail({
+      to: email,
+      subject,
+      html,
+      text
+    });
+  }
+
+  /**
    * 7. Send 1-Hour Matchday Reminder Email
    */
   public static async sendBookingReminder(params: {
@@ -873,13 +1089,32 @@ export class EmailService {
 </html>
     `;
 
-    return this.sendEmail({
+    const res = await this.sendEmail({
       to: recipient,
       subject,
       html,
       text,
       from: venue.email_sender || this.DEFAULT_SENDER
     });
+
+    try {
+      AuditLogger.log(
+        'SYSTEM',
+        'SEND_EMAIL_REMINDER',
+        'Booking',
+        booking.booking_ref || booking.id,
+        null,
+        {
+          recipient,
+          customerName: customer.name,
+          bookingRef: booking.booking_ref,
+          slot: `${formatDateDDMMYYYY(booking.booking_date)} ${booking.start_time}-${booking.end_time}`,
+          status: res.success ? 'sent' : 'failed'
+        }
+      );
+    } catch {}
+
+    return res;
   }
 
   /**

@@ -1,7 +1,7 @@
 import { EmailService } from './emailService';
 import { store } from './store';
 
-export type OtpPurpose = 'login' | 'profile_update' | 'signup';
+export type OtpPurpose = 'login' | 'profile_update' | 'signup' | 'forgot_password';
 
 export interface OtpRecord {
   email: string;
@@ -104,8 +104,22 @@ export class EmailVerificationService {
         customerName: customerName || 'Player',
         venueName: venue.name
       });
+    } else if (purpose === 'signup') {
+      dispatchRes = await EmailService.sendSignupVerificationOtp({
+        email: cleanEmail,
+        otpCode: code,
+        customerName: customerName || 'Player',
+        venueName: venue.name
+      });
+    } else if (purpose === 'forgot_password') {
+      dispatchRes = await EmailService.sendPasswordResetVerificationOtp({
+        email: cleanEmail,
+        otpCode: code,
+        customerName: customerName || 'Player',
+        venueName: venue.name
+      });
     } else {
-      // 'login' or 'signup'
+      // 'login'
       dispatchRes = await EmailService.sendLoginVerificationOtp({
         email: cleanEmail,
         otpCode: code,

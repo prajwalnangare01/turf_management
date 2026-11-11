@@ -9,6 +9,7 @@ import { CustomerProfilePage } from './CustomerProfilePage';
 import { VenueInfoAndPoliciesPage, PolicySection } from './VenueInfoAndPoliciesPage';
 import { TurfSelectionCard } from './TurfSelectionCard';
 import { HoldSummaryBar } from './HoldSummaryBar';
+import { Footer } from '../common/Footer';
 import { SlotGrid } from './SlotGrid';
 import { CheckoutModal } from './CheckoutModal';
 import { BookingConfirmationModal } from './BookingConfirmationModal';
@@ -259,6 +260,38 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
     }
   };
 
+  const scrollToSection = (id: string, delay = 80) => {
+    setTimeout(() => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, delay);
+  };
+
+  const handleSportSelect = (sport: Sport) => {
+    setSelectedSport(sport);
+    scrollToSection('pitch-selection');
+  };
+
+  const handleCourtSelect = (court: Court) => {
+    setSelectedCourt(court);
+    setSelectedSlots([]);
+    scrollToSection('date-selection');
+  };
+
+  const handleDateStripSelect = (isoDate: string) => {
+    if (selectedCourt && selectedSlots.length > 0) {
+      selectedSlots.forEach(s => {
+        RedisLockService.releaseLock(selectedCourt.id, selectedDate, s.start_time, effectiveSessionId);
+      });
+    }
+    setSelectedDate(isoDate);
+    setActiveFilter('all');
+    setSelectedSlots([]);
+    scrollToSection('slots-selection');
+  };
+
   const handleFilterClick = (filter: 'today' | 'tomorrow' | 'weekend' | 'all') => {
     setActiveFilter(filter);
     const now = new Date();
@@ -282,6 +315,7 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
       });
     }
     setSelectedSlots([]);
+    scrollToSection('slots-selection');
   };
 
   const handleProceedCheckout = () => {
@@ -368,7 +402,7 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
   }
 
   return (
-    <div className="bg-background text-on-surface min-h-screen pb-28">
+    <div className="bg-background text-on-surface min-h-screen flex flex-col">
       {/* Stitch TopAppBar Header */}
       <header className="sticky top-0 w-full z-50 bg-white/95 backdrop-blur-md border-b border-outline-variant/40 shadow-sm flex items-center justify-between max-w-[1200px] mx-auto min-h-16 px-3 sm:px-4 py-2">
         <div className="flex items-center gap-2 sm:gap-3">
@@ -446,13 +480,13 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
               <div className="w-6 h-6 rounded-full bg-black/10 flex items-center justify-center">
                 <User className="w-3.5 h-3.5" />
               </div>
-              <span>Sign In / My Bookings</span>
+              <span>Sign Up / Login</span>
             </button>
           )}
         </div>
       </header>
 
-      <main className={`max-w-[1200px] mx-auto px-3 sm:px-4 pt-4 sm:pt-6 space-y-6 sm:space-y-8 ${selectedSlots.length > 0 ? 'pb-32 sm:pb-36' : 'pb-12'}`}>
+      <main className={`flex-1 w-full max-w-[1200px] mx-auto px-3 sm:px-4 pt-4 sm:pt-6 space-y-6 sm:space-y-8 ${selectedSlots.length > 0 ? 'pb-28 sm:pb-32' : 'pb-10'}`}>
         {isInitialLoading && allCourts.length === 0 ? (
           <CustomerPortalSkeleton />
         ) : (
@@ -474,41 +508,6 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
           </div>
         )}
 
-        {/* Stitch Hero Banner Section */}
-        <section className="relative rounded-2xl overflow-hidden shadow-md group border border-outline-variant/40">
-          <div className="absolute inset-0 bg-gradient-to-r from-primary/95 via-primary/80 to-primary-container/40 z-10"></div>
-          <div
-            className="h-64 md:h-72 w-full bg-cover bg-center"
-            style={{
-              backgroundImage: `url('https://images.unsplash.com/photo-1529900748604-07564a03e7a6?auto=format&fit=crop&w=1200&q=80')`
-            }}
-          ></div>
-          <div className="absolute inset-0 z-20 flex flex-col justify-center p-6 md:p-10 text-on-primary">
-            <span className="bg-secondary-container text-on-secondary-container px-3 py-1 rounded-full font-headline font-bold text-xs w-fit mb-3 tracking-wide">
-              PROMOTED VENUE
-            </span>
-            <h2 className="font-headline font-bold text-3xl md:text-4xl mb-2 leading-tight max-w-xl text-white">
-              Prime Time Slots Available
-            </h2>
-            <p className="font-body text-sm md:text-base text-on-primary-container/90 max-w-md mb-6 leading-relaxed">
-              Secure your preferred evening pitches with instant Redis slot locks and zero double booking guarantee.
-            </p>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => {
-                  const el = document.getElementById('court-selection');
-                  el?.scrollIntoView({ behavior: 'smooth' });
-                }}
-                className="btn-cta px-6 py-2.5 text-sm font-headline uppercase tracking-wider transition-all active:scale-95 shadow-lg"
-              >
-                Book Pitch Now
-              </button>
-              <span className="text-xs text-white/80 font-medium hidden sm:inline-block">
-                ⚡ Real-Time Dynamic Pricing Active
-              </span>
-            </div>
-          </div>
-        </section>
 
         {/* Stitch Sport Selection Cards Section */}
         <section className="space-y-4">
@@ -530,7 +529,7 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
               return (
                 <div
                   key={s.id}
-                  onClick={() => setSelectedSport(s)}
+                  onClick={() => handleSportSelect(s)}
                   className={`group relative rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 border ${
                     isSelected
                       ? 'border-primary ring-2 ring-primary/20 shadow-md translate-y-[-2px]'
@@ -564,7 +563,7 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
         </section>
 
         {/* Available Pitch & Courts Section */}
-        <section id="court-selection" className="space-y-4 pt-2">
+        <section id="pitch-selection" className="space-y-4 pt-2 scroll-mt-20">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="font-headline font-bold text-xl text-primary tracking-tight">Available Pitch & Courts</h3>
@@ -587,10 +586,7 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
                     court={c}
                     selectedDate={selectedDate}
                     isSelected={isSelected}
-                    onSelect={() => {
-                      setSelectedCourt(c);
-                      setSelectedSlots([]);
-                    }}
+                    onSelect={() => handleCourtSelect(c)}
                   />
                 );
               })
@@ -599,7 +595,7 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
         </section>
 
         {/* Stitch Quick Filter & 14-Day Date Strip */}
-        <section className="space-y-4">
+        <section id="date-selection" className="space-y-4 scroll-mt-20">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <span className="font-headline font-bold text-sm text-primary">Quick Date Filter:</span>
@@ -635,11 +631,7 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
               return (
                 <button
                   key={d.iso}
-                  onClick={() => {
-                    setSelectedDate(d.iso);
-                    setActiveFilter('all');
-                    setSelectedSlots([]);
-                  }}
+                  onClick={() => handleDateStripSelect(d.iso)}
                   className={`min-w-[72px] p-3 rounded-2xl text-center font-headline transition-all border flex flex-col items-center justify-center gap-0.5 ${
                     isSelected
                       ? 'bg-primary text-white border-primary shadow-md scale-105'
@@ -666,7 +658,7 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
 
         {/* Slot Grid Container */}
         {selectedCourt && (
-          <section className="bg-white rounded-3xl p-4 sm:p-6 border border-outline-variant/50 shadow-sm space-y-4">
+          <section id="slots-selection" className="bg-white rounded-3xl p-4 sm:p-6 border border-outline-variant/50 shadow-sm space-y-4 scroll-mt-20">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-outline-variant/40 pb-4">
               <div>
                 <h3 className="font-headline font-bold text-xl text-primary flex items-center gap-2">
@@ -689,77 +681,22 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
             />
           </section>
         )}
-
-        {/* Footer with Comprehensive Links */}
-        <footer className="pt-8 pb-4 border-t border-outline-variant/30 text-xs text-on-surface-variant space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-outline-variant/20">
-            <div className="flex items-center gap-2">
-              <img src="/logo.png" alt="TurfFlow" className="w-6 h-6 rounded-md object-contain" />
-              <span className="font-headline font-bold text-sm text-primary">{venue.name}</span>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-semibold">
-              <button
-                onClick={() => {
-                  setInitialPolicySection('helpline');
-                  setCustomerView('policies');
-                }}
-                className="text-on-surface-variant hover:text-primary transition cursor-pointer flex items-center gap-1"
-              >
-                <Phone className="w-3.5 h-3.5 text-primary" /> Owner Helpline
-              </button>
-              <button
-                onClick={() => {
-                  setInitialPolicySection('location');
-                  setCustomerView('policies');
-                }}
-                className="text-on-surface-variant hover:text-primary transition cursor-pointer flex items-center gap-1"
-              >
-                <MapPin className="w-3.5 h-3.5 text-primary" /> Location & Map
-              </button>
-              <button
-                onClick={() => {
-                  setInitialPolicySection('cancellation');
-                  setCustomerView('policies');
-                }}
-                className="text-red-700 hover:text-red-800 transition cursor-pointer flex items-center gap-1 font-bold bg-red-50 hover:bg-red-100 px-2.5 py-1 rounded-lg border border-red-200"
-              >
-                <RotateCcw className="w-3.5 h-3.5 text-red-600" /> Cancellation & Refund Policy
-              </button>
-              <button
-                onClick={() => {
-                  setInitialPolicySection('terms');
-                  setCustomerView('policies');
-                }}
-                className="text-on-surface-variant hover:text-primary transition cursor-pointer flex items-center gap-1"
-              >
-                <FileText className="w-3.5 h-3.5 text-primary" /> Terms & Conditions
-              </button>
-              <button
-                onClick={() => {
-                  setInitialPolicySection('privacy');
-                  setCustomerView('policies');
-                }}
-                className="text-on-surface-variant hover:text-primary transition cursor-pointer flex items-center gap-1"
-              >
-                <Lock className="w-3.5 h-3.5 text-primary" /> Privacy Policy
-              </button>
-            </div>
-          </div>
-
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-on-surface-variant/80">
-            <p>© 2026 {venue.name}. High Performance Sports Venues. GSTIN: {venue.gst_number || '29ABCDE1234F1Z5'}</p>
-            <button
-              onClick={onSwitchToAdmin}
-              className="text-on-surface-variant/70 hover:text-primary transition-colors font-medium underline flex items-center gap-1 cursor-pointer"
-            >
-              Staff / Manager Portal Access
-            </button>
-          </div>
-        </footer>
           </>
         )}
       </main>
+
+      {/* Dark-themed High Performance Responsive Footer */}
+      <Footer
+        venueName={venue.name || 'TurfFlow Arena'}
+        logoUrl="/logo.png"
+        gstin={venue.gst_number || '29ABCDE1234F1Z5'}
+        onNavigateToPolicies={(sec) => {
+          if (sec) setInitialPolicySection(sec as any);
+          setCustomerView('policies');
+        }}
+        onSwitchToAdmin={onSwitchToAdmin}
+        hasActiveHold={selectedSlots.length > 0}
+      />
 
       {/* Fixed-Bottom Summary Checkout Bar */}
       {selectedSlots.length > 0 && selectedCourt && (() => {

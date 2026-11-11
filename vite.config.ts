@@ -138,38 +138,144 @@ export default defineConfig(({ mode }) => {
                 const cleanMessage = data.message || '';
                 const activeSenderId = data.senderId || env.SMS_SENDER_ID || 'TRFFLW';
 
+                // 1. Fast2SMS Gateway (India OTP & DLT)
                 const fast2smsKey = env.FAST2SMS_API_KEY || (env.SMS_PROVIDER === 'fast2sms' ? env.SMS_API_KEY : null);
                 const activeTemplateId = data.templateId || env.FAST2SMS_DLT_TEMPLATE_ID;
 
                 if (fast2smsKey && !fast2smsKey.includes('your_')) {
-                  const payload = data.route === 'otp' && data.otpCode
-                    ? { route: 'otp', variables_values: data.otpCode, numbers: cleanDigits }
-                    : activeTemplateId
-                      ? { route: 'dlt', sender_id: activeSenderId, message: activeTemplateId, variables_values: cleanMessage, numbers: cleanDigits }
-                      : { route: 'q', message: cleanMessage, numbers: cleanDigits, flash: 0 };
+                  if (data.route === 'otp' && data.otpCode) {
+                    // Dedicated cheap Fast2SMS OTP Route
+                    const payload = { route: 'otp', variables_values: data.otpCode, numbers: cleanDigits };
+                    const f2sRes = await fetch('https://www.fast2sms.com/dev/bulkV2', {
+                      method: 'POST',
+                      headers: { 'authorization': fast2smsKey, 'Content-Type': 'application/json' },
+                      body: JSON.stringify(payload)
+                    });
+                    const f2sData = await f2sRes.json();
+                    if (f2sData.return === true) {
+                      res.setHeader('Content-Type', 'application/json');
+                      res.end(JSON.stringify({
+                        success: true,
+                        simulated: false,
+                        id: f2sData.request_id || `sms_${Date.now()}`,
+                        provider: 'fast2sms'
+                      }));
+                      return;
+                    } else {
+                      console.warn(`[Fast2SMS Error]`, f2sData);
+                      res.setHeader('Content-Type', 'application/json');
+                      res.end(JSON.stringify({
+                        success: true,
+                        simulated: true,
+                        otpCode: data.otpCode,
+                        id: `sim_dev_sms_${Date.now()}`,
+                        provider: 'fast2sms',
+                        error: f2sData.message
+                      }));
+                      return;
+                    }
+                  } else if (activeTemplateId) {
+                    // Registered DLT Route
+                    const payload = { route: 'dlt', sender_id: activeSenderId, message: activeTemplateId, variables_values: cleanMessage, numbers: cleanDigits };
+                    const f2sRes = await fetch('https://www.fast2sms.com/dev/bulkV2', {
+                      method: 'POST',
+                      headers: { 'authorization': fast2smsKey, 'Content-Type': 'application/json' },
+                      body: JSON.stringify(payload)
+                    });
+                    const f2sData = await f2sRes.json();
+                    res.setHeader('Content-Type', 'application/json');
+                    res.end(JSON.stringify({
+                      success: f2sData.return === true,
+                      simulated: false,
+                      id: f2sData.request_id || `sms_${Date.now()}`,
+                      provider: 'fast2sms',
+                      error: f2sData.return !== true ? f2sData.message : undefined
+                    }));
+                    return;
+                  } else {
+                    // Quick SMS ('q') is strictly disabled to avoid excessive carrier billing.
+                    // Booking confirmations and reminders are handled via Email & WhatsApp.
+                    console.log(`[Fast2SMS Notice] Quick SMS route ('q') disabled to prevent high costs. Msg for +91${cleanDigits} delivered via WhatsApp/Email.`);
+                    res.setHeader('Content-Type', 'application/json');
+                    res.end(JSON.stringify({
+                      success: true,
+                      simulated: true,
+                      id: `sim_dev_sms_${Date.now()}`,
+                      provider: 'fast2sms_skipped_quick',
+                      message: 'Quick SMS route is disabled to avoid high charges. Sent via WhatsApp & Email.'
+                    }));
+                    return;
+                  }
+                }
 
-                  const f2sRes = await fetch('https://www.fast2sms.com/dev/bulkV2', {
+                // 2. Twilio Gateway (Global)
+                const twilioSid = env.TWILIO_ACCOUNT_SID;
+                const twilioToken = env.TWILIO_AUTH_TOKEN;
+                const twilioFrom = env.TWILIO_PHONE_NUMBER;
+                if (twilioSid && twilioToken && twilioFrom && !twilioSid.includes('your_')) {
+                  const auth = Buffer.from(`${twilioSid}:${twilioToken}`).toString('base64');
+                  const params = new URLSearchParams();
+                  params.append('From', twilioFrom);
+                  params.append('To', rawTo.startsWith('+') ? rawTo : `+91${cleanDigits}`);
+                  params.append('Body', cleanMessage);
+
+                  const twilioRes = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`, {
                     method: 'POST',
-                    headers: { 'authorization': fast2smsKey, 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
+                    headers: {
+                      'Authorization': `Basic ${auth}`,
+                      'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: params.toString()
                   });
-                  const f2sData = await f2sRes.json();
+                  const twilioData = await twilioRes.json();
+                  if (twilioRes.ok && twilioData.sid) {
+                    res.setHeader('Content-Type', 'application/json');
+                    res.end(JSON.stringify({
+                      success: true,
+                      simulated: false,
+                      id: twilioData.sid,
+                      provider: 'twilio'
+                    }));
+                    return;
+                  }
+                }
+
+                // 3. MSG91 Gateway (India)
+                const msg91Key = env.MSG91_AUTH_KEY || (env.SMS_PROVIDER === 'msg91' ? env.SMS_API_KEY : null);
+                if (msg91Key && !msg91Key.includes('your_')) {
+                  const templateId = data.templateId || env.MSG91_OTP_TEMPLATE_ID;
+                  const url = templateId && data.otpCode
+                    ? `https://control.msg91.com/api/v5/otp?template_id=${templateId}&mobile=91${cleanDigits}&authkey=${msg91Key}&otp=${data.otpCode}`
+                    : `https://api.msg91.com/api/v2/sendsms`;
+
+                  const msg91Res = await fetch(url, {
+                    method: templateId && data.otpCode ? 'GET' : 'POST',
+                    headers: { 'authkey': msg91Key, 'Content-Type': 'application/json' },
+                    body: templateId && data.otpCode ? undefined : JSON.stringify({
+                      sender: activeSenderId,
+                      route: '4',
+                      country: '91',
+                      sms: [{ message: cleanMessage, to: [cleanDigits] }]
+                    })
+                  });
+                  const msg91Data = await msg91Res.json();
                   res.setHeader('Content-Type', 'application/json');
                   res.end(JSON.stringify({
-                    success: f2sData.return === true,
+                    success: msg91Res.ok,
                     simulated: false,
-                    id: f2sData.request_id || `sms_${Date.now()}`,
-                    provider: 'fast2sms'
+                    id: msg91Data.request_id || `msg91_${Date.now()}`,
+                    provider: 'msg91'
                   }));
                   return;
                 }
 
-                // Default Simulation Mode
-                console.log(`[SMS Dev Simulation] To: +91${cleanDigits} | Sender: ${activeSenderId} | Msg: "${cleanMessage.slice(0, 80)}..."`);
+                // Default Simulation Mode (When no paid SMS gateway is active in .env)
+                console.log(`[SMS Dev Simulation] To: +91${cleanDigits} | Sender: ${activeSenderId} | Code: ${data.otpCode || 'N/A'} | Msg: "${cleanMessage.slice(0, 80)}..."`);
                 res.setHeader('Content-Type', 'application/json');
                 res.end(JSON.stringify({
                   success: true,
                   simulated: true,
+                  otpCode: data.otpCode,
                   id: `sim_dev_sms_${Date.now()}`,
                   provider: 'simulation'
                 }));

@@ -3,7 +3,7 @@ import QRCode from 'qrcode';
 import { store } from '../../services/store';
 import { AuditLogger } from '../../services/auditLogger';
 import { AdminUser, CancellationPolicy, CancellationSettings } from '../../types/schema';
-import { Sliders, Save, RefreshCw, MessageSquare, DollarSign, Clock, PlusCircle, Trash2, ShieldCheck, ArrowRight, AlertCircle, RotateCcw, Mail, Send, CheckCircle2, Database, Radio, MapPin, QrCode, ExternalLink } from 'lucide-react';
+import { Sliders, Save, RefreshCw, MessageSquare, DollarSign, Clock, PlusCircle, Trash2, ShieldCheck, ArrowRight, AlertCircle, RotateCcw, Mail, Send, CheckCircle2, Database, Radio, MapPin, QrCode, ExternalLink, Info } from 'lucide-react';
 import { getSupabaseConfig, setSupabaseConfig, clearSupabaseConfig, testSupabaseConnection, isSupabaseConfigured } from '../../services/supabaseClient';
 import { SupabaseSyncService } from '../../services/supabaseSyncService';
 import { EmailService } from '../../services/emailService';
@@ -120,6 +120,13 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin }) =>
 
   const handleSendTestEmail = async () => {
     if (!testEmailRecipient.trim()) return;
+    if (EmailService.isResendSenderEmail(testEmailRecipient)) {
+      setTestEmailResult({
+        success: false,
+        message: `You can't send on this email (${testEmailRecipient}) — it is the sender email! Both sender and recipient cannot be the same. Please provide a different recipient email.`
+      });
+      return;
+    }
     setTestEmailLoading(true);
     setTestEmailResult(null);
     try {
@@ -853,8 +860,20 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin }) =>
                       <span>Test Resend</span>
                     </button>
                   </div>
-                  <p className="text-[10px] text-on-surface-variant mt-1">
-                    Tip: Use your Resend registered email or <code className="bg-surface-container px-1 py-0.5 rounded">delivered@resend.dev</code> for instant sandbox verification.
+                  {/* Resend Sender Email Conflict Notice (No Brackets) */}
+                  {EmailService.isResendSenderEmail(testEmailRecipient) ? (
+                    <div className="flex items-center gap-1.5 text-[11px] text-red-800 bg-red-50 border border-red-300 px-2.5 py-1.5 rounded-lg mt-2 font-medium">
+                      <AlertCircle className="w-3.5 h-3.5 text-red-600 shrink-0" />
+                      <span><strong>You can't send to this email — it's the sender email!</strong> Please enter a separate test recipient.</span>
+                    </div>
+                  ) : testEmailRecipient.trim().includes('@') ? (
+                    <div className="flex items-center gap-1.5 text-[11px] text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1.5 rounded-lg mt-2 font-medium">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>Recipient is distinct from sender. Ready for dispatch.</span>
+                    </div>
+                  ) : null}
+                  <p className="text-[10px] text-on-surface-variant mt-1.5">
+                    Tip: Use a separate test inbox or <code className="bg-surface-container px-1 py-0.5 rounded text-primary font-bold">delivered@resend.dev</code> for sandbox verification.
                   </p>
                 </div>
               </div>

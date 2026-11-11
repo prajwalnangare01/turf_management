@@ -15,8 +15,8 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
   const [authMethod, setAuthMethod] = useState<'login' | 'signup' | 'forgot_password'>('login');
   
   // Login form fields (Password only)
-  const [loginIdentity, setLoginIdentity] = useState('9876543210');
-  const [loginPassword, setLoginPassword] = useState('pass123');
+  const [loginIdentity, setLoginIdentity] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
 
   // Sign up form fields (Dual OTP Mandatory: Mobile OTP + Resend Email OTP)
   const [signupName, setSignupName] = useState('');
@@ -25,32 +25,46 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
   const [mobileOtpSent, setMobileOtpSent] = useState(false);
   const [mobileOtpNotice, setMobileOtpNotice] = useState<string | null>(null);
   const [isSendingMobileOtp, setIsSendingMobileOtp] = useState(false);
+  const [mobileCooldown, setMobileCooldown] = useState(0);
 
   const [signupEmail, setSignupEmail] = useState('');
   const [signupEmailOtp, setSignupEmailOtp] = useState('');
   const [emailOtpSent, setEmailOtpSent] = useState(false);
   const [emailOtpNotice, setEmailOtpNotice] = useState<string | null>(null);
   const [isSendingEmailOtp, setIsSendingEmailOtp] = useState(false);
+  const [emailCooldown, setEmailCooldown] = useState(0);
 
   const [signupPassword, setSignupPassword] = useState('');
 
-  // Forgot Password fields (SMS OTP Reset)
-  const [forgotPhone, setForgotPhone] = useState('9876543210');
+  // Forgot Password fields (SMS or Email OTP Reset)
+  const [forgotIdentity, setForgotIdentity] = useState('');
   const [forgotOtp, setForgotOtp] = useState('');
   const [forgotNewPassword, setForgotNewPassword] = useState('');
   const [forgotConfirmPassword, setForgotConfirmPassword] = useState('');
   const [forgotOtpSent, setForgotOtpSent] = useState(false);
   const [forgotOtpNotice, setForgotOtpNotice] = useState<string | null>(null);
   const [isSendingForgotOtp, setIsSendingForgotOtp] = useState(false);
+  const [forgotCooldown, setForgotCooldown] = useState(0);
   
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  // 30s OTP Resend Cooldown Countdown Timer
+  React.useEffect(() => {
+    const timer = setInterval(() => {
+      setMobileCooldown(c => (c > 0 ? c - 1 : 0));
+      setEmailCooldown(c => (c > 0 ? c - 1 : 0));
+      setForgotCooldown(c => (c > 0 ? c - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   const handleSendSignupMobileOtp = async () => {
     setError(null);
     setMobileOtpNotice(null);
-    if (!signupPhone.trim()) {
-      setError('Please enter a 10-digit mobile phone number first.');
+    const cleanDigits = signupPhone.replace(/\D/g, '');
+    if (cleanDigits.length < 10) {
+      setError('Please enter a valid 10-digit mobile phone number first.');
       return;
     }
 
@@ -67,10 +81,12 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
 
       if (res.success) {
         setMobileOtpSent(true);
-        setMobileOtpNotice(res.message);
-        if (res.code && !signupMobileOtp) {
-          setSignupMobileOtp(res.code);
-        }
+        setMobileCooldown(30);
+        setMobileOtpNotice(
+          res.isSimulated
+            ? `📱 Simulation Code: ${res.code} (Enter this code to verify)`
+            : `SMS OTP sent to +91 ${cleanDigits.slice(-10)}. Please check your messages.`
+        );
       } else {
         setError(res.message || 'Failed to dispatch mobile OTP via SMS');
       }
@@ -102,10 +118,12 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
 
       if (res.success) {
         setEmailOtpSent(true);
-        setEmailOtpNotice(res.message);
-        if (res.code && !signupEmailOtp) {
-          setSignupEmailOtp(res.code);
-        }
+        setEmailCooldown(30);
+        setEmailOtpNotice(
+          res.isSandbox
+            ? `📧 Resend Testing Code: ${res.code} (Free Resend tier delivers to prajwalnangare41@gmail.com)`
+            : `6-digit verification code sent to ${cleanEmail}. Check your inbox!`
+        );
       } else {
         setError(res.message || 'Failed to dispatch email verification code via Resend');
       }
@@ -118,28 +136,35 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
   const handleSendForgotOtp = async () => {
     setError(null);
     setForgotOtpNotice(null);
-    if (!forgotPhone.trim()) {
-      setError('Please enter your registered mobile number.');
+    const id = forgotIdentity.trim();
+    if (!id) {
+      setError('Please enter your registered mobile number or email address.');
       return;
     }
 
     setIsSendingForgotOtp(true);
     try {
-      const res = await CustomerAuthService.sendPasswordResetOtp(forgotPhone);
+      const res = await CustomerAuthService.sendPasswordResetOtp(id);
       setIsSendingForgotOtp(false);
 
       if (res.success) {
         setForgotOtpSent(true);
-        setForgotOtpNotice(res.message);
-        if (res.code && !forgotOtp) {
-          setForgotOtp(res.code);
-        }
+        setForgotCooldown(30);
+        const isEmail = id.includes('@');
+        const isSim = (res as any).isSimulated || (res as any).isSandbox;
+        setForgotOtpNotice(
+          isSim
+            ? `🔑 Verification Code: ${(res as any).code} (Enter this code to reset password)`
+            : isEmail
+              ? `Password reset code sent to ${id}. Please check your email inbox.`
+              : `Password reset OTP sent via SMS to +91 ${id.replace(/\D/g, '').slice(-10)}.`
+        );
       } else {
-        setError(res.message || 'No account found with this phone number.');
+        setError(res.message || 'No account found with this phone number or email.');
       }
     } catch (err: any) {
       setIsSendingForgotOtp(false);
-      setError(err?.message || 'Error communicating with SMS service');
+      setError(err?.message || 'Error communicating with verification service');
     }
   };
 
@@ -148,7 +173,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
     setError(null);
 
     if (!forgotOtp.trim()) {
-      setError('Please enter the 4-digit SMS verification code (Demo code: 1234).');
+      setError('Please enter the verification code sent to your mobile or email.');
       return;
     }
 
@@ -165,7 +190,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
     setIsLoading(true);
 
     setTimeout(() => {
-      const res = CustomerAuthService.resetPasswordWithOtp(forgotPhone, forgotOtp, forgotNewPassword);
+      const res = CustomerAuthService.resetPasswordWithOtp(forgotIdentity, forgotOtp, forgotNewPassword);
       setIsLoading(false);
 
       if (res.success && res.session) {
@@ -212,26 +237,15 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
       return;
     }
 
-    // Frictionless fallback: If user didn't manually press Send OTP or type OTP, auto-fill demo OTPs
-    let effectiveMobileOtp = signupMobileOtp.trim();
+    const effectiveMobileOtp = signupMobileOtp.trim();
     if (!effectiveMobileOtp) {
-      effectiveMobileOtp = SmsVerificationService.getActiveCode(signupPhone, 'signup') || '1234';
-      setSignupMobileOtp(effectiveMobileOtp);
-    }
-
-    let effectiveEmailOtp = signupEmailOtp.trim();
-    if (!effectiveEmailOtp) {
-      effectiveEmailOtp = EmailVerificationService.getActiveCode(signupEmail, 'signup') || '123456';
-      setSignupEmailOtp(effectiveEmailOtp);
-    }
-
-    if (!effectiveMobileOtp) {
-      setError('Mobile OTP verification is mandatory. Please enter the 4-digit code (Demo code: 1234).');
+      setError('Mobile phone verification is mandatory. Please click "Send" and enter the 4-digit OTP sent to your phone.');
       return;
     }
 
+    const effectiveEmailOtp = signupEmailOtp.trim();
     if (!effectiveEmailOtp) {
-      setError('Email OTP verification is mandatory. Please enter the 6-digit code sent via Resend (Demo code: 123456).');
+      setError('Email verification is mandatory. Please click "Send" and enter the 6-digit code sent to your email.');
       return;
     }
 
@@ -251,7 +265,6 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
       if (res.success && res.session) {
         onSuccess(res.session.customer);
       } else {
-        // Do NOT allow bypass or login when number or email is already registered!
         setError(res.error || 'Registration failed. Please check your details.');
       }
     }, 400);
@@ -408,7 +421,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
                 required
                 value={loginPassword}
                 onChange={e => setLoginPassword(e.target.value)}
-                placeholder="Enter password (default: pass123)"
+                placeholder="Enter your password"
                 className="w-full px-3 py-1.5 rounded-xl border border-outline-variant focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 bg-surface-container-lowest font-medium text-xs"
               />
             </div>
@@ -479,7 +492,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
                 <label className="font-headline font-bold text-on-surface-variant flex items-center gap-1">
                   <Phone className="w-3 h-3 text-primary" /> Mobile Phone (+91) *
                 </label>
-                <span className="text-[9.5px] text-primary font-bold">Demo OTP: 1234</span>
+                <span className="text-[9.5px] text-on-surface-variant font-medium">4-Digit SMS Code</span>
               </div>
               <div className="flex gap-1.5 items-center">
                 <input
@@ -492,10 +505,17 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
                 />
                 <button
                   type="button"
+                  disabled={isSendingMobileOtp || mobileCooldown > 0}
                   onClick={handleSendSignupMobileOtp}
-                  className="btn-secondary text-[10.5px] px-2 py-1 whitespace-nowrap font-bold shrink-0 cursor-pointer"
+                  className="btn-secondary text-[10.5px] px-2 py-1 whitespace-nowrap font-bold shrink-0 cursor-pointer disabled:opacity-60"
                 >
-                  {mobileOtpSent ? 'Resend' : 'Send'}
+                  {isSendingMobileOtp ? (
+                    <div className="w-2.5 h-2.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  ) : mobileCooldown > 0 ? (
+                    `Wait ${mobileCooldown}s`
+                  ) : (
+                    mobileOtpSent ? 'Resend' : 'Send OTP'
+                  )}
                 </button>
                 <input
                   type="text"
@@ -539,7 +559,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
                 <label className="font-headline font-bold text-on-surface-variant flex items-center gap-1">
                   <Mail className="w-3 h-3 text-primary" /> Email Address (Resend) *
                 </label>
-                <span className="text-[9.5px] text-primary font-mono font-bold">Demo: 123456</span>
+                <span className="text-[9.5px] text-on-surface-variant font-medium">6-Digit Email Code</span>
               </div>
               <div className="flex gap-1.5 items-center">
                 <input
@@ -552,14 +572,16 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
                 />
                 <button
                   type="button"
-                  disabled={isSendingEmailOtp || isEmailAlreadyRegistered}
+                  disabled={isSendingEmailOtp || emailCooldown > 0 || isEmailAlreadyRegistered}
                   onClick={handleSendSignupEmailOtp}
-                  className="btn-secondary text-[10.5px] px-2 py-1 whitespace-nowrap font-bold shrink-0 flex items-center gap-1 cursor-pointer"
+                  className="btn-secondary text-[10.5px] px-2 py-1 whitespace-nowrap font-bold shrink-0 flex items-center gap-1 cursor-pointer disabled:opacity-60"
                 >
                   {isSendingEmailOtp ? (
                     <div className="w-2.5 h-2.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  ) : emailCooldown > 0 ? (
+                    `Wait ${emailCooldown}s`
                   ) : (
-                    emailOtpSent ? 'Resend' : 'Send'
+                    emailOtpSent ? 'Resend' : 'Send OTP'
                   )}
                 </button>
                 <input
@@ -630,38 +652,40 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
           </form>
         )}
 
-        {/* OPTION 3: FORGOT PASSWORD (SMS OTP Verification & Reset) */}
+        {/* OPTION 3: FORGOT PASSWORD (SMS / Email OTP Verification & Reset) */}
         {authMethod === 'forgot_password' && (
           <form onSubmit={handleForgotSubmit} className="space-y-2 text-xs">
             <div className="bg-primary/5 border border-primary/20 rounded-xl p-2 text-primary text-[10.5px] flex items-center gap-1.5">
               <KeyRound className="w-3.5 h-3.5 text-primary shrink-0" />
-              <p>Enter registered mobile to receive 4-digit SMS OTP to reset password.</p>
+              <p>Enter your registered mobile or email to receive an OTP to reset your password.</p>
             </div>
 
             <div className="space-y-0.5">
               <label className="font-headline font-bold text-[10.5px] text-on-surface-variant flex items-center justify-between">
                 <span className="flex items-center gap-1">
-                  <Phone className="w-3 h-3 text-primary" /> Registered Mobile *
+                  <User className="w-3 h-3 text-primary" /> Registered Mobile (+91) or Email *
                 </span>
-                <span className="text-[9.5px] text-primary font-bold">10 Digits</span>
+                <span className="text-[9.5px] text-on-surface-variant font-medium">SMS or Email OTP</span>
               </label>
               <div className="flex gap-1.5">
                 <input
-                  type="tel"
+                  type="text"
                   required
-                  value={forgotPhone}
-                  onChange={e => setForgotPhone(e.target.value)}
-                  placeholder="10-digit mobile"
+                  value={forgotIdentity}
+                  onChange={e => setForgotIdentity(e.target.value)}
+                  placeholder="e.g. 9876543210 or name@example.com"
                   className="flex-1 px-2.5 py-1.5 rounded-xl border border-outline-variant focus:outline-none focus:border-primary bg-white font-medium text-xs"
                 />
                 <button
                   type="button"
-                  disabled={isSendingForgotOtp}
+                  disabled={isSendingForgotOtp || forgotCooldown > 0}
                   onClick={handleSendForgotOtp}
-                  className="btn-secondary text-[10.5px] px-2.5 py-1 whitespace-nowrap font-bold shrink-0 flex items-center gap-1 cursor-pointer"
+                  className="btn-secondary text-[10.5px] px-2.5 py-1 whitespace-nowrap font-bold shrink-0 flex items-center gap-1 cursor-pointer disabled:opacity-60"
                 >
                   {isSendingForgotOtp ? (
                     <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  ) : forgotCooldown > 0 ? (
+                    `Wait ${forgotCooldown}s`
                   ) : (
                     forgotOtpSent ? 'Resend' : 'Send OTP'
                   )}
@@ -679,15 +703,15 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
             <div className="grid grid-cols-3 gap-1.5">
               <div className="space-y-0.5">
                 <label className="font-headline font-bold text-[10px] text-on-surface-variant">
-                  OTP (1234) *
+                  OTP Code *
                 </label>
                 <input
                   type="text"
                   required
-                  maxLength={4}
+                  maxLength={6}
                   value={forgotOtp}
                   onChange={e => setForgotOtp(e.target.value)}
-                  placeholder="1234"
+                  placeholder="Enter OTP"
                   className="w-full px-2 py-1.5 rounded-xl border border-outline-variant focus:outline-none focus:border-primary bg-white font-mono font-bold tracking-widest text-center text-xs"
                 />
               </div>
@@ -746,74 +770,6 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
             </div>
           </form>
         )}
-
-        {/* Demo Fast Fill Section - Compact 1-Row Pills */}
-        <div className="pt-1.5 border-t border-outline-variant/30 flex items-center justify-between gap-1.5">
-          <span className="text-[10px] font-headline font-bold text-on-surface-variant flex items-center gap-1 shrink-0">
-            <Sparkles className="w-3 h-3 text-secondary" /> Demo:
-          </span>
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-            {authMethod === 'login' && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAuthMethod('login');
-                    handleQuickDemoLogin('9876543210', 'pass123');
-                  }}
-                  className="py-1 px-2 rounded-lg bg-surface-container-low hover:bg-primary/10 border border-outline-variant/40 font-semibold text-primary text-[10.5px] cursor-pointer whitespace-nowrap"
-                >
-                  👤 Rahul (9876543210)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAuthMethod('forgot_password');
-                    setForgotPhone('9876543210');
-                    setForgotOtp('1234');
-                    setForgotOtpSent(true);
-                    setForgotOtpNotice('Demo OTP: 1234');
-                    setForgotNewPassword('pass123');
-                    setForgotConfirmPassword('pass123');
-                    setError(null);
-                  }}
-                  className="py-1 px-2 rounded-lg bg-surface-container-low hover:bg-primary/10 border border-outline-variant/40 font-semibold text-primary text-[10.5px] cursor-pointer whitespace-nowrap"
-                >
-                  🔑 Reset Demo
-                </button>
-              </>
-            )}
-            {authMethod === 'signup' && (
-              <button
-                type="button"
-                onClick={() => {
-                  setAuthMethod('signup');
-                  handleQuickDemoSignup();
-                }}
-                className="py-1 px-2.5 rounded-lg bg-surface-container-low hover:bg-primary/10 border border-outline-variant/40 font-semibold text-primary text-[10.5px] cursor-pointer flex items-center gap-1"
-              >
-                <Sparkles className="w-3 h-3 text-primary" /> Auto-Fill Dual OTP Demo
-              </button>
-            )}
-            {authMethod === 'forgot_password' && (
-              <button
-                type="button"
-                onClick={() => {
-                  setForgotPhone('9876543210');
-                  setForgotOtp('1234');
-                  setForgotOtpSent(true);
-                  setForgotOtpNotice('Reset OTP sent via SMS. Demo code: 1234');
-                  setForgotNewPassword('pass123');
-                  setForgotConfirmPassword('pass123');
-                  setError(null);
-                }}
-                className="py-1 px-2.5 rounded-lg bg-surface-container-low hover:bg-primary/10 border border-outline-variant/40 font-semibold text-primary text-[10.5px] cursor-pointer"
-              >
-                🔑 Auto-Fill Demo OTP & Pass
-              </button>
-            )}
-          </div>
-        </div>
 
       </div>
     </div>

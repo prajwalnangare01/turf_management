@@ -3,6 +3,7 @@ import { store } from '../../services/store';
 import { AdminUser } from '../../types/schema';
 import { formatTime12hPlain, formatDateDDMMYYYY, formatPhoneNumber, getBookingGatePassOtp } from '../../utils/formatters';
 import { DataArchiveService, ArchiveDispatchResult } from '../../services/dataArchiveService';
+import { EmailService } from '../../services/emailService';
 import { 
   BarChart3, 
   TrendingUp, 
@@ -17,7 +18,8 @@ import {
   RotateCcw,
   Layers,
   Database,
-  ArrowRight
+  ArrowRight,
+  Info
 } from 'lucide-react';
 
 interface ReportsAnalyticsProps {
@@ -89,14 +91,24 @@ export const ReportsAnalytics: React.FC<ReportsAnalyticsProps> = ({ currentAdmin
       return;
     }
 
+    const cleanEmail = ownerEmailInput.trim().toLowerCase();
+    if (EmailService.isResendSenderEmail(cleanEmail)) {
+      setEmailStatus({
+        type: 'error',
+        message: "You can't send on this email — it's the sender email! Both sender and recipient cannot be the same. Please provide a different recipient email."
+      });
+      return;
+    }
+
     setIsSendingEmail(true);
     setEmailStatus(null);
     try {
       const res = await DataArchiveService.dispatchArchiveToOwner({
         targetEmail: ownerEmailInput,
         periodDays: selectedPeriod,
-        isManual: true
-      });
+        isManual: true,
+        adminId: currentAdmin.id
+      } as any);
 
       setDispatchResultModal(res);
 
@@ -134,15 +146,25 @@ export const ReportsAnalytics: React.FC<ReportsAnalyticsProps> = ({ currentAdmin
   const handleSaveEmail = () => {
     const cleanEmail = ownerEmailInput.trim().toLowerCase();
     if (!cleanEmail || !cleanEmail.includes('@')) {
-      alert('Please enter a valid email address.');
+      setEmailStatus({
+        type: 'error',
+        message: 'Please enter a valid email address.'
+      });
+      return;
+    }
+    if (EmailService.isResendSenderEmail(cleanEmail)) {
+      setEmailStatus({
+        type: 'error',
+        message: "You can't send on this email — it's the sender email! Both sender and recipient cannot be the same. Please provide a different recipient email address."
+      });
       return;
     }
     store.updateDataArchiveSettings({ owner_email: cleanEmail });
     setEmailStatus({
       type: 'success',
-      message: `Owner archive dispatch email updated and saved as ${cleanEmail}!`
+      message: `Owner archive dispatch email saved as ${cleanEmail}!`
     });
-    setTimeout(() => setEmailStatus(null), 4000);
+    setTimeout(() => setEmailStatus(null), 5000);
   };
 
   const lastDispatchStr = archiveSettings.last_dispatch_date 
@@ -367,7 +389,7 @@ export const ReportsAnalytics: React.FC<ReportsAnalyticsProps> = ({ currentAdmin
               </p>
 
               {/* Editable Owner Email Field */}
-              <div className="bg-white p-3.5 rounded-xl border border-gray-200/90 shadow-2xs space-y-1.5">
+              <div className="bg-white p-3.5 rounded-xl border border-gray-200/90 shadow-2xs space-y-2">
                 <div className="flex items-center justify-between">
                   <label htmlFor="owner-email-input" className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
                     <Mail className="w-3.5 h-3.5 text-primary" />
@@ -394,6 +416,19 @@ export const ReportsAnalytics: React.FC<ReportsAnalyticsProps> = ({ currentAdmin
                     <span>Save</span>
                   </button>
                 </div>
+
+                {/* Resend Sender Email Conflict Warning / Success Notice (1 Line, No Brackets) */}
+                {EmailService.isResendSenderEmail(ownerEmailInput) ? (
+                  <div className="flex items-center gap-1.5 bg-red-50 border border-red-300 text-red-900 px-2.5 py-1.5 rounded-lg text-xs font-medium animate-fadeIn">
+                    <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                    <span><strong>You can't send on this email — it's the sender email!</strong></span>
+                  </div>
+                ) : ownerEmailInput.trim().includes('@') ? (
+                  <div className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-900 px-2.5 py-1.5 rounded-lg text-xs font-medium animate-fadeIn">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span><strong>Valid Recipient Email</strong> — ready for delivery.</span>
+                  </div>
+                ) : null}
               </div>
 
               {/* Schedule Info Box */}
@@ -480,8 +515,17 @@ export const ReportsAnalytics: React.FC<ReportsAnalyticsProps> = ({ currentAdmin
               <button
                 type="button"
                 onClick={handleSendEmailNow}
-                disabled={isSendingEmail}
-                className="w-full py-2.5 px-4 bg-primary hover:bg-primary-dark text-white rounded-xl font-headline font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition cursor-pointer disabled:opacity-50"
+                disabled={isSendingEmail || EmailService.isResendSenderEmail(ownerEmailInput)}
+                className={`w-full py-2.5 px-4 rounded-xl font-headline font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition ${
+                  EmailService.isResendSenderEmail(ownerEmailInput)
+                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed border border-gray-300'
+                    : 'bg-primary hover:bg-primary-dark text-white cursor-pointer'
+                }`}
+                title={
+                  EmailService.isResendSenderEmail(ownerEmailInput)
+                    ? "Cannot send: recipient matches the sender email. Both cannot be the same."
+                    : `Send past ${selectedPeriod}-day backup to ${ownerEmailInput}`
+                }
               >
                 {isSendingEmail ? (
                   <>
@@ -495,6 +539,12 @@ export const ReportsAnalytics: React.FC<ReportsAnalyticsProps> = ({ currentAdmin
                   </>
                 )}
               </button>
+              {EmailService.isResendSenderEmail(ownerEmailInput) && (
+                <p className="text-[11px] text-red-600 font-bold text-center mt-1.5 flex items-center justify-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5 text-red-600 shrink-0" />
+                  <span>Cannot send: Recipient cannot be the sender email.</span>
+                </p>
+              )}
             </div>
           </div>
         </div>

@@ -15,6 +15,7 @@ import { ReminderScheduler } from '../services/reminderScheduler';
 import { NotificationService } from '../services/notificationService';
 import { ExcelExportService } from '../services/excelExportService';
 import { DataArchiveService } from '../services/dataArchiveService';
+import { AuditLogger } from '../services/auditLogger';
 import { formatTimeRange12h, formatDateDDMMYYYY, getBookingGatePassOtp, getBookingGroupRef } from '../utils/formatters';
 import { Court, DynamicSlot, BlockedSlot, Booking } from '../types/schema';
 
@@ -1433,7 +1434,7 @@ async function runResendTests() {
   });
 
   const configuredOwnerEmail = store.getDataArchiveSettings().owner_email || 'rajupainter84688@gmail.com';
-  const autoDispatchCheck = await DataArchiveService.checkAndDispatchAutomatedMonthlyArchive();
+  const autoDispatchCheck = await DataArchiveService.checkAndDispatchAutomatedMonthlyArchive(true);
   assert(autoDispatchCheck.dispatched === true, 'Automated scheduler detected 30+ days elapsed and triggered archive dispatch');
   assert(autoDispatchCheck.recipient === configuredOwnerEmail, `Automated dispatch sent to configured owner email (${configuredOwnerEmail})`);
 
@@ -1475,6 +1476,286 @@ async function runResendTests() {
   assert(custLockRes.success, 'Customer locked 20:00 slot');
   RedisLockService.releaseAllLocksForSession(customerId);
   assert(!RedisLockService.getLock(refreshTestCourt.id, refreshTestDate, '20:00'), 'Customer held slot immediately released on refresh');
+
+  // --- TEST 25: Audit Logs 60-Day Operational Retention & Email Operation Tracking ---
+  console.log('\n--- TEST 25: Audit Logs 60-Day Retention & Email Operation Tracking ---');
+
+  // 25.1: Retention window configuration
+  assert(AuditLogger.RETENTION_DAYS === 60, 'AuditLogger retention window is strictly 60 days');
+  assert(AuditLogger.RETENTION_MS === 60 * 24 * 60 * 60 * 1000, 'Retention window milliseconds matches 60 days');
+
+  // 25.2: Email Archive Dispatch Audit Logging
+  const testArchiveEmail = 'sanjay.owner@example.com';
+  const testArchiveLog = AuditLogger.log(
+    'adm-001',
+    'DISPATCH_EMAIL_ARCHIVE',
+    'DataArchive',
+    testArchiveEmail,
+    null,
+    {
+      recipient: testArchiveEmail,
+      period: 'Last 30 Days',
+      bookingsCount: 25,
+      netRevenue: 42000,
+      attachmentFilename: 'TurfFlow_Master_Ledger_Past_30Days_2026-11-11.xls',
+      status: 'sent'
+    }
+  );
+  assert(testArchiveLog.action === 'DISPATCH_EMAIL_ARCHIVE', 'DISPATCH_EMAIL_ARCHIVE logged successfully');
+  assert(testArchiveLog.entity_id === testArchiveEmail, 'Target recipient matches test email');
+  assert(testArchiveLog.new_value?.bookingsCount === 25, 'Payload booking count preserved in audit metadata');
+
+  // 25.3: Customer Confirmation Email Audit Logging
+  const testConfirmLog = AuditLogger.log(
+    'SYSTEM',
+    'SEND_EMAIL_CONFIRMATION',
+    'Booking',
+    'TRF-20261111-9999',
+    null,
+    {
+      recipient: 'customer99@example.com',
+      customerName: 'Kunal Kapoor',
+      bookingRef: 'TRF-20261111-9999',
+      slot: '11/11/2026 06:00 PM - 07:00 PM',
+      status: 'sent'
+    }
+  );
+  assert(testConfirmLog.admin_name === 'System Automation', 'SYSTEM admin ID correctly resolves to System Automation');
+  assert(testConfirmLog.action === 'SEND_EMAIL_CONFIRMATION', 'SEND_EMAIL_CONFIRMATION logged successfully');
+
+  // 25.4: Automatic 60-Day Purging & Retention Filtering
+  const nowMs = Date.now();
+  const seventyDaysAgoIso = new Date(nowMs - 70 * 24 * 60 * 60 * 1000).toISOString();
+  const tenDaysAgoIso = new Date(nowMs - 10 * 24 * 60 * 60 * 1000).toISOString();
+
+  // Inject stale record (>60 days old) and fresh record (<60 days old)
+  const existingAuditLogs = store.getAuditLogs();
+  store.setAuditLogs([
+    {
+      id: 'audit-stale-test-70d',
+      admin_user_id: 'adm-001',
+      admin_name: 'Sanjay Kumar (Owner)',
+      action: 'UPDATE_COURT',
+      entity_type: 'Court',
+      entity_id: 'crt-001',
+      created_at: seventyDaysAgoIso
+    },
+    {
+      id: 'audit-fresh-test-10d',
+      admin_user_id: 'adm-002',
+      admin_name: 'Amit Patel (Staff)',
+      action: 'UPDATE_BOOKING_STATUS_COMPLETED',
+      entity_type: 'Booking',
+      entity_id: 'TRF-2026-TEST',
+      created_at: tenDaysAgoIso
+    },
+    ...existingAuditLogs
+  ]);
+
+  // Execute explicit 60-day purge
+  const purgedCount = AuditLogger.purgeRecordsOlderThan60Days();
+  assert(purgedCount >= 1, `Purged ${purgedCount} stale records older than 60 days`);
+
+  const activeAuditLogs = AuditLogger.getLogsLast60Days();
+  const hasStaleLog = activeAuditLogs.some(l => l.id === 'audit-stale-test-70d');
+  const hasFreshLog = activeAuditLogs.some(l => l.id === 'audit-fresh-test-10d');
+  assert(!hasStaleLog, 'Records older than 60 days are successfully removed from audit logs');
+  assert(hasFreshLog, 'Records within 60 days are preserved intact');
+
+  // Verify all entries in activeAuditLogs are within 60 days
+  const sixtyDaysLimitMs = nowMs - AuditLogger.RETENTION_MS;
+  const allWithin60Days = activeAuditLogs.every(l => new Date(l.created_at).getTime() >= sixtyDaysLimitMs);
+  assert(allWithin60Days, '100% of returned audit logs strictly respect the 60-day retention window');
+
+  // --- TEST 26: Production Auth - Signup OTPs, Forgot Password, and Profile Email Update OTP ---
+  console.log('\n--- TEST 26: Production Auth: Dual Signup OTPs, Password Reset & Profile Email OTP ---');
+
+  // 26.1: Request Mobile Signup OTP via SMS
+  const smsReq = await SmsVerificationService.requestOtp('9822334455', 'signup', 'Arun Joshi');
+  assert(smsReq.success === true, 'Mobile signup OTP requested successfully');
+  assert(!!smsReq.code && smsReq.code.length === 4, 'Generated 4-digit mobile OTP code');
+
+  // 26.2: Request Email Signup OTP via Resend
+  const emailReq = await EmailVerificationService.requestOtp('arun.joshi@example.com', 'signup', 'Arun Joshi');
+  assert(emailReq.success === true, 'Email signup OTP requested successfully via Resend');
+  assert(!!emailReq.code && emailReq.code.length === 6, 'Generated 6-digit email OTP code');
+
+  // 26.3: Register Customer using Dual Verified OTPs
+  const regRes = CustomerAuthService.register(
+    'Arun Joshi',
+    '9822334455',
+    smsReq.code!,
+    'securePass2026',
+    'arun.joshi@example.com',
+    emailReq.code!
+  );
+  assert(regRes.success === true, 'Registration succeeded with verified Dual OTPs');
+  assert(Boolean(regRes.session?.customer.phone.includes('9822334455')), 'Registered customer profile phone matches');
+  assert(regRes.session?.customer.email === 'arun.joshi@example.com', 'Registered customer profile email matches');
+  assert(regRes.session?.customer.email_verified === true, 'Customer email marked verified');
+
+  // 26.4: Log in with newly registered real password
+  const newLogin = CustomerAuthService.loginWithPassword('9822334455', 'securePass2026');
+  assert(newLogin.success === true, 'Customer successfully logged in with real password');
+  const badLogin = CustomerAuthService.loginWithPassword('9822334455', 'wrongpass');
+  assert(badLogin.success === false, 'Bad password rejected for customer');
+
+  // 26.5: Forgot Password flow via Mobile SMS
+  const forgotSmsReq = await CustomerAuthService.sendPasswordResetOtp('9822334455');
+  assert(forgotSmsReq.success === true, 'Password reset OTP dispatched via SMS');
+  assert(!!(forgotSmsReq as any).code, 'Forgot password SMS code generated');
+
+  const pwdResetRes = CustomerAuthService.resetPasswordWithOtp('9822334455', (forgotSmsReq as any).code, 'brandNewPass789');
+  assert(pwdResetRes.success === true, 'Password reset succeeded with SMS OTP');
+  const oldPassLogin = CustomerAuthService.loginWithPassword('9822334455', 'securePass2026');
+  assert(oldPassLogin.success === false, 'Old password no longer works after reset');
+  const freshPassLogin = CustomerAuthService.loginWithPassword('9822334455', 'brandNewPass789');
+  assert(freshPassLogin.success === true, 'New password works immediately for login');
+
+  // 26.6: Profile Email Update with Email OTP Verification
+  const updateEmailOtpReq = await EmailVerificationService.requestOtp('arun.updated@example.com', 'profile_update', 'Arun Joshi');
+  assert(updateEmailOtpReq.success === true, 'Profile update email OTP requested via Resend');
+  assert(!!updateEmailOtpReq.code, 'Generated 6-digit profile update email code');
+
+  const updateEmailRes = CustomerAuthService.updateCustomerEmail(regRes.session!.customer.id, 'arun.updated@example.com', updateEmailOtpReq.code!);
+  assert(updateEmailRes.success === true, 'Email updated successfully after OTP verification');
+  assert(updateEmailRes.customer?.email === 'arun.updated@example.com', 'Customer email updated to new verified address');
+  assert(updateEmailRes.customer?.email_verified === true, 'Updated email marked verified');
+
+  // Verify duplicate email update is blocked
+  const dupUpdate = CustomerAuthService.updateCustomerEmail('cust-101', 'arun.updated@example.com', '123456');
+  assert(dupUpdate.success === false, 'Cannot update email to an address already owned by another customer');
+
+  // --- TEST 27: Resend Sender Email Conflict Prevention & Warning ---
+  console.log('\n--- TEST 27: Resend Sender Email Conflict Prevention & Warning ---');
+  const resendSender = EmailService.getResendSenderEmail();
+  assert(resendSender === 'rajupainter84688@gmail.com', `Resend sender email correctly resolves to rajupainter84688@gmail.com (got: ${resendSender})`);
+  assert(EmailService.isResendSenderEmail('rajupainter84688@gmail.com') === true, 'Matches exact sender email');
+  assert(EmailService.isResendSenderEmail('Rajupainter84688@Gmail.Com') === true, 'Case-insensitive match for sender email');
+  assert(EmailService.isResendSenderEmail('other.user@example.com') === false, 'Non-sender email correctly identified as external');
+  assert(EmailService.isResendSenderEmail('') === false, 'Empty email safely returns false');
+  assert(EmailService.isResendSenderEmail(null) === false, 'Null email safely returns false');
+
+  // Verify that dispatching to sender email is strictly blocked
+  const blockedSenderDispatch = await DataArchiveService.dispatchArchiveToOwner({
+    targetEmail: 'rajupainter84688@gmail.com',
+    periodDays: 30
+  });
+  assert(blockedSenderDispatch.success === false, 'Dispatching archive to sender email is cleanly blocked');
+  assert(blockedSenderDispatch.message.includes('sender email'), 'Clear warning returned indicating sender & recipient cannot be the same');
+
+  // Verify that dispatching to a distinct recipient email succeeds
+  const validRecipientDispatch = await DataArchiveService.dispatchArchiveToOwner({
+    targetEmail: 'owner@turfflow.com',
+    periodDays: 30
+  });
+  assert(validRecipientDispatch.success === true, 'Dispatching archive to distinct recipient email succeeds');
+
+  // --- TEST 28: Profile Email Update Conflict Validations (Same Email & Duplicate Registered Email) ---
+  console.log('\n--- TEST 28: Profile Email Update Conflict Validations (Same Email & Duplicate Registered Email) ---');
+  
+  // Validation function mirroring CustomerProfilePage validation logic
+  const validateProfileEmailUpdate = (newEmail: string, oldEmail?: string, currentCustId?: string) => {
+    const cleanNew = newEmail.trim().toLowerCase();
+    const cleanOld = (oldEmail || '').trim().toLowerCase();
+
+    if (!cleanNew) {
+      return { isConflict: false, warning: null, isValid: false };
+    }
+
+    // 1. Both old and new should not be the same
+    if (cleanOld && cleanNew === cleanOld) {
+      return {
+        isConflict: true,
+        warning: 'New email cannot be the same as your old email.',
+        isValid: false
+      };
+    }
+
+    // 2. Format check
+    const isValidFormat = cleanNew.includes('@') && cleanNew.includes('.') && cleanNew.length >= 5;
+    if (!isValidFormat) {
+      return {
+        isConflict: false,
+        warning: null,
+        isValid: false
+      };
+    }
+
+    // 3. New email should not already be registered to another account
+    const customers = store.getCustomers();
+    const duplicateCustomer = customers.find(
+      c => c.id !== currentCustId && c.email && c.email.trim().toLowerCase() === cleanNew
+    );
+
+    if (duplicateCustomer) {
+      return {
+        isConflict: true,
+        warning: 'This email is already registered with another account.',
+        isValid: false
+      };
+    }
+
+    return {
+      isConflict: false,
+      warning: null,
+      isValid: true
+    };
+  };
+
+  const testCustomer = store.getCustomers()[0];
+  const oldEmail = testCustomer.email || 'customer1@example.com';
+
+  // 28.1: Test same email conflict check (case-insensitive and trimmed)
+  const sameEmailVal1 = validateProfileEmailUpdate(oldEmail, oldEmail, testCustomer.id);
+  assert(sameEmailVal1.isConflict === true, 'Identical email flagged as conflict');
+  assert(sameEmailVal1.warning === 'New email cannot be the same as your old email.', 'Exact same email warning message returned');
+  assert(sameEmailVal1.isValid === false, 'Same email marked invalid');
+
+  const sameEmailVal2 = validateProfileEmailUpdate(`  ${oldEmail.toUpperCase()}  `, oldEmail, testCustomer.id);
+  assert(sameEmailVal2.isConflict === true, 'Case-insensitive & whitespace trimmed same email flagged as conflict');
+  assert(sameEmailVal2.warning === 'New email cannot be the same as your old email.', 'Same email warning returned for uppercase input');
+
+  // 28.2: Test duplicate already registered email check
+  const anotherCustomer = store.getCustomers().find(c => c.id !== testCustomer.id && c.email) || {
+    id: 'cust-temp-dup-99',
+    name: 'Existing Other User',
+    phone: '+919988776655',
+    email: 'other.existing.user@turfflow.com',
+    email_verified: true,
+    created_at: new Date().toISOString(),
+    total_bookings: 0,
+    total_spent: 0,
+    no_show_count: 0,
+    is_blacklisted: false
+  };
+  if (!store.getCustomers().some(c => c.id === anotherCustomer.id)) {
+    store.addCustomer(anotherCustomer as any);
+  }
+
+  const dupEmailVal = validateProfileEmailUpdate(anotherCustomer.email!, oldEmail, testCustomer.id);
+  assert(dupEmailVal.isConflict === true, 'Already registered email flagged as conflict');
+  assert(dupEmailVal.warning === 'This email is already registered with another account.', 'Duplicate registered email warning message returned');
+  assert(dupEmailVal.isValid === false, 'Duplicate registered email marked invalid');
+
+  // Verify CustomerAuthService.updateCustomerEmail blocks duplicate registration
+  const blockedDupUpdateRes = CustomerAuthService.updateCustomerEmail(testCustomer.id, anotherCustomer.email!, '123456');
+  assert(blockedDupUpdateRes.success === false, 'CustomerAuthService blocks update when email is registered to another account');
+
+  // 28.3: Test fresh, distinct, unregistered email
+  const freshEmail = `unique.player.${Date.now()}@example.com`;
+  const freshEmailVal = validateProfileEmailUpdate(freshEmail, oldEmail, testCustomer.id);
+  assert(freshEmailVal.isConflict === false, 'Fresh distinct email has no conflict');
+  assert(freshEmailVal.warning === null, 'No warning for fresh distinct email');
+  assert(freshEmailVal.isValid === true, 'Fresh distinct email marked valid for verification');
+
+  // 28.4: Request and confirm OTP for fresh email
+  const freshEmailOtpReq = await EmailVerificationService.requestOtp(freshEmail, 'profile_update', testCustomer.name);
+  assert(freshEmailOtpReq.success === true, 'OTP requested for fresh email');
+  const freshEmailUpdateRes = CustomerAuthService.updateCustomerEmail(testCustomer.id, freshEmail, freshEmailOtpReq.code!);
+  assert(freshEmailUpdateRes.success === true, 'Customer email updated successfully with valid OTP');
+  assert(freshEmailUpdateRes.customer?.email === freshEmail, 'Customer record reflects updated email');
+  assert(freshEmailUpdateRes.customer?.email_verified === true, 'Customer email verified status set to true');
 
   console.log('\n🎉 ALL CORNER & EDGE CASE TESTS (INCLUDING AUTO-COMPLETE & OWNER REDUCED WORKFLOW) PASSED PERFECTLY!\n');
 }

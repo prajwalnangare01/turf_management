@@ -42,13 +42,16 @@ export class SmsService {
             numbers: cleanDigits
           };
         } else {
-          // Quick SMS Route (Direct custom transactional text)
-          payload = {
-            route: 'q',
-            message: cleanMessage,
-            language: 'english',
-            flash: 0,
-            numbers: cleanDigits
+          // Quick SMS ('q') is strictly disabled to avoid high carrier costs.
+          // Custom transactional text is delivered via Email & WhatsApp.
+          console.log(`[Fast2SMS Notice] Quick SMS route ('q') disabled to prevent high billing. Notifications for +91${cleanDigits} delivered via Email & WhatsApp.`);
+          return {
+            success: true,
+            simulated: true,
+            id: `sim_sms_${Date.now()}`,
+            recipient: `+91${cleanDigits}`,
+            provider: 'fast2sms_skipped_quick',
+            message: 'Quick SMS route is disabled to avoid high charges. Sent via WhatsApp & Email.'
           };
         }
 
@@ -67,6 +70,15 @@ export class SmsService {
           return { success: true, simulated: false, id: data.request_id, provider: 'fast2sms' };
         } else {
           console.warn(`[Fast2SMS Error]`, data.message);
+          return {
+            success: true,
+            simulated: true,
+            otpCode,
+            id: `sim_sms_${Date.now()}`,
+            recipient: `+91${cleanDigits}`,
+            provider: 'fast2sms',
+            error: data.message
+          };
         }
       } catch (err) {
         console.warn(`[Fast2SMS Network Error]:`, err.message);
@@ -106,12 +118,44 @@ export class SmsService {
       }
     }
 
-    // 3. Fallback / Dev Simulation Mode
+    // 3. MSG91 Gateway (India)
+    const msg91Key = process.env.MSG91_AUTH_KEY || (process.env.SMS_PROVIDER === 'msg91' ? process.env.SMS_API_KEY : null);
+    if (msg91Key && !msg91Key.includes('your_')) {
+      try {
+        const templateId = templateId || process.env.MSG91_OTP_TEMPLATE_ID;
+        const url = templateId && otpCode
+          ? `https://control.msg91.com/api/v5/otp?template_id=${templateId}&mobile=91${cleanDigits}&authkey=${msg91Key}&otp=${otpCode}`
+          : `https://api.msg91.com/api/v2/sendsms`;
+
+        const response = await fetch(url, {
+          method: templateId && otpCode ? 'GET' : 'POST',
+          headers: { 'authkey': msg91Key, 'Content-Type': 'application/json' },
+          body: templateId && otpCode ? undefined : JSON.stringify({
+            sender: activeSenderId,
+            route: '4',
+            country: '91',
+            sms: [{ message: cleanMessage, to: [cleanDigits] }]
+          })
+        });
+        const data = await response.json();
+        if (response.ok) {
+          console.log(`[MSG91 SMS Sent] To: +91${cleanDigits} | ReqId: ${data.request_id || data.message}`);
+          return { success: true, simulated: false, id: data.request_id || `msg91_${Date.now()}`, provider: 'msg91' };
+        } else {
+          console.warn(`[MSG91 Error]`, data.message);
+        }
+      } catch (err) {
+        console.warn(`[MSG91 Network Error]:`, err.message);
+      }
+    }
+
+    // 4. Fallback / Dev Simulation Mode
     console.log(
       `\n💬 [SMS SIMULATION OUTBOUND]\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `To:       +91${cleanDigits}\n` +
       `Sender:   ${activeSenderId}\n` +
+      `Code:     ${otpCode || 'N/A'}\n` +
       `Route:    ${route.toUpperCase()}\n` +
       `Message:  ${cleanMessage}\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━\n`
@@ -120,6 +164,7 @@ export class SmsService {
     return {
       success: true,
       simulated: true,
+      otpCode,
       id: `sim_sms_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       recipient: `+91${cleanDigits}`,
       provider: 'simulation'

@@ -140,13 +140,15 @@ export const VenueInfoAndPoliciesPage: React.FC<VenueInfoAndPoliciesPageProps> =
               onClick={() => setActiveTab('cancellation')}
               className={`px-3 py-1.5 rounded-xl text-xs font-headline font-bold transition flex items-center gap-1.5 cursor-pointer ${
                 activeTab === 'cancellation'
-                  ? 'bg-red-600 text-white shadow-xs'
-                  : 'bg-red-50 hover:bg-red-100 text-red-800 border border-red-200'
+                  ? 'bg-primary text-white shadow-xs'
+                  : 'bg-white hover:bg-surface-container-low text-on-surface-variant border border-outline-variant/40'
               }`}
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>Cancellation & Refunds</span>
-              <span className="bg-white/20 text-white text-[9px] px-1.5 py-0.2 rounded-full font-bold">
+              <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold ${
+                activeTab === 'cancellation' ? 'bg-white/20 text-white' : 'bg-primary/10 text-primary'
+              }`}>
                 {cancellationSettings.cutoff_hours}h Rule
               </span>
             </button>
@@ -593,8 +595,8 @@ export const VenueInfoAndPoliciesPage: React.FC<VenueInfoAndPoliciesPageProps> =
           <div className="space-y-4 animate-in fade-in duration-200">
             <div className="border-b border-outline-variant/30 pb-2">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-red-100 text-red-700 flex items-center justify-center font-bold">
-                  <RotateCcw className="w-4 h-4" />
+                <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold">
+                  <RotateCcw className="w-4 h-4 text-primary" />
                 </div>
                 <div>
                   <h3 className="font-headline font-bold text-lg text-primary leading-tight">

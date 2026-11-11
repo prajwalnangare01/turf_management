@@ -113,9 +113,11 @@ export class SmsVerificationService {
       success: true,
       code,
       isSimulated: isSim,
-      message: isSim
-        ? `SMS OTP sent to ${normalizedPhone}. Demo / Test OTP code: ${code} (or demo fallback 1234)`
-        : `SMS OTP successfully sent to ${normalizedPhone}. Please check your phone messages.`
+      message: dispatchRes.error
+        ? `Fast2SMS Gate: ${dispatchRes.error}. Verification Code: ${code}`
+        : isSim
+          ? `SMS OTP sent to ${normalizedPhone}. Demo / Test OTP code: ${code} (or demo fallback 1234)`
+          : `SMS OTP successfully sent to ${normalizedPhone}. Please check your phone messages.`
     };
   }
 

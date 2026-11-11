@@ -200,11 +200,66 @@ const DEFAULT_COUPONS: Coupon[] = [
 
 const DEFAULT_ARCHIVE_SETTINGS: DataArchiveSettings = {
   auto_dispatch_days: 30,
-  owner_email: 'rajupainter84688@gmail.com',
+  owner_email: 'owner@turfflow.com',
   last_dispatch_date: new Date(Date.now() - 25 * 24 * 60 * 60 * 1000).toISOString(),
   next_dispatch_date: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
   is_active: true
 };
+
+const DEFAULT_AUDIT_LOGS: AuditLog[] = [
+  {
+    id: 'audit-001',
+    admin_user_id: 'SYSTEM',
+    admin_name: 'System Automation',
+    action: 'DISPATCH_EMAIL_ARCHIVE',
+    entity_type: 'DataArchive',
+    entity_id: 'rajupainter84688@gmail.com',
+    new_value: {
+      recipient: 'rajupainter84688@gmail.com',
+      period: 'Last Month (October 2026)',
+      bookingsCount: 48,
+      netRevenue: 72400,
+      attachmentFilename: 'TurfFlow_Master_Ledger_October_2026.xls',
+      status: 'sent'
+    },
+    created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString()
+  },
+  {
+    id: 'audit-002',
+    admin_user_id: 'SYSTEM',
+    admin_name: 'System Automation',
+    action: 'SEND_EMAIL_CONFIRMATION',
+    entity_type: 'Booking',
+    entity_id: 'TRF-20261110-2221',
+    new_value: {
+      recipient: 'rahul.sharma@example.com',
+      customerName: 'Rahul Sharma',
+      bookingRef: 'TRF-20261110-2221',
+      slot: '10/11/2026 07:00 PM - 08:00 PM',
+      status: 'sent'
+    },
+    created_at: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString()
+  },
+  {
+    id: 'audit-003',
+    admin_user_id: 'adm-001',
+    admin_name: 'Sanjay Kumar (Owner)',
+    action: 'CREATE_OFFLINE_BOOKING',
+    entity_type: 'Booking',
+    entity_id: 'TRF-2026-0002',
+    new_value: { customer_name: 'Vikram Singh', court: 'Turf A', amount: 1600 },
+    created_at: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString()
+  },
+  {
+    id: 'audit-004',
+    admin_user_id: 'adm-002',
+    admin_name: 'Amit Patel (Staff)',
+    action: 'UPDATE_BOOKING_STATUS_COMPLETED',
+    entity_type: 'Booking',
+    entity_id: 'TRF-2026-0003',
+    created_at: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString()
+  }
+];
 
 // Persistent State Helper using LocalStorage
 class AppStore {
@@ -223,7 +278,7 @@ class AppStore {
   private dataArchiveSettings: DataArchiveSettings = DEFAULT_ARCHIVE_SETTINGS;
   private coupons: Coupon[] = DEFAULT_COUPONS;
   private notificationLogs: NotificationLog[] = [];
-  private auditLogs: AuditLog[] = [];
+  private auditLogs: AuditLog[] = DEFAULT_AUDIT_LOGS;
   private listeners: (() => void)[] = [];
 
   public subscribe(listener: () => void): () => void {
@@ -332,12 +387,18 @@ class AppStore {
         this.cancellationPolicies = parsed.cancellationPolicies || DEFAULT_CANCELLATION_POLICIES;
         this.cancellationSettings = parsed.cancellationSettings || DEFAULT_CANCELLATION_SETTINGS;
         this.dataArchiveSettings = parsed.dataArchiveSettings || DEFAULT_ARCHIVE_SETTINGS;
-        if (!this.dataArchiveSettings.owner_email || this.dataArchiveSettings.owner_email === 'owner@turfflow.com' || this.dataArchiveSettings.owner_email.includes('sanjay.turfowner') || this.dataArchiveSettings.owner_email.includes('apexturf')) {
-          this.dataArchiveSettings.owner_email = 'rajupainter84688@gmail.com';
+        if (!this.dataArchiveSettings.owner_email || this.dataArchiveSettings.owner_email.includes('sanjay.turfowner') || this.dataArchiveSettings.owner_email.includes('apexturf')) {
+          this.dataArchiveSettings.owner_email = 'owner@turfflow.com';
         }
         this.coupons = parsed.coupons || DEFAULT_COUPONS;
         this.notificationLogs = parsed.notificationLogs || [];
-        this.auditLogs = parsed.auditLogs || [];
+        const rawAudit = parsed.auditLogs || [];
+        const sixtyDaysCutoff = Date.now() - 60 * 24 * 60 * 60 * 1000;
+        const validAudit = rawAudit.filter((l: AuditLog) => {
+          const t = new Date(l.created_at).getTime();
+          return !isNaN(t) && t >= sixtyDaysCutoff;
+        });
+        this.auditLogs = validAudit.length > 0 ? validAudit : DEFAULT_AUDIT_LOGS;
       }
     } catch (e) {
       console.warn('LocalStorage load failed, using defaults', e);
@@ -434,7 +495,7 @@ class AppStore {
     this.cancellationSettings = DEFAULT_CANCELLATION_SETTINGS;
     this.coupons = DEFAULT_COUPONS;
     this.notificationLogs = [];
-    this.auditLogs = [];
+    this.auditLogs = DEFAULT_AUDIT_LOGS;
     this.saveToStorage();
   }
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { store } from '../../services/store';
 import { AuditLogger } from '../../services/auditLogger';
 import { PostgresEngine } from '../../services/postgresEngine';
@@ -17,6 +17,17 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
   const [courts, setCourts] = useState<Court[]>(() => store.getCourts());
   const [blockedSlots, setBlockedSlots] = useState<BlockedSlot[]>(() => store.getBlockedSlots());
   const [sports, setSports] = useState<Sport[]>(() => store.getSports());
+
+  // Subscribe to store updates (Supabase Realtime & background sync)
+  useEffect(() => {
+    const handleStoreChange = () => {
+      setCourts([...store.getCourts()]);
+      setBlockedSlots([...store.getBlockedSlots()]);
+      setSports([...store.getSports()]);
+    };
+    const unsubscribe = store.subscribe(handleStoreChange);
+    return () => unsubscribe();
+  }, []);
 
   // Custom Sport Input State
   const [showAddCustomSportAdd, setShowAddCustomSportAdd] = useState(false);
@@ -119,13 +130,19 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
       message: `Are you sure you want to delete custom sport "${sportName}"? This will remove it from all pitch configurations and sport options.`,
       confirmText: 'Yes, Delete Sport',
       variant: 'danger',
-      onConfirm: () => {
+      onConfirm: async () => {
         const updated = sports.filter(s => s.id !== sportId);
         store.setSports(updated);
         setSports(updated);
         setSelectedSportIds(prev => prev.filter(id => id !== sportId));
         setEditSportIds(prev => prev.filter(id => id !== sportId));
         closeConfirm();
+
+        try {
+          await SupabaseSyncService.deleteSportFromSupabase(sportId);
+        } catch (err) {
+          console.warn('❌ [CourtPricingManager] Error deleting sport from Supabase:', err);
+        }
       }
     });
   };
@@ -663,12 +680,18 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
       message: warningMsg,
       confirmText: 'Yes, Delete Pitch',
       variant: 'danger',
-      onConfirm: () => {
+      onConfirm: async () => {
         const updatedCourts = courts.filter(c => c.id !== courtId);
         store.setCourts(updatedCourts);
         setCourts(updatedCourts);
         AuditLogger.log(currentAdmin.id, 'DELETE_COURT', 'Court', courtId);
         closeConfirm();
+
+        try {
+          await SupabaseSyncService.deleteCourtFromSupabase(courtId);
+        } catch (err) {
+          console.warn('❌ [CourtPricingManager] Error deleting court from Supabase:', err);
+        }
       }
     });
   };

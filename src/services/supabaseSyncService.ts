@@ -73,7 +73,7 @@ export class SupabaseSyncService {
       // 3. Fetch Courts & Court Sports
       const { data: courts, error: cErr } = await supabase.from('courts').select('*');
       const { data: courtSports, error: csErr } = await supabase.from('court_sports').select('*');
-      if (!cErr && courts && courts.length > 0) {
+      if (!cErr && courts) {
         const enrichedCourts: Court[] = courts.map((c: any) => {
           const matchingSports = (courtSports || [])
             .filter((cs: any) => cs.court_id === c.id)
@@ -769,6 +769,64 @@ export class SupabaseSyncService {
       return true;
     } catch (err: any) {
       console.error('❌ [Supabase Sync] Exception syncing court to Supabase:', err.message);
+      return false;
+    }
+  }
+
+  /**
+   * Delete court and its related records (junction, pricing rules, blocked slots, locks) from Supabase
+   */
+  public static async deleteCourtFromSupabase(courtId: string): Promise<boolean> {
+    const supabase = getSupabase();
+    if (!supabase) return false;
+
+    try {
+      // 1. Delete associated junction entries first
+      await supabase.from('court_sports').delete().eq('court_id', courtId);
+      // 2. Delete associated pricing rules if any
+      await supabase.from('court_pricing_rules').delete().eq('court_id', courtId);
+      // 3. Delete associated blocked slots if any
+      await supabase.from('blocked_slots').delete().eq('court_id', courtId);
+      // 4. Delete associated slot locks if any
+      await supabase.from('slot_locks').delete().eq('court_id', courtId);
+      // 5. Delete the court itself
+      const { error } = await supabase.from('courts').delete().eq('id', courtId);
+      if (error) {
+        // If foreign key constraint blocks hard delete (e.g. historical bookings exist), mark inactive
+        if (error.code === '23503') {
+          console.warn('⚠️ [Supabase Sync] Court has associated bookings; marking inactive instead of hard deleting');
+          await supabase.from('courts').update({ status: 'inactive' }).eq('id', courtId);
+          return true;
+        }
+        console.error('❌ [Supabase Sync] Error deleting court from Supabase:', error.message);
+        return false;
+      }
+      console.log(`✅ [Supabase Sync] Court ${courtId} deleted from Supabase.`);
+      return true;
+    } catch (err: any) {
+      console.error('❌ [Supabase Sync] Exception deleting court from Supabase:', err.message);
+      return false;
+    }
+  }
+
+  /**
+   * Delete Sport from Supabase
+   */
+  public static async deleteSportFromSupabase(sportId: string): Promise<boolean> {
+    const supabase = getSupabase();
+    if (!supabase) return false;
+
+    try {
+      await supabase.from('court_sports').delete().eq('sport_id', sportId);
+      const { error } = await supabase.from('sports').delete().eq('id', sportId);
+      if (error) {
+        console.warn('⚠️ [Supabase Sync] Error deleting sport from Supabase:', error.message);
+        return false;
+      }
+      console.log(`✅ [Supabase Sync] Sport "${sportId}" deleted from Supabase.`);
+      return true;
+    } catch (err: any) {
+      console.warn('⚠️ [Supabase Sync] Exception deleting sport from Supabase:', err.message);
       return false;
     }
   }

@@ -86,12 +86,13 @@ export class CustomerAuthService {
   }
 
   /**
-   * Request Password Reset OTP via SMS
+   * Request Password Reset OTP via SMS or Email
    */
-  public static async sendPasswordResetOtp(identity: string): Promise<RequestSmsOtpResult> {
+  public static async sendPasswordResetOtp(identity: string): Promise<RequestSmsOtpResult | RequestOtpResult> {
     const cleanIdentity = identity.trim().toLowerCase();
     const normalizedPhone = normalizeIndianPhone(identity);
     const cleanDigits = identity.replace(/\D/g, '');
+    const isEmail = cleanIdentity.includes('@') && cleanIdentity.includes('.');
 
     const customers = store.getCustomers();
     const customer = customers.find(c =>
@@ -114,42 +115,69 @@ export class CustomerAuthService {
       };
     }
 
+    if (isEmail && customer.email) {
+      return EmailVerificationService.requestOtp(customer.email, 'forgot_password', customer.name);
+    }
+
     return SmsVerificationService.requestOtp(customer.phone, 'forgot_password', customer.name);
   }
 
   /**
-   * Reset Customer Password using SMS OTP verification
+   * Reset Customer Password using SMS or Email OTP verification
    */
   public static resetPasswordWithOtp(
-    phone: string,
+    identity: string,
     otpCode: string,
     newPassword: string
   ): { success: boolean; session?: CustomerSession; customer?: Customer; error?: string } {
-    const normalizedPhone = normalizeIndianPhone(phone);
-    const cleanDigits = phone.replace(/\D/g, '');
+    const cleanIdentity = identity.trim().toLowerCase();
+    const cleanDigits = identity.replace(/\D/g, '');
+    const normalizedPhone = normalizeIndianPhone(identity);
+    const isEmail = cleanIdentity.includes('@') && cleanIdentity.includes('.');
 
-    if (cleanDigits.length < 10) {
-      return { success: false, error: 'Please enter a valid 10-digit mobile number.' };
+    if (!cleanIdentity) {
+      return { success: false, error: 'Please enter your registered mobile number or email.' };
     }
 
     if (!newPassword || newPassword.trim().length < 4) {
       return { success: false, error: 'New password must be at least 4 characters long.' };
     }
 
-    // Verify OTP
-    const verifyRes = SmsVerificationService.verifyOtp(phone, otpCode, 'forgot_password');
-    if (!verifyRes.success) {
-      return { success: false, error: verifyRes.message };
-    }
-
     const customers = store.getCustomers();
     const customer = customers.find(c =>
       normalizeIndianPhone(c.phone) === normalizedPhone ||
-      (cleanDigits.length >= 10 && c.phone.replace(/\D/g, '').slice(-10) === cleanDigits.slice(-10))
+      (cleanDigits.length >= 10 && c.phone.replace(/\D/g, '').slice(-10) === cleanDigits.slice(-10)) ||
+      (c.email && c.email.toLowerCase() === cleanIdentity)
     );
 
     if (!customer) {
       return { success: false, error: 'Customer account not found.' };
+    }
+
+    // Verify OTP: Check Email OTP first if 6 digits or email entered, otherwise SMS OTP (4 digits)
+    let verifySuccess = false;
+    let verifyError = 'Invalid verification code.';
+
+    if (isEmail || (otpCode.trim().length === 6 && customer.email)) {
+      const emailVerify = EmailVerificationService.verifyOtp(customer.email || cleanIdentity, otpCode, 'forgot_password');
+      if (emailVerify.success) {
+        verifySuccess = true;
+      } else {
+        verifyError = emailVerify.message;
+      }
+    }
+
+    if (!verifySuccess) {
+      const smsVerify = SmsVerificationService.verifyOtp(customer.phone, otpCode, 'forgot_password');
+      if (smsVerify.success) {
+        verifySuccess = true;
+      } else if (!isEmail) {
+        verifyError = smsVerify.message;
+      }
+    }
+
+    if (!verifySuccess) {
+      return { success: false, error: verifyError };
     }
 
     // Update password
@@ -166,7 +194,6 @@ export class CustomerAuthService {
     // Log the user in and return active session
     return this.createSession(customer);
   }
-
 
   /**
    * Login with phone/email and password
@@ -201,10 +228,17 @@ export class CustomerAuthService {
       };
     }
 
-    // Default demo password is 'pass123' if not explicitly set
-    const expectedPassword = customer.password || 'pass123';
-    if (password !== expectedPassword && password !== 'pass123') {
-      return { success: false, error: 'Incorrect password. (Demo password: pass123)' };
+    // Validate password
+    const expectedPassword = customer.password;
+    if (expectedPassword) {
+      if (password !== expectedPassword) {
+        return { success: false, error: 'Incorrect password. Please try again or use Forgot Password.' };
+      }
+    } else {
+      // Default demo password for initial mock accounts without password set
+      if (password !== 'pass123') {
+        return { success: false, error: 'Incorrect password. Please try again or use Forgot Password.' };
+      }
     }
 
     return this.createSession(customer);

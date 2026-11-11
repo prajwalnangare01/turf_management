@@ -10,7 +10,7 @@ import {
   User, Phone, Mail, Calendar, ArrowLeft, ShieldCheck, Ticket, 
   XCircle, CheckCircle2, Clock, Award, LogOut, Edit2, Save, X, KeyRound, RotateCcw,
   Download, Printer, AlertCircle, Sparkles, Trophy, CreditCard, Tag, AlertTriangle, FileDown,
-  Sun, Moon, MapPin, Layers, CloudRain, QrCode, ExternalLink
+  Sun, Moon, MapPin, Layers, CloudRain, QrCode, ExternalLink, Send
 } from 'lucide-react';
 import { EmailVerificationService } from '../../services/emailVerificationService';
 import { CustomerAuthService } from '../../services/customerAuthService';
@@ -36,15 +36,87 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
 
   // Edit form state
   const [nameInput, setNameInput] = useState(currentCustomer.name);
-  const [emailInput, setEmailInput] = useState(currentCustomer.email || '');
+  const [emailInput, setEmailInput] = useState('');
+  const [isUpdatingEmailInEdit, setIsUpdatingEmailInEdit] = useState(false);
+  const [newEmailInput, setNewEmailInput] = useState('');
 
   // Email verification modal states (Resend OTP)
   const [isVerifyingEmail, setIsVerifyingEmail] = useState(false);
+  const [emailOtpSent, setEmailOtpSent] = useState(false);
   const [emailOtpCode, setEmailOtpCode] = useState('');
   const [emailOtpNotice, setEmailOtpNotice] = useState<string | null>(null);
   const [emailOtpError, setEmailOtpError] = useState<string | null>(null);
   const [isSendingEmailOtp, setIsSendingEmailOtp] = useState(false);
   const [isConfirmingEmailOtp, setIsConfirmingEmailOtp] = useState(false);
+  const [emailCooldown, setEmailCooldown] = useState(0);
+
+  // Validation for updating email (Old vs New Email comparison & Duplicate registration check)
+  const validateEmailUpdate = (newEmail: string, oldEmail?: string, currentCustId?: string) => {
+    const cleanNew = newEmail.trim().toLowerCase();
+    const cleanOld = (oldEmail || '').trim().toLowerCase();
+
+    if (!cleanNew) {
+      return { isConflict: false, warning: null, isValid: false };
+    }
+
+    // 1. Both old and new should not be the same
+    if (cleanOld && cleanNew === cleanOld) {
+      return {
+        isConflict: true,
+        warning: 'New email cannot be the same as your old email.',
+        isValid: false
+      };
+    }
+
+    // 2. Format check
+    const isValidFormat = cleanNew.includes('@') && cleanNew.includes('.') && cleanNew.length >= 5;
+    if (!isValidFormat) {
+      return {
+        isConflict: false,
+        warning: null,
+        isValid: false
+      };
+    }
+
+    // 3. New email should not already be registered to another account
+    const customers = store.getCustomers();
+    const duplicateCustomer = customers.find(
+      c => c.id !== currentCustId && c.email && c.email.trim().toLowerCase() === cleanNew
+    );
+
+    if (duplicateCustomer) {
+      return {
+        isConflict: true,
+        warning: 'This email is already registered with another account.',
+        isValid: false
+      };
+    }
+
+    return {
+      isConflict: false,
+      warning: null,
+      isValid: true
+    };
+  };
+
+  const editEmailValidation = validateEmailUpdate(newEmailInput, currentCustomer.email, currentCustomer.id);
+  const modalEmailValidation = validateEmailUpdate(emailInput, currentCustomer.email, currentCustomer.id);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setEmailCooldown(c => (c > 0 ? c - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const openEmailUpdateModal = () => {
+    setEmailInput('');
+    setEmailOtpCode('');
+    setEmailOtpSent(false);
+    setEmailOtpError(null);
+    setEmailOtpNotice(null);
+    setIsVerifyingEmail(true);
+  };
 
   // Selected booking for Entry Pass Modal
   const [passModalBooking, setPassModalBooking] = useState<Booking | null>(null);
@@ -238,35 +310,25 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanNewEmail = emailInput.trim().toLowerCase();
-    const currentEmail = (currentCustomer.email || '').trim().toLowerCase();
 
-    // If customer edited or added a new email, require Resend verification
-    if (cleanNewEmail && cleanNewEmail !== currentEmail) {
-      setIsSendingEmailOtp(true);
-      setEmailOtpError(null);
-      setEmailOtpNotice(null);
-
-      const res = await EmailVerificationService.requestOtp(cleanNewEmail, 'profile_update', nameInput.trim());
-      setIsSendingEmailOtp(false);
-
-      if (res.success) {
-        setIsVerifyingEmail(true);
-        setEmailOtpNotice(res.message);
-        if (res.code) {
-          setEmailOtpCode(res.code); // Prefill demo code in trial/sandbox mode
-        }
-      } else {
-        alert(res.message || 'Could not send verification email via Resend.');
+    // If customer is updating email in edit form
+    if (isUpdatingEmailInEdit && newEmailInput.trim()) {
+      if (editEmailValidation.warning) {
+        alert(editEmailValidation.warning);
+        return;
       }
+      if (!emailOtpSent) {
+        alert('Please click "Send Verification Code" and verify your new email address with OTP before saving.');
+        return;
+      }
+      alert('Please enter the 6-digit verification code to complete your email update.');
       return;
     }
 
-    // Only name changed (or email was cleared)
+    // Only name changed
     const updated = {
       ...currentCustomer,
-      name: nameInput.trim(),
-      email: cleanNewEmail || undefined
+      name: nameInput.trim()
     };
 
     const customers = store.getCustomers();
@@ -281,7 +343,150 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
 
     onUpdateCustomer(updated);
     setIsEditing(false);
+    setIsUpdatingEmailInEdit(false);
     alert('Profile details updated successfully!');
+  };
+
+  const handleSendEmailOtpForEditUpdate = async (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    const cleanNewEmail = newEmailInput.trim().toLowerCase();
+    const validation = validateEmailUpdate(cleanNewEmail, currentCustomer.email, currentCustomer.id);
+    if (validation.warning) {
+      setEmailOtpError(validation.warning);
+      return;
+    }
+    if (!validation.isValid) {
+      setEmailOtpError('Please enter a valid email address.');
+      return;
+    }
+
+    setIsSendingEmailOtp(true);
+    setEmailOtpError(null);
+    setEmailOtpNotice(null);
+
+    try {
+      const res = await EmailVerificationService.requestOtp(cleanNewEmail, 'profile_update', nameInput.trim() || currentCustomer.name);
+      setIsSendingEmailOtp(false);
+
+      if (res.success) {
+        setEmailOtpSent(true);
+        setEmailCooldown(30);
+        setEmailOtpNotice(res.isSandbox 
+          ? `📧 Resend Sandbox Code: ${res.code} (Free Resend tier delivers to prajwalnangare41@gmail.com)` 
+          : `6-digit verification code sent to ${cleanNewEmail}. Check your inbox!`);
+      } else {
+        setEmailOtpError(res.message || 'Could not send verification email via Resend.');
+      }
+    } catch (err: any) {
+      setIsSendingEmailOtp(false);
+      setEmailOtpError(err?.message || 'Error communicating with Resend email service.');
+    }
+  };
+
+  const handleConfirmEmailOtpForEdit = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    setEmailOtpError(null);
+    if (!emailOtpCode.trim()) {
+      setEmailOtpError('Please enter the 6-digit verification code.');
+      return;
+    }
+
+    setIsConfirmingEmailOtp(true);
+    const cleanNewEmail = newEmailInput.trim().toLowerCase();
+    const result = CustomerAuthService.updateCustomerEmail(currentCustomer.id, cleanNewEmail, emailOtpCode);
+    setIsConfirmingEmailOtp(false);
+
+    if (result.success && result.customer) {
+      const finalCustomer: Customer = {
+        ...result.customer,
+        name: nameInput.trim() || currentCustomer.name,
+        email_verified: true
+      };
+
+      const customers = store.getCustomers();
+      const idx = customers.findIndex(c => c.id === finalCustomer.id);
+      if (idx !== -1) {
+        customers[idx] = finalCustomer;
+        store.setCustomers(customers);
+        SupabaseSyncService.syncCustomerToSupabase(finalCustomer).catch(err => {
+          console.warn('[CustomerProfilePage] Error syncing confirmed email to Supabase:', err);
+        });
+      }
+
+      onUpdateCustomer(finalCustomer);
+      setIsUpdatingEmailInEdit(false);
+      setNewEmailInput('');
+      setEmailOtpCode('');
+      setEmailOtpNotice(null);
+      setEmailOtpSent(false);
+      alert('Email address verified via Resend and profile updated successfully!');
+    } else {
+      setEmailOtpError(result.error || 'Verification failed. Please check the code.');
+    }
+  };
+
+  const handleResendEmailOtpForEdit = async (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    const cleanNewEmail = newEmailInput.trim().toLowerCase();
+    if (!cleanNewEmail) return;
+
+    setIsSendingEmailOtp(true);
+    setEmailOtpError(null);
+    const res = await EmailVerificationService.requestOtp(cleanNewEmail, 'profile_update', nameInput.trim() || currentCustomer.name);
+    setIsSendingEmailOtp(false);
+
+    if (res.success) {
+      setEmailCooldown(30);
+      setEmailOtpNotice(res.isSandbox 
+        ? `New verification code dispatched (Resend Sandbox mode).` 
+        : `New 6-digit code sent to ${cleanNewEmail}.`);
+    } else {
+      setEmailOtpError(res.message || 'Could not resend email verification code.');
+    }
+  };
+
+  const handleSendEmailOtpForUpdate = async () => {
+    const cleanNewEmail = emailInput.trim().toLowerCase();
+    const validation = validateEmailUpdate(cleanNewEmail, currentCustomer.email, currentCustomer.id);
+    if (validation.warning) {
+      setEmailOtpError(validation.warning);
+      return;
+    }
+    if (!validation.isValid) {
+      setEmailOtpError('Please enter a valid email address.');
+      return;
+    }
+
+    setIsSendingEmailOtp(true);
+    setEmailOtpError(null);
+    setEmailOtpNotice(null);
+
+    try {
+      const res = await EmailVerificationService.requestOtp(cleanNewEmail, 'profile_update', currentCustomer.name);
+      setIsSendingEmailOtp(false);
+
+      if (res.success) {
+        setEmailOtpSent(true);
+        setEmailCooldown(30);
+        setEmailOtpNotice(res.isSandbox 
+          ? `📧 Resend Sandbox Code: ${res.code} (Free Resend tier delivers to prajwalnangare41@gmail.com)` 
+          : `6-digit verification code sent to ${cleanNewEmail}. Check your inbox!`);
+      } else {
+        setEmailOtpError(res.message || 'Could not send verification email via Resend.');
+      }
+    } catch (err: any) {
+      setIsSendingEmailOtp(false);
+      setEmailOtpError(err?.message || 'Error communicating with Resend email service.');
+    }
   };
 
   const handleConfirmEmailOtp = () => {
@@ -299,7 +504,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
     if (result.success && result.customer) {
       const finalCustomer: Customer = {
         ...result.customer,
-        name: nameInput.trim(),
+        name: nameInput.trim() || currentCustomer.name,
         email_verified: true
       };
 
@@ -316,9 +521,12 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
       onUpdateCustomer(finalCustomer);
       setIsVerifyingEmail(false);
       setIsEditing(false);
+      setIsUpdatingEmailInEdit(false);
+      setNewEmailInput('');
       setEmailOtpCode('');
       setEmailOtpNotice(null);
-      alert('Email verified via Resend and profile updated successfully!');
+      setEmailOtpSent(false);
+      alert('Email address verified via Resend and profile updated successfully!');
     } else {
       setEmailOtpError(result.error || 'Verification failed. Please check the code.');
     }
@@ -334,8 +542,10 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
     setIsSendingEmailOtp(false);
 
     if (res.success) {
-      setEmailOtpNotice(res.message);
-      if (res.code) setEmailOtpCode(res.code);
+      setEmailCooldown(30);
+      setEmailOtpNotice(res.isSandbox 
+        ? `New verification code dispatched (Resend Sandbox mode).` 
+        : `New 6-digit code sent to ${cleanNewEmail}.`);
     } else {
       setEmailOtpError(res.message || 'Could not resend email verification code.');
     }
@@ -481,19 +691,35 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
                   <span className="flex items-center gap-1">
                     <Phone className="w-3.5 h-3.5 text-primary" /> {currentCustomer.phone.startsWith('+91') ? currentCustomer.phone : `+91 ${currentCustomer.phone}`}
                   </span>
-                  {currentCustomer.email && (
+                  {currentCustomer.email ? (
                     <span className="flex items-center gap-1.5 flex-wrap">
                       <Mail className="w-3.5 h-3.5 text-primary" /> {currentCustomer.email}
                       {currentCustomer.email_verified ? (
                         <span className="bg-emerald-50 text-emerald-800 border border-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
-                          <ShieldCheck className="w-3 h-3 text-emerald-600" /> Verified via Resend
+                          <ShieldCheck className="w-3 h-3 text-emerald-600" /> Verified
                         </span>
                       ) : (
                         <span className="bg-amber-50 text-amber-900 border border-amber-200 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
                           Unverified
                         </span>
                       )}
+                      <button
+                        type="button"
+                        onClick={openEmailUpdateModal}
+                        className="text-[10.5px] font-bold text-primary hover:underline ml-1 inline-flex items-center gap-1 cursor-pointer bg-primary/10 hover:bg-primary/20 px-2 py-0.5 rounded-lg transition"
+                        title="Update your email address with OTP verification"
+                      >
+                        <Edit2 className="w-2.5 h-2.5" /> Update Email
+                      </button>
                     </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={openEmailUpdateModal}
+                      className="text-[11px] font-bold text-primary hover:underline inline-flex items-center gap-1 cursor-pointer bg-primary/10 hover:bg-primary/20 px-2.5 py-1 rounded-lg transition"
+                    >
+                      <Mail className="w-3 h-3" /> + Add & Verify Email Address
+                    </button>
                   )}
                 </div>
               </div>
@@ -523,22 +749,191 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
                     className="w-full px-3.5 py-2 rounded-xl border border-outline-variant bg-white font-medium focus:outline-none focus:border-primary"
                   />
                 </div>
-                <div>
-                  <label className="block font-bold text-on-surface-variant mb-1">Email Address</label>
-                  <input
-                    type="email"
-                    value={emailInput}
-                    onChange={e => setEmailInput(e.target.value)}
-                    placeholder="name@example.com"
-                    className="w-full px-3.5 py-2 rounded-xl border border-outline-variant bg-white font-medium focus:outline-none focus:border-primary"
-                  />
-                  {emailInput.trim().toLowerCase() !== (currentCustomer.email || '').trim().toLowerCase() && emailInput.trim() && (
-                    <p className="text-[11px] text-amber-900 bg-amber-50 border border-amber-200 p-2 rounded-xl mt-1.5 font-medium flex items-center gap-1.5 animate-in fade-in">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                      Updating your email triggers a 6-digit verification code sent via Resend.
-                    </p>
-                  )}
-                </div>
+                {/* Email Address Section */}
+                {!isUpdatingEmailInEdit ? (
+                  <div>
+                    <label className="block font-bold text-on-surface-variant mb-1">Email Address</label>
+                    <div className="w-full px-3.5 py-2 rounded-xl border border-outline-variant bg-surface-container-lowest text-on-surface font-medium text-xs flex items-center justify-between">
+                      <span className="truncate">{currentCustomer.email || 'No email configured'}</span>
+                      {currentCustomer.email_verified && (
+                        <span className="bg-emerald-50 text-emerald-800 border border-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                          <ShieldCheck className="w-3 h-3 text-emerald-600" /> Verified
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-2 flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsUpdatingEmailInEdit(true);
+                          setNewEmailInput('');
+                          setEmailOtpSent(false);
+                          setEmailOtpCode('');
+                          setEmailOtpNotice(null);
+                          setEmailOtpError(null);
+                        }}
+                        className="text-xs font-bold text-primary hover:underline inline-flex items-center gap-1.5 bg-primary/10 hover:bg-primary/20 px-3 py-1.5 rounded-xl transition cursor-pointer"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" /> Update Email
+                      </button>
+                      <span className="text-[10.5px] text-on-surface-variant font-medium">OTP verification required</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3 bg-surface-container-high/40 p-3.5 rounded-2xl border border-outline-variant/60 col-span-1 sm:col-span-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-xs text-primary flex items-center gap-1.5">
+                        <Mail className="w-3.5 h-3.5" /> Update Email Address
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsUpdatingEmailInEdit(false);
+                          setNewEmailInput('');
+                          setEmailOtpSent(false);
+                          setEmailOtpCode('');
+                          setEmailOtpNotice(null);
+                          setEmailOtpError(null);
+                        }}
+                        className="text-[11px] text-on-surface-variant hover:text-on-surface font-semibold cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* Old Email */}
+                      <div>
+                        <label className="block text-[11px] font-bold text-on-surface-variant mb-1">
+                          Old Email
+                        </label>
+                        <input
+                          type="email"
+                          readOnly
+                          value={currentCustomer.email || 'None'}
+                          className="w-full px-3.5 py-2 rounded-xl border border-outline-variant bg-surface-container-lowest text-on-surface-variant font-medium text-xs cursor-not-allowed select-none"
+                        />
+                      </div>
+
+                      {/* New Email Textbox */}
+                      <div>
+                        <label className="block text-[11px] font-bold text-on-surface-variant mb-1">
+                          New Email <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="email"
+                          value={newEmailInput}
+                          onChange={e => {
+                            setNewEmailInput(e.target.value);
+                            setEmailOtpError(null);
+                          }}
+                          placeholder="Enter new email address"
+                          className="w-full px-3.5 py-2 rounded-xl border border-outline-variant bg-white font-medium text-xs focus:outline-none focus:border-primary"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Conflict Warnings */}
+                    {editEmailValidation.warning && (
+                      <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-[11px] font-medium flex items-center gap-1.5 animate-in fade-in">
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-red-600" />
+                        <span>{editEmailValidation.warning}</span>
+                      </div>
+                    )}
+
+                    {/* Available Confirmation */}
+                    {editEmailValidation.isValid && !editEmailValidation.warning && (
+                      <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-medium flex items-center gap-1.5 animate-in fade-in">
+                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
+                        <span>New email is available for verification.</span>
+                      </div>
+                    )}
+
+                    {emailOtpError && (
+                      <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-[11px] font-medium flex items-center gap-1.5">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0 text-red-600" />
+                        <span>{emailOtpError}</span>
+                      </div>
+                    )}
+
+                    {!emailOtpSent ? (
+                      <div>
+                        <button
+                          type="button"
+                          disabled={isSendingEmailOtp || !editEmailValidation.isValid || !!editEmailValidation.warning}
+                          onClick={e => handleSendEmailOtpForEditUpdate(e)}
+                          className="btn-cta py-2 px-4 text-xs font-headline font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50"
+                        >
+                          {isSendingEmailOtp ? (
+                            <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <>
+                              <Send className="w-3.5 h-3.5" /> Send Verification Code
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    ) : (
+                      /* Step 2: 6-digit OTP verification */
+                      <div className="space-y-2.5 pt-1">
+                        {emailOtpNotice && (
+                          <div className="p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-[11px] font-medium flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5 shrink-0 text-blue-600" />
+                            <span>{emailOtpNotice}</span>
+                          </div>
+                        )}
+
+                        <div className="space-y-1 bg-white p-3 rounded-xl border border-outline-variant/60 max-w-sm">
+                          <div className="flex items-center justify-between text-[10px] font-headline font-bold text-on-surface-variant">
+                            <span className="flex items-center gap-1">
+                              <KeyRound className="w-3 h-3 text-secondary" /> 6-Digit Email Code *
+                            </span>
+                            <button
+                              type="button"
+                              disabled={isSendingEmailOtp || emailCooldown > 0}
+                              onClick={e => handleResendEmailOtpForEdit(e)}
+                              className="text-primary hover:underline font-bold cursor-pointer disabled:opacity-50"
+                            >
+                              {emailCooldown > 0 ? `Resend (${emailCooldown}s)` : 'Resend Code'}
+                            </button>
+                          </div>
+                          <input
+                            type="text"
+                            maxLength={6}
+                            value={emailOtpCode}
+                            onChange={e => setEmailOtpCode(e.target.value)}
+                            placeholder="Enter 6-digit OTP"
+                            className="w-full px-3 py-1.5 rounded-xl border border-outline-variant focus:outline-none focus:border-primary bg-white font-mono font-extrabold tracking-[0.3em] text-center text-sm"
+                          />
+                        </div>
+
+                        <div className="flex gap-2 pt-1 max-w-sm">
+                          <button
+                            type="button"
+                            onClick={() => setEmailOtpSent(false)}
+                            className="btn-secondary py-1.5 px-3 text-xs font-headline font-bold rounded-xl cursor-pointer"
+                          >
+                            Change Email
+                          </button>
+                          <button
+                            type="button"
+                            onClick={e => handleConfirmEmailOtpForEdit(e)}
+                            disabled={isConfirmingEmailOtp}
+                            className="btn-cta flex-1 py-1.5 text-xs font-headline font-bold uppercase tracking-wider flex items-center justify-center gap-1 shadow-xs cursor-pointer disabled:opacity-60"
+                          >
+                            {isConfirmingEmailOtp ? (
+                              <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <>
+                                <CheckCircle2 className="w-3.5 h-3.5" /> Verify & Update Email
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               <button
                 type="submit"
@@ -1148,76 +1543,166 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
       {/* Resend Email OTP Verification Modal for Profile Update */}
       {isVerifyingEmail && (
         <div className="modal-overlay">
-          <div className="bg-white border border-outline-variant rounded-3xl w-full max-w-sm p-3.5 sm:p-5 shadow-2xl animate-modalScaleIn text-on-surface space-y-2.5 overflow-hidden">
-            <div className="flex justify-between items-center pb-1.5 border-b border-outline-variant/40">
+          <div className="bg-white border border-outline-variant rounded-3xl w-full max-w-sm p-4 sm:p-5 shadow-2xl animate-modalScaleIn text-on-surface space-y-3 overflow-hidden">
+            <div className="flex justify-between items-center pb-2 border-b border-outline-variant/40">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">
+                <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold text-sm">
                   🛡️
                 </div>
                 <div>
-                  <h3 className="font-headline font-bold text-sm sm:text-base text-primary">Verify New Email</h3>
-                  <p className="text-[10px] text-on-surface-variant font-medium">Confirmation code sent via Resend</p>
+                  <h3 className="font-headline font-bold text-sm sm:text-base text-primary">Update Account Email</h3>
+                  <p className="text-[10.5px] text-on-surface-variant font-medium">Verified securely via Resend OTP</p>
                 </div>
               </div>
               <button
-                onClick={() => setIsVerifyingEmail(false)}
+                onClick={() => {
+                  setIsVerifyingEmail(false);
+                  setEmailOtpSent(false);
+                  setEmailOtpCode('');
+                  setEmailOtpError(null);
+                  setEmailOtpNotice(null);
+                }}
                 className="text-on-surface-variant hover:text-on-surface p-1 rounded-full hover:bg-surface-container cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <p className="text-[11px] text-on-surface-variant leading-tight">
-              We dispatched a 6-digit code to <strong>{emailInput}</strong> via Resend.
-            </p>
-
             {emailOtpNotice && (
-              <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-2 rounded-xl text-[10px] font-medium flex items-center gap-1.5">
-                <ShieldCheck className="w-3 h-3 text-emerald-600 shrink-0" />
-                <span className="truncate">{emailOtpNotice}</span>
+              <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-2.5 rounded-xl text-[10.5px] font-medium flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span className="leading-snug">{emailOtpNotice}</span>
               </div>
             )}
 
             {emailOtpError && (
-              <div className="bg-error/10 border border-error/30 text-error p-2 rounded-xl text-[10px] font-medium flex items-center gap-1.5">
-                <AlertCircle className="w-3 h-3 shrink-0" />
-                <span className="truncate">{emailOtpError}</span>
+              <div className="bg-error/10 border border-error/30 text-error p-2.5 rounded-xl text-[10.5px] font-medium flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                <span className="leading-snug">{emailOtpError}</span>
               </div>
             )}
 
-            <div className="space-y-0.5 bg-surface-container-low p-2.5 rounded-xl border border-outline-variant/40">
-              <div className="flex items-center justify-between text-[10px] font-headline font-bold text-on-surface-variant">
-                <span className="flex items-center gap-1">
-                  <KeyRound className="w-3 h-3 text-secondary" /> 6-Digit Code *
-                </span>
-                <span className="text-primary font-mono">Demo: 123456</span>
-              </div>
-              <input
-                type="text"
-                maxLength={6}
-                value={emailOtpCode}
-                onChange={e => setEmailOtpCode(e.target.value)}
-                placeholder="123456"
-                className="w-full px-3 py-1.5 rounded-xl border border-outline-variant focus:outline-none focus:border-primary bg-white font-mono font-extrabold tracking-[0.3em] text-center text-sm"
-              />
-            </div>
+            {!emailOtpSent ? (
+              /* Step 1: Input New Email Address */
+              <div className="space-y-3 text-xs">
+                {/* Old Email */}
+                <div className="space-y-1">
+                  <label className="font-headline font-bold text-on-surface-variant text-[11px] flex items-center gap-1">
+                    <Mail className="w-3.5 h-3.5 text-slate-500" /> Old Email
+                  </label>
+                  <input
+                    type="email"
+                    readOnly
+                    value={currentCustomer.email || 'None'}
+                    className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-container-low text-on-surface-variant font-medium text-xs cursor-not-allowed select-none"
+                  />
+                </div>
 
-            <div className="flex gap-2 pt-1">
-              <button
-                type="button"
-                onClick={handleConfirmEmailOtp}
-                disabled={isConfirmingEmailOtp}
-                className="btn-cta flex-1 py-2 text-xs font-headline font-bold uppercase tracking-wider flex items-center justify-center gap-1 shadow-sm cursor-pointer"
-              >
-                {isConfirmingEmailOtp ? (
-                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Verify & Save
-                  </>
+                {/* New Email Textbox */}
+                <div className="space-y-1">
+                  <label className="font-headline font-bold text-on-surface-variant text-[11px] flex items-center gap-1">
+                    <Mail className="w-3.5 h-3.5 text-primary" /> New Email *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={emailInput}
+                    onChange={e => {
+                      setEmailInput(e.target.value);
+                      setEmailOtpError(null);
+                    }}
+                    placeholder="Enter your new email"
+                    className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-white font-medium focus:outline-none focus:border-primary text-xs"
+                  />
+                </div>
+
+                {/* Conflict Warnings */}
+                {modalEmailValidation.warning && (
+                  <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-[11px] font-medium flex items-center gap-1.5 animate-in fade-in">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-red-600" />
+                    <span>{modalEmailValidation.warning}</span>
+                  </div>
                 )}
-              </button>
-            </div>
+
+                {/* Available Confirmation */}
+                {modalEmailValidation.isValid && !modalEmailValidation.warning && (
+                  <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-medium flex items-center gap-1.5 animate-in fade-in">
+                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
+                    <span>New email is available for verification.</span>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  disabled={isSendingEmailOtp || !modalEmailValidation.isValid || !!modalEmailValidation.warning}
+                  onClick={handleSendEmailOtpForUpdate}
+                  className="btn-cta w-full py-2.5 text-xs font-headline font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-50"
+                >
+                  {isSendingEmailOtp ? (
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <Send className="w-3.5 h-3.5" /> Send Verification Code
+                    </>
+                  )}
+                </button>
+              </div>
+            ) : (
+              /* Step 2: Enter 6-digit OTP */
+              <div className="space-y-3 text-xs">
+                <p className="text-[11px] text-on-surface-variant leading-snug">
+                  Enter the 6-digit verification code sent to <strong>{emailInput}</strong> via Resend:
+                </p>
+
+                <div className="space-y-1 bg-surface-container-low p-2.5 rounded-xl border border-outline-variant/40">
+                  <div className="flex items-center justify-between text-[10px] font-headline font-bold text-on-surface-variant">
+                    <span className="flex items-center gap-1">
+                      <KeyRound className="w-3 h-3 text-secondary" /> 6-Digit Email Code *
+                    </span>
+                    <button
+                      type="button"
+                      disabled={isSendingEmailOtp || emailCooldown > 0}
+                      onClick={handleResendEmailOtp}
+                      className="text-primary hover:underline font-bold cursor-pointer disabled:opacity-50"
+                    >
+                      {emailCooldown > 0 ? `Resend (${emailCooldown}s)` : 'Resend Code'}
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    maxLength={6}
+                    value={emailOtpCode}
+                    onChange={e => setEmailOtpCode(e.target.value)}
+                    placeholder="Enter 6-digit OTP"
+                    className="w-full px-3 py-2 rounded-xl border border-outline-variant focus:outline-none focus:border-primary bg-white font-mono font-extrabold tracking-[0.3em] text-center text-sm"
+                  />
+                </div>
+
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setEmailOtpSent(false)}
+                    className="btn-secondary py-2 px-3 text-xs font-headline font-bold rounded-xl cursor-pointer"
+                  >
+                    Change Email
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmEmailOtp}
+                    disabled={isConfirmingEmailOtp}
+                    className="btn-cta flex-1 py-2 text-xs font-headline font-bold uppercase tracking-wider flex items-center justify-center gap-1 shadow-sm cursor-pointer disabled:opacity-60"
+                  >
+                    {isConfirmingEmailOtp ? (
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Verify & Update Email
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

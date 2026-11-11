@@ -2,6 +2,7 @@ import { store } from './store';
 import { Booking, Venue } from '../types/schema';
 import { ExcelExportService } from './excelExportService';
 import { EmailService } from './emailService';
+import { AuditLogger } from './auditLogger';
 import { formatDateDDMMYYYY, formatTime12hPlain, formatPhoneNumber } from '../utils/formatters';
 
 export interface ArchiveDispatchResult {
@@ -181,6 +182,19 @@ export class DataArchiveService {
     const venue = store.getVenue();
     const targetEmail = (params?.targetEmail || settings.owner_email || 'owner@turfflow.com').trim();
 
+    // Block dispatch if recipient email matches the sender email (both cannot be identical)
+    if (EmailService.isResendSenderEmail(targetEmail)) {
+      console.warn(`[DataArchiveService] Blocked dispatch: recipient email (${targetEmail}) matches the sender email.`);
+      return {
+        success: false,
+        message: "You can't send on this email — it is the sender email! Both sender and recipient cannot be the same. Please provide a different recipient email.",
+        recipient: targetEmail,
+        bookingsCount: 0,
+        grossRevenue: 0,
+        netRevenue: 0
+      };
+    }
+
     let bookings: Booking[];
     let startDateFormatted: string;
     let endDateFormatted: string;
@@ -313,6 +327,26 @@ export class DataArchiveService {
     });
     store.setNotificationLogs([...notificationLogs]);
 
+    // Record in Audit Log so owners and staff can track email dispatch operations
+    const auditAdminId = (params as any)?.adminId || (params?.isManual ? 'adm-001' : 'SYSTEM');
+    const periodLabel = isLastMonth ? `Last Month (${monthName})` : `Last ${periodDays} Days`;
+    AuditLogger.log(
+      auditAdminId,
+      'DISPATCH_EMAIL_ARCHIVE',
+      'DataArchive',
+      targetEmail,
+      null,
+      {
+        recipient: targetEmail,
+        period: periodLabel,
+        bookingsCount: totalBookings,
+        netRevenue,
+        attachmentFilename,
+        status: emailRes.success ? 'sent' : 'failed',
+        simulated: !!emailRes.simulated
+      }
+    );
+
     const periodDescription = isLastMonth 
       ? `last month (${monthName})` 
       : `past ${periodDays} days from current`;
@@ -337,13 +371,13 @@ export class DataArchiveService {
    * Dispatches automatically on the 1st of every month sending the full previous month's data,
    * or when 30+ days have elapsed since the last dispatch.
    */
-  public static async checkAndDispatchAutomatedMonthlyArchive(): Promise<{
+  public static async checkAndDispatchAutomatedMonthlyArchive(forceTrigger = false): Promise<{
     dispatched: boolean;
     reason?: string;
     recipient?: string;
   }> {
     const settings = (store as any).getDataArchiveSettings();
-    if (!settings.is_active) {
+    if (!settings.is_active && !forceTrigger) {
       return { dispatched: false, reason: 'Automated monthly archival is disabled in settings' };
     }
 
@@ -355,15 +389,11 @@ export class DataArchiveService {
     const alreadyDispatchedToday = lastDispatchDate &&
       lastDispatchDate.getFullYear() === now.getFullYear() &&
       lastDispatchDate.getMonth() === now.getMonth() &&
-      lastDispatchDate.getDate() === 1;
+      lastDispatchDate.getDate() === now.getDate();
 
-    const diffDays = lastDispatchDate 
-      ? (now.getTime() - lastDispatchDate.getTime()) / (1000 * 60 * 60 * 24) 
-      : 999;
-
-    // Trigger if today is the 1st of the month and not yet dispatched, or if 30+ days elapsed
-    if ((isFirstOfMonth && !alreadyDispatchedToday) || diffDays >= 30) {
-      console.info(`[DataArchiveService] 📅 1st of month schedule trigger (day: ${now.getDate()}, diffDays: ${diffDays.toFixed(1)}). Dispatching previous month data to owner...`);
+    // Trigger strictly if today is the 1st of the month and not yet dispatched for today (or forced)
+    if ((isFirstOfMonth && !alreadyDispatchedToday) || forceTrigger) {
+      console.info(`[DataArchiveService] 📅 1st of month schedule trigger (day: ${now.getDate()}). Dispatching previous month data to owner...`);
       const res = await this.dispatchArchiveToOwner({
         targetEmail: settings.owner_email,
         isLastMonth: true,
