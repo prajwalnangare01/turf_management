@@ -126,90 +126,148 @@ export class GatePassService {
         };
 
         const validSlots = Array.isArray(booking.all_slots) ? booking.all_slots.filter(s => s.start_time && s.end_time) : [];
-        const slotTimeDisplay = booking.formatted_slots && !booking.formatted_slots.includes('undefined') && booking.formatted_slots.trim() !== '–'
-          ? booking.formatted_slots
-          : (validSlots.length > 0
-            ? validSlots.map(s => `${WhatsAppFormatter.formatTime(s.start_time)} — ${WhatsAppFormatter.formatTime(s.end_time)}`).join(', ')
-            : (booking.start_time && booking.end_time
-                ? `${WhatsAppFormatter.formatTime(booking.start_time)} — ${WhatsAppFormatter.formatTime(booking.end_time)}`
-                : 'Confirmed Match Slot'));
-        const totalAmountDisplay = `INR ${booking.total_order_amount || booking.total_amount || 0} (PAID)`;
+        const slotsToRender = validSlots.length > 1 
+          ? validSlots 
+          : [{
+              start_time: booking.start_time,
+              end_time: booking.end_time,
+              price: booking.total_amount,
+              booking_ref: booking.booking_ref
+            }];
 
-        drawField('Booking Reference', booking.booking_ref, 70, y + 15, true);
-        drawField('Reserved Pitch', courtName, 310, y + 15);
+        slotsToRender.forEach((slot, slotIdx) => {
+          if (slotIdx > 0) {
+            doc.addPage({ size: 'A4', margin: 40 });
+          }
 
-        drawField('Sport', sportName, 70, y + 55);
-        drawField('Match Date', WhatsAppFormatter.formatDate(booking.booking_date), 310, y + 55);
+          // 1. Top Header Banner
+          doc.rect(40, 40, 515, 75).fill(primaryColor);
+          doc.fillColor('#FFFFFF')
+            .fontSize(22)
+            .font('Helvetica-Bold')
+            .text(venue.name.toUpperCase(), 50, 55, { align: 'center', width: 495 });
+          doc.fontSize(10)
+            .font('Helvetica-Bold')
+            .text(
+              slotsToRender.length > 1
+                ? `OFFICIAL VENUE ENTRY PASS — PASS ${slotIdx + 1} OF ${slotsToRender.length}`
+                : 'OFFICIAL VENUE ENTRY PASS & PAYMENT RECEIPT',
+              50,
+              85,
+              { align: 'center', width: 495 }
+            );
 
-        drawField('Reserved Slots', slotTimeDisplay, 70, y + 95);
-        drawField('Customer Name', customer.name, 310, y + 95);
+          // 2. Gate Check-in OTP Box (Dashed Gold Box)
+          doc.rect(50, 130, 495, 80).fillAndStroke(goldBg, goldBorder);
+          doc.fillColor(goldText)
+            .fontSize(11)
+            .font('Helvetica-Bold')
+            .text('4-DIGIT GATE CHECK-IN OTP PASS', 50, 142, { align: 'center', width: 495 });
+          
+          doc.fillColor('#B45309')
+            .fontSize(36)
+            .font('Helvetica-Bold')
+            .text(otpCode.split('').join('  '), 50, 158, { align: 'center', width: 495 });
 
-        drawField('Customer Phone', cleanCustomerPhone, 70, y + 135);
-        drawField('Total Amount Paid', totalAmountDisplay, 310, y + 135, true);
+          doc.fillColor(goldText)
+            .fontSize(9)
+            .font('Helvetica')
+            .text(
+              slotsToRender.length > 1
+                ? `Common pass valid for all ${slotsToRender.length} reserved sessions`
+                : 'Show this 4-digit code to the gate manager for check-in',
+              50,
+              196,
+              { align: 'center', width: 495 }
+            );
 
-        drawField('Payment Status', 'VERIFIED (Razorpay Live UPI)', 70, y + 175);
-        drawField('Channel', `WhatsApp AI Concierge (${booking.source || 'online'})`, 310, y + 175);
+          // 3. Booking Details Grid
+          let y = 230;
+          doc.rect(50, y, 495, 230).fillAndStroke('#FFFFFF', '#E2E8F0');
 
-        // 4. Turf Location QR Code & Address Stamp
-        y = 480;
-        doc.rect(50, y, 495, 120).fillAndStroke('#F8FAFC', '#E2E8F0');
-        
-        // Draw Location QR Code
-        doc.image(locationQrBuffer, 65, y + 10, { width: 95 });
-        doc.fillColor(primaryColor)
-          .fontSize(7)
-          .font('Helvetica-Bold')
-          .text('SCAN FOR GOOGLE MAPS', 55, y + 107, { width: 115, align: 'center' });
+          const slotTimingStr = (slot.start_time && slot.end_time)
+            ? `${WhatsAppFormatter.formatTime(slot.start_time)} — ${WhatsAppFormatter.formatTime(slot.end_time)}`
+            : (booking.start_time ? `${WhatsAppFormatter.formatTime(booking.start_time)} — ${WhatsAppFormatter.formatTime(booking.end_time)}` : 'Confirmed Slot');
 
-        doc.fillColor(darkColor)
-          .fontSize(10)
-          .font('Helvetica-Bold')
-          .text('VENUE ADDRESS & DIRECTIONS', 185, y + 16);
+          const slotRef = slot.booking_ref || (slotIdx === 0 ? booking.booking_ref : `${booking.group_ref || booking.booking_ref}-${slotIdx + 1}`);
+          const slotAmountDisplay = `INR ${slot.price || booking.total_amount || 0} (PAID)`;
 
-        doc.fillColor(slateColor)
-          .fontSize(9)
-          .font('Helvetica')
-          .text(venue.address, 185, y + 32, { width: 340 });
+          drawField('Pass Reference', slotRef, 70, y + 15, true);
+          drawField('Reserved Pitch', courtName, 310, y + 15);
 
-        doc.fillColor(darkColor)
-          .fontSize(8.5)
-          .font('Helvetica-Bold')
-          .text(`GSTIN: ${venue.gst_number || '27AABCT1234F1Z0'}  |  Helpdesk: ${venue.contact_phone}`, 185, y + 66);
+          drawField('Sport', sportName, 70, y + 55);
+          drawField('Match Date', WhatsAppFormatter.formatDate(booking.booking_date), 310, y + 55);
 
-        doc.fillColor(primaryColor)
-          .fontSize(8.5)
-          .font('Helvetica-Bold')
-          .text('Google Maps: ' + venueLocationUrl, 185, y + 84, { 
-            width: 340,
-            link: venueLocationUrl,
-            underline: true 
-          });
+          drawField('Reserved Slot Timing', slotTimingStr, 70, y + 95, true);
+          drawField('Customer Name', customer.name, 310, y + 95);
 
-        // 5. Pitch Guidelines Box
-        y = 620;
-        doc.rect(50, y, 495, 90).fillAndStroke('#F1F5F9', '#CBD5E1');
+          drawField('Customer Phone', cleanCustomerPhone, 70, y + 135);
+          drawField('Slot Amount Paid', slotAmountDisplay, 310, y + 135, true);
 
-        doc.fillColor(darkColor).fontSize(9).font('Helvetica-Bold').text('PITCH GUIDELINES & VENUE RULES:', 65, y + 12);
-        
-        const rules = [
-          '• Turf shoes or flat rubber sole studs only (No metal spikes permitted on synthetic turf).',
-          '• Please arrive at least 10 minutes prior to your reserved kick-off time.',
-          '• Free drinking water, bibs, footballs, and changing rooms with showers provided.',
-          '• For cancellations or rescheduling, visit the site or reply directly on WhatsApp.'
-        ];
+          drawField('Payment Status', 'VERIFIED (Razorpay Live UPI)', 70, y + 175);
+          drawField('Common Group Ref', booking.group_ref || booking.booking_ref, 310, y + 175);
 
-        let ruleY = y + 28;
-        doc.fillColor(slateColor).fontSize(8).font('Helvetica');
-        for (const rule of rules) {
-          doc.text(rule, 65, ruleY);
-          ruleY += 13;
-        }
+          // 4. Turf Location QR Code & Address Stamp
+          y = 480;
+          doc.rect(50, y, 495, 120).fillAndStroke('#F8FAFC', '#E2E8F0');
+          
+          // Draw Location QR Code
+          doc.image(locationQrBuffer, 65, y + 10, { width: 95 });
+          doc.fillColor(primaryColor)
+            .fontSize(7)
+            .font('Helvetica-Bold')
+            .text('SCAN FOR GOOGLE MAPS', 55, y + 107, { width: 115, align: 'center' });
 
-        // 6. Footer
-        doc.fillColor('#94A3B8')
-          .fontSize(8)
-          .font('Helvetica')
-          .text(`Generated automatically by TurfFlow Unified Platform on ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`, 50, 740, { align: 'center', width: 495 });
+          doc.fillColor(darkColor)
+            .fontSize(10)
+            .font('Helvetica-Bold')
+            .text('VENUE ADDRESS & DIRECTIONS', 185, y + 16);
+
+          doc.fillColor(slateColor)
+            .fontSize(9)
+            .font('Helvetica')
+            .text(venue.address, 185, y + 32, { width: 340 });
+
+          doc.fillColor(darkColor)
+            .fontSize(8.5)
+            .font('Helvetica-Bold')
+            .text(`GSTIN: ${venue.gst_number || '27AABCT1234F1Z0'}  |  Helpdesk: ${venue.contact_phone}`, 185, y + 66);
+
+          doc.fillColor(primaryColor)
+            .fontSize(8.5)
+            .font('Helvetica-Bold')
+            .text('Google Maps: ' + venueLocationUrl, 185, y + 84, { 
+              width: 340,
+              link: venueLocationUrl,
+              underline: true 
+            });
+
+          // 5. Pitch Guidelines Box
+          y = 620;
+          doc.rect(50, y, 495, 90).fillAndStroke('#F1F5F9', '#CBD5E1');
+
+          doc.fillColor(darkColor).fontSize(9).font('Helvetica-Bold').text('PITCH GUIDELINES & VENUE RULES:', 65, y + 12);
+          
+          const rules = [
+            '• Turf shoes or flat rubber sole studs only (No metal spikes permitted on synthetic turf).',
+            '• Please arrive at least 10 minutes prior to your reserved kick-off time.',
+            '• Free drinking water, bibs, footballs, and changing rooms with showers provided.',
+            '• For cancellations or rescheduling, visit the site or reply directly on WhatsApp.'
+          ];
+
+          let ruleY = y + 28;
+          doc.fillColor(slateColor).fontSize(8).font('Helvetica');
+          for (const rule of rules) {
+            doc.text(rule, 65, ruleY);
+            ruleY += 13;
+          }
+
+          // 6. Footer
+          doc.fillColor('#94A3B8')
+            .fontSize(8)
+            .font('Helvetica')
+            .text(`Generated automatically by TurfFlow Unified Platform on ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`, 50, 740, { align: 'center', width: 495 });
+        });
 
         doc.end();
       } catch (err) {
@@ -240,6 +298,16 @@ export class GatePassService {
     } catch (e) {
       console.warn('Could not generate location QR code:', e);
     }
+
+    const validSlots = Array.isArray(booking.all_slots) ? booking.all_slots.filter(s => s.start_time && s.end_time) : [];
+    const slotsToRender = validSlots.length > 1
+      ? validSlots
+      : [{
+          start_time: booking.start_time,
+          end_time: booking.end_time,
+          price: booking.total_amount,
+          booking_ref: booking.booking_ref
+        }];
 
     return `<!DOCTYPE html>
 <html>
@@ -286,100 +354,115 @@ export class GatePassService {
     </div>
   </div>
 
-  <div class="ticket-card">
-    <div class="ticket-header">
-      <h1>${venue.name}</h1>
-      <p>
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-        OFFICIAL VENUE ENTRY PASS & PAYMENT RECEIPT
-      </p>
-    </div>
+  ${slotsToRender.map((slot, idx) => {
+    const slotRef = slot.booking_ref || (idx === 0 ? booking.booking_ref : `${booking.group_ref || booking.booking_ref}-${idx + 1}`);
+    const slotPrice = slot.price || Math.round((booking.total_order_amount || booking.total_amount) / slotsToRender.length);
+    const slotTimingDisplay = (slot.start_time && slot.end_time)
+      ? `${getTimeOfDaySvg(slot.start_time)}${WhatsAppFormatter.formatTime(slot.start_time)} – ${getTimeOfDaySvg(slot.end_time)}${WhatsAppFormatter.formatTime(slot.end_time)}`
+      : 'Confirmed Match Slot';
 
-    <div class="ticket-body">
-      ${booking.status === 'cancelled' || booking.status === 'refunded' ? `
-      <div class="otp-box" style="background: #fef2f2; border: 2px dashed #ef4444; color: #991b1b;">
-        <div class="otp-title" style="color: #b91c1c;">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-          <span>RESERVATION CANCELLED — INVALID FOR ENTRY</span>
-        </div>
-        <div class="otp-code" style="color: #dc2626; text-decoration: line-through;">${otpCode}</div>
-        <div style="font-size: 11px; font-weight: 600; color: #b91c1c;">${booking.status === 'refunded' ? `Refund of INR ${booking.refund_amount || 0} initiated.` : 'This slot is cancelled.'}</div>
+    return `
+    <div class="ticket-card" style="${idx > 0 ? 'margin-top: 32px; page-break-before: always;' : ''}">
+      <div class="ticket-header">
+        <h1>${venue.name}</h1>
+        <p>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          OFFICIAL ENTRY PASS ${slotsToRender.length > 1 ? `&bull; PASS ${idx + 1} OF ${slotsToRender.length}` : '& PAYMENT RECEIPT'}
+        </p>
       </div>
-      ` : `
-      <div class="otp-box">
-        <div class="otp-title">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>
-          <span>4-Digit Common Gate Check-in OTP Pass</span>
-        </div>
-        <div class="otp-code">${otpCode}</div>
-        <div style="font-size: 11px; font-weight: 600;">Show this 4-digit code to the gate manager for check-in (Valid for all listed sessions)</div>
-      </div>
-      `}
 
-      <div class="info-grid">
-        <div class="info-item">
-          <span class="info-label">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 17v2"/><path d="M13 11v2"/></svg>
-            Booking Reference
-          </span>
-          <span class="info-value" style="color: #006b30; font-family: monospace;">${booking.booking_ref}</span>
+      <div class="ticket-body">
+        ${booking.status === 'cancelled' || booking.status === 'refunded' ? `
+        <div class="otp-box" style="background: #fef2f2; border: 2px dashed #ef4444; color: #991b1b;">
+          <div class="otp-title" style="color: #b91c1c;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+            <span>RESERVATION CANCELLED — INVALID FOR ENTRY</span>
+          </div>
+          <div class="otp-code" style="color: #dc2626; text-decoration: line-through;">${otpCode}</div>
+          <div style="font-size: 11px; font-weight: 600; color: #b91c1c;">${booking.status === 'refunded' ? `Refund of INR ${booking.refund_amount || 0} initiated.` : 'This slot is cancelled.'}</div>
         </div>
-        <div class="info-item">
-          <span class="info-label">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
-            Reserved Pitch
-          </span>
-          <span class="info-value">${court?.name || 'Pitch'}</span>
+        ` : `
+        <div class="otp-box">
+          <div class="otp-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>
+            <span>4-Digit Common Gate Check-in OTP Pass</span>
+          </div>
+          <div class="otp-code">${otpCode}</div>
+          <div style="font-size: 11px; font-weight: 600;">Show this 4-digit code to the gate manager for check-in (${slotsToRender.length > 1 ? `Valid for all ${slotsToRender.length} sessions` : 'Valid for entry'})</div>
         </div>
-        <div class="info-item">
-          <span class="info-label">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
-            Booking Date
-          </span>
-          <span class="info-value">${WhatsAppFormatter.formatDate(booking.booking_date)}</span>
+        `}
+
+        <!-- Dedicated Slot Timing Box for THIS Specific Pass -->
+        <div style="margin: 16px 0; border: 2px solid #006b30; border-radius: 12px; background: #f0fdf4; padding: 14px; text-align: center;">
+          <div style="font-size: 11px; font-weight: 800; color: #166534; text-transform: uppercase; letter-spacing: 0.8px;">
+            ${slotsToRender.length > 1 ? `PASS ${idx + 1}: RESERVED SLOT TIMING` : 'RESERVED SLOT TIMING'}
+          </div>
+          <div style="font-size: 20px; font-weight: 900; color: #006b30; margin: 6px 0; display: flex; align-items: center; justify-content: center; gap: 8px;">
+            ${slotTimingDisplay}
+          </div>
+          <div style="font-size: 12px; color: #15803d; font-weight: 700;">
+            ${court?.name || 'Pitch'} &bull; ${WhatsAppFormatter.formatDate(booking.booking_date)}
+          </div>
         </div>
-        <div class="info-item">
-          <span class="info-label">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            Reserved Slots
-          </span>
-          <span class="info-value" style="color: #006b30; font-weight: 700;">${
-            Array.isArray(booking.all_slots) && booking.all_slots.filter(s => s.start_time && s.end_time).length > 0
-              ? booking.all_slots.filter(s => s.start_time && s.end_time).map(s => `${getTimeOfDaySvg(s.start_time)}${WhatsAppFormatter.formatTime(s.start_time)} – ${getTimeOfDaySvg(s.end_time)}${WhatsAppFormatter.formatTime(s.end_time)}`).join(', ')
-              : (booking.start_time && booking.end_time
-                  ? `${getTimeOfDaySvg(booking.start_time)}${WhatsAppFormatter.formatTime(booking.start_time)} – ${getTimeOfDaySvg(booking.end_time)}${WhatsAppFormatter.formatTime(booking.end_time)}`
-                  : 'Confirmed Match Slot')
-          }</span>
+
+        <div class="info-grid">
+          <div class="info-item">
+            <span class="info-label">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 17v2"/><path d="M13 11v2"/></svg>
+              Pass Reference
+            </span>
+            <span class="info-value" style="color: #006b30; font-family: monospace;">${slotRef}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+              Common Group Ref
+            </span>
+            <span class="info-value" style="color: #006b30; font-family: monospace;">${booking.group_ref || booking.booking_ref}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+              Reserved Pitch
+            </span>
+            <span class="info-value">${court?.name || 'Pitch'}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+              Booking Date
+            </span>
+            <span class="info-value">${WhatsAppFormatter.formatDate(booking.booking_date)}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              Customer Name
+            </span>
+            <span class="info-value">${customer.name}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+              Mobile Phone
+            </span>
+            <span class="info-value">${cleanCustomerPhone}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+              This Slot Amount
+            </span>
+            <span class="info-value" style="font-size: 15px; color: #006b30;">₹${slotPrice} (PAID)</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+              Total Order (${slotsToRender.length} Slots)
+            </span>
+            <span class="info-value" style="color: #006b30;">₹${booking.total_order_amount || booking.total_amount} (PAID)</span>
+          </div>
         </div>
-        <div class="info-item">
-          <span class="info-label">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-            Customer Name
-          </span>
-          <span class="info-value">${customer.name}</span>
-        </div>
-        <div class="info-item">
-          <span class="info-label">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-            Mobile Phone
-          </span>
-          <span class="info-value">${cleanCustomerPhone}</span>
-        </div>
-        <div class="info-item">
-          <span class="info-label">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
-            Total Amount Paid
-          </span>
-          <span class="info-value" style="font-size: 15px; color: #006b30;">₹${booking.total_order_amount || booking.total_amount} (PAID)</span>
-        </div>
-        <div class="info-item">
-          <span class="info-label">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
-            Payment Status
-          </span>
-          <span class="info-value" style="color: #006b30;">VERIFIED (Razorpay Live)</span>
-        </div>
-      </div>
 
       <div style="margin-top: 20px; padding: 14px; background: #f8fafc; border-radius: 12px; font-size: 11px; color: #475569; border: 1px solid #e2e8f0; display: flex; gap: 16px; align-items: center;">
         ${locationQrDataUrl ? `
@@ -411,6 +494,8 @@ export class GatePassService {
       Thank you for booking with ${venue.name}. Please arrive 10 minutes prior to your slot time.
     </div>
   </div>
+  `;
+}).join('')}
 </body>
 </html>`;
   }

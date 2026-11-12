@@ -38,9 +38,10 @@ async function findOrResolveBooking(ref, fallbackData = {}) {
         }
       }
     }
-    // Aggregate siblings if this is part of a multi-slot order
-    const parentRef = WhatsAppFormatter.getBookingGroupRef(booking);
-    if (parentRef) {
+    // Aggregate siblings ONLY when viewing the entire order group, NOT when targeting a specific single slot pass
+    const isSingleSlotRequest = (fallbackData && Array.isArray(fallbackData.all_slots) && fallbackData.all_slots.length === 1) ||
+                                (parentRef && cleanRef !== parentRef && cleanRef.includes('-'));
+    if (parentRef && !isSingleSlotRequest) {
       const isBookingActive = booking.status !== 'cancelled' && booking.status !== 'refunded';
       const siblings = store.getBookings().filter(b => 
         (isBookingActive ? (b.status !== 'cancelled' && b.status !== 'refunded') : b.id === booking.id) &&
@@ -52,11 +53,20 @@ async function findOrResolveBooking(ref, fallbackData = {}) {
         booking.all_slots = Array.from(new Map(validSiblings.map(s => [`${s.start_time}-${s.end_time}`, {
           start_time: s.start_time,
           end_time: s.end_time,
-          price: s.total_amount
+          price: s.total_amount,
+          booking_ref: s.booking_ref
         }])).values()).sort((a, b) => String(a.start_time).localeCompare(String(b.start_time)));
         booking.total_order_amount = validSiblings.reduce((sum, s) => sum + (Number(s.total_amount) || 0), 0);
         booking.formatted_slots = booking.all_slots.map(s => `${WhatsAppFormatter.formatTime(s.start_time)} – ${WhatsAppFormatter.formatTime(s.end_time)}`).join(', ');
       }
+    } else if (isSingleSlotRequest && booking.start_time && booking.end_time) {
+      booking.all_slots = [{
+        start_time: booking.start_time,
+        end_time: booking.end_time,
+        price: booking.total_amount,
+        booking_ref: booking.booking_ref
+      }];
+      booking.formatted_slots = `${WhatsAppFormatter.formatTime(booking.start_time)} – ${WhatsAppFormatter.formatTime(booking.end_time)}`;
     }
     if (!booking.gate_pass_otp) {
       booking.gate_pass_otp = WhatsAppFormatter.getBookingGatePassOtp(booking);

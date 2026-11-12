@@ -1329,7 +1329,16 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
                     <div className="flex justify-between items-start gap-2">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                          <span className="font-mono font-extrabold text-xs text-primary truncate">{b.group_ref || b.booking_ref}</span>
+                          <span className="font-mono font-extrabold text-xs text-primary truncate">{b.booking_ref}</span>
+                          {b.group_ref && b.group_ref !== b.booking_ref && (
+                            <span className="text-[9px] font-mono text-on-surface-variant font-semibold bg-surface-container-low px-1.5 py-0.2 rounded border border-outline-variant/40" title="Common Gate Pass Group Reference">
+                              Group: {b.group_ref}
+                            </span>
+                          )}
+                          <span className="text-[9.5px] font-mono font-bold text-amber-900 bg-amber-50 px-2 py-0.2 rounded-full border border-amber-300 flex items-center gap-1 shadow-2xs" title="4-Digit Gate Check-in Pass OTP">
+                            <KeyRound className="w-2.5 h-2.5 text-amber-600 shrink-0" />
+                            <span>OTP: {getBookingGatePassOtp(b)}</span>
+                          </span>
                           <span
                             className={`badge text-[9.5px] sm:text-[10px] px-2 py-0.5 ${
                               b.status === 'confirmed'

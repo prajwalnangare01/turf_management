@@ -2001,6 +2001,127 @@ async function runResendTests() {
   }
   console.log('✅ PASSED: Sport name cleanly rendered for every pitch in slot listings');
 
+  // --- TEST 34: Continuous & Disjoint Slots Individual Passes with Common Gate Pass OTP & Single Continuous Slot Cancellation ---
+  console.log('\n--- TEST 34: Continuous & Disjoint Slots Individual Passes with Common Gate Pass OTP & Single Continuous Slot Cancellation ---');
+  const t34Date = new Date(Date.now() + 86400000 * 5).toISOString().split('T')[0];
+  const t34CustId = 'cust-multi-cont-001';
+  const t34PrimaryRef = `TRF-${t34Date.replace(/-/g, '')}-9542`;
+  const t34CommonOtp = '9542';
+  const t34PaymentId = `pay_t34_live_${Date.now()}`;
+
+  // Customer selects 6-7, 7-8 (continuous), and 13-14 (1 PM, disjoint)
+  const selectedSlotsT34 = [
+    { start_time: '06:00', end_time: '07:00', price: 1200 },
+    { start_time: '07:00', end_time: '08:00', price: 1200 },
+    { start_time: '13:00', end_time: '14:00', price: 1500 }
+  ];
+  const t34GrandTotal = 3900;
+  const t34Summary = '06:00 AM – 07:00 AM, 07:00 AM – 08:00 AM, 01:00 PM – 02:00 PM';
+
+  // 34.1: Verify each slot generates an independent booking record
+  const bk1 = PostgresEngine.createBooking({
+    booking_ref: t34PrimaryRef,
+    group_ref: t34PrimaryRef,
+    gate_pass_otp: t34CommonOtp,
+    gateway_payment_id: t34PaymentId,
+    total_order_amount: t34GrandTotal,
+    all_slots: selectedSlotsT34,
+    formatted_slots: t34Summary,
+    customer_id: t34CustId,
+    court_id: targetCourt.id,
+    sport_id: 'sp-football',
+    booking_date: t34Date,
+    start_time: '06:00',
+    end_time: '07:00',
+    total_amount: 1200,
+    discount_amount: 0,
+    status: 'confirmed',
+    source: 'online'
+  }).booking!;
+
+  const bk2 = PostgresEngine.createBooking({
+    booking_ref: `${t34PrimaryRef}-2`,
+    group_ref: t34PrimaryRef,
+    gate_pass_otp: t34CommonOtp,
+    gateway_payment_id: t34PaymentId,
+    total_order_amount: t34GrandTotal,
+    all_slots: selectedSlotsT34,
+    formatted_slots: t34Summary,
+    customer_id: t34CustId,
+    court_id: targetCourt.id,
+    sport_id: 'sp-football',
+    booking_date: t34Date,
+    start_time: '07:00',
+    end_time: '08:00',
+    total_amount: 1200,
+    discount_amount: 0,
+    status: 'confirmed',
+    source: 'online'
+  }).booking!;
+
+  const bk3 = PostgresEngine.createBooking({
+    booking_ref: `${t34PrimaryRef}-3`,
+    group_ref: t34PrimaryRef,
+    gate_pass_otp: t34CommonOtp,
+    gateway_payment_id: t34PaymentId,
+    total_order_amount: t34GrandTotal,
+    all_slots: selectedSlotsT34,
+    formatted_slots: t34Summary,
+    customer_id: t34CustId,
+    court_id: targetCourt.id,
+    sport_id: 'sp-football',
+    booking_date: t34Date,
+    start_time: '13:00',
+    end_time: '14:00',
+    total_amount: 1500,
+    discount_amount: 0,
+    status: 'confirmed',
+    source: 'online'
+  }).booking!;
+
+  assert(Boolean(bk1 && bk2 && bk3), 'All 3 bookings created individually');
+  assert(bk1.start_time === '06:00' && bk1.end_time === '07:00', 'Booking 1 is strictly 06:00 - 07:00 (not merged into 6-8)');
+  assert(bk2.start_time === '07:00' && bk2.end_time === '08:00', 'Booking 2 is strictly 07:00 - 08:00 (not merged into 6-8)');
+  assert(bk3.start_time === '13:00' && bk3.end_time === '14:00', 'Booking 3 is strictly 13:00 - 14:00');
+  assert(bk1.gate_pass_otp === t34CommonOtp && bk2.gate_pass_otp === t34CommonOtp && bk3.gate_pass_otp === t34CommonOtp, 'All 3 bookings share identical 4-digit Gate Pass OTP');
+  assert(bk1.group_ref === t34PrimaryRef && bk2.group_ref === t34PrimaryRef && bk3.group_ref === t34PrimaryRef, 'All 3 bookings share identical group_ref');
+
+  // 34.2: Verify SlotEngine detects all 3 slots as booked before cancellation
+  const slotsBeforeCancel = SlotEngine.computeSlotsForCourt(targetCourt, t34Date, '9876543210');
+  const s06 = slotsBeforeCancel.find(s => s.start_time === '06:00');
+  const s07 = slotsBeforeCancel.find(s => s.start_time === '07:00');
+  const s13 = slotsBeforeCancel.find(s => s.start_time === '13:00');
+  assert(s06?.status !== 'available', 'Slot 06:00 - 07:00 is booked');
+  assert(s07?.status !== 'available', 'Slot 07:00 - 08:00 is booked');
+  assert(s13?.status !== 'available', 'Slot 13:00 - 14:00 is booked');
+
+  // 34.3: Cancel ONLY continuous slot 2 (07:00 - 08:00)
+  const cancelBk2Result = PostgresEngine.updateBookingStatus(bk2.id, 'cancelled', {
+    refundAmount: 0,
+    refundReason: 'Customer cancelled continuous slot 07:00 - 08:00',
+    cancelledBy: 'customer'
+  });
+  assert(cancelBk2Result.success, 'Continuous slot 2 (07:00 - 08:00) cancelled successfully');
+
+  // 34.4: Verify Slot 2 is cancelled, but Slot 1 and Slot 3 remain strictly confirmed!
+  const updatedBk1 = store.getBookings().find(b => b.id === bk1.id)!;
+  const updatedBk2 = store.getBookings().find(b => b.id === bk2.id)!;
+  const updatedBk3 = store.getBookings().find(b => b.id === bk3.id)!;
+  assert(updatedBk2.status === 'cancelled', 'Slot 2 is marked cancelled');
+  assert(updatedBk1.status === 'confirmed', 'Slot 1 (06:00 - 07:00) remains confirmed and active');
+  assert(updatedBk3.status === 'confirmed', 'Slot 3 (13:00 - 14:00) remains confirmed and active');
+  assert(updatedBk1.gate_pass_otp === t34CommonOtp && updatedBk3.gate_pass_otp === t34CommonOtp, 'Remaining active slots retain common 4-digit Gate Pass OTP');
+
+  // 34.5: Verify SlotEngine immediately frees up 07:00 - 08:00 while keeping 06:00 - 07:00 booked
+  const slotsAfterCancel = SlotEngine.computeSlotsForCourt(targetCourt, t34Date, '9876543210');
+  const s06After = slotsAfterCancel.find(s => s.start_time === '06:00');
+  const s07After = slotsAfterCancel.find(s => s.start_time === '07:00');
+  const s13After = slotsAfterCancel.find(s => s.start_time === '13:00');
+  assert(s06After?.status !== 'available', 'Slot 06:00 - 07:00 is STILL booked');
+  assert(s07After?.status === 'available', 'Slot 07:00 - 08:00 is now immediately AVAILABLE after single-slot cancellation');
+  assert(s13After?.status !== 'available', 'Slot 13:00 - 14:00 is STILL booked');
+  console.log('✅ PASSED: Continuous slot cancellation frees only target slot while siblings retain active booking and common gate pass OTP');
+
   console.log('\n🎉 ALL CORNER & EDGE CASE TESTS (INCLUDING AUTO-COMPLETE & OWNER REDUCED WORKFLOW) PASSED PERFECTLY!\n');
 }
 

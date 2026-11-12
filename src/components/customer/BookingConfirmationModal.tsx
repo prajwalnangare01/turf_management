@@ -44,11 +44,12 @@ export const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> =
   );
 
   // Extract all slots: collect active slots from sibling bookings
-  const allSlots: Array<{ start_time: string; end_time: string; price?: number }> = 
+  const allSlots: Array<{ start_time: string; end_time: string; price?: number; booking_ref?: string }> = 
     Array.from(new Map(siblingBookings.map(b => [`${b.start_time}-${b.end_time}`, {
       start_time: b.start_time,
       end_time: b.end_time,
-      price: b.total_amount
+      price: b.total_amount,
+      booking_ref: b.booking_ref
     }])).values()).sort((a, b) => a.start_time.localeCompare(b.start_time));
 
   // Grand total paid across all active slots
@@ -172,135 +173,166 @@ export const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> =
           </button>
         </div>
 
-        <div class="ticket-card">
-          <div class="ticket-header">
-            <h1>${venue.name}</h1>
-            <p>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-              OFFICIAL VENUE ENTRY PASS & RECEIPT
-            </p>
-          </div>
-
-          <div class="ticket-body">
-            <div class="otp-box">
-              <div class="otp-title">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>
-                <span>4-Digit Common Gate Check-in Pass</span>
-              </div>
-              <div class="otp-code">${otpCode}</div>
-              <div style="font-size: 11px; font-weight: 700;">
-                ${allSlots.length > 1 ? `Valid for all ${allSlots.length} reserved sessions below` : 'Show this 4-digit code to the gate manager for check-in'}
-              </div>
+        ${allSlots.map((s, idx) => {
+          const slotRef = s.booking_ref || (idx === 0 ? groupRef : `${groupRef}-${idx + 1}`);
+          const slotPrice = s.price || Math.round(grandTotalPaid / allSlots.length);
+          return `
+          <div class="ticket-card" style="${idx > 0 ? 'margin-top: 32px; page-break-before: always;' : ''}">
+            <div class="ticket-header">
+              <h1>${venue.name}</h1>
+              <p>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                OFFICIAL ENTRY PASS ${allSlots.length > 1 ? `&bull; PASS ${idx + 1} OF ${allSlots.length}` : '& RECEIPT'}
+              </p>
             </div>
 
-            <!-- Booked Sessions List -->
-            <div style="margin: 16px 0; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
-              <div style="background: #f1f5f9; padding: 10px 14px; font-size: 11px; font-weight: 800; color: #1e293b; display: flex; justify-content: space-between; letter-spacing: 0.5px;">
-                <span>RESERVED SESSION TIMINGS (${allSlots.length} ${allSlots.length === 1 ? 'SESSION' : 'SESSIONS'})</span>
-                <span style="color: #006b30; font-weight: 700;">COMMON PASS</span>
+            <div class="ticket-body">
+              <div class="otp-box">
+                <div class="otp-title">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>
+                  <span>4-Digit Common Gate Check-in Pass</span>
+                </div>
+                <div class="otp-code">${otpCode}</div>
+                <div style="font-size: 11px; font-weight: 700;">
+                  ${allSlots.length > 1 ? `Common pass code valid for all ${allSlots.length} reserved sessions` : 'Show this 4-digit code to the gate manager for check-in'}
+                </div>
               </div>
-              <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
-                <tbody>
-                  ${allSlots.map((s, idx) => `
-                    <tr style="border-top: 1px solid #f1f5f9; background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
-                      <td style="padding: 10px 14px; font-weight: 700; color: #006b30; width: 25%;">Slot ${idx + 1}</td>
-                      <td style="padding: 10px 14px; font-weight: 800; color: #0f172a;">${getTimeOfDaySvg(s.start_time)} ${formatTime12hPlain(s.start_time)} – ${getTimeOfDaySvg(s.end_time)} ${formatTime12hPlain(s.end_time)}</td>
-                      <td style="padding: 10px 14px; color: #64748b; text-align: right;">${court?.name || 'Main Pitch'}</td>
-                    </tr>
-                  `).join('')}
-                </tbody>
-              </table>
-            </div>
 
-            <div class="info-grid">
-              <div class="info-item">
-                <span class="info-label">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 17v2"/><path d="M13 11v2"/></svg>
-                  Booking Reference
-                </span>
-                <span class="info-value" style="color: #006b30; font-family: monospace;">${groupRef}</span>
+              <!-- Dedicated Slot Timing Box for THIS Specific Pass -->
+              <div style="margin: 16px 0; border: 2px solid #006b30; border-radius: 12px; background: #f0fdf4; padding: 14px; text-align: center;">
+                <div style="font-size: 11px; font-weight: 800; color: #166534; text-transform: uppercase; letter-spacing: 0.8px;">
+                  ${allSlots.length > 1 ? `PASS ${idx + 1}: RESERVED SLOT TIMING` : 'RESERVED SLOT TIMING'}
+                </div>
+                <div style="font-size: 22px; font-weight: 900; color: #006b30; margin: 6px 0; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                  ${getTimeOfDaySvg(s.start_time)}
+                  <span>${formatTime12hPlain(s.start_time)} – ${getTimeOfDaySvg(s.end_time)} ${formatTime12hPlain(s.end_time)}</span>
+                </div>
+                <div style="font-size: 12px; color: #15803d; font-weight: 700;">
+                  ${court?.name || 'Pitch'} &bull; ${formatDateDDMMYYYY(booking.booking_date)}
+                </div>
               </div>
-              <div class="info-item">
-                <span class="info-label">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
-                  Reserved Pitch
-                </span>
-                <span class="info-value">${court?.name || 'Pitch'}</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
-                  Booking Date
-                </span>
-                <span class="info-value">${formatDateDDMMYYYY(booking.booking_date)}</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                  Total Sessions
-                </span>
-                <span class="info-value">${allSlots.length} ${allSlots.length === 1 ? 'Slot' : 'Slots'} (${allSlots.length * 60} mins)</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                  Customer Name
-                </span>
-                <span class="info-value">${customer?.name || 'Customer'}</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-                  Mobile Phone
-                </span>
-                <span class="info-value">${cleanPhone}</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
-                  Total Amount Paid
-                </span>
-                <span class="info-value" style="font-size: 16px; color: #006b30;">₹${grandTotalPaid} (PAID)</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
-                  Payment Status
-                </span>
-                <span class="info-value" style="color: #006b30;">VERIFIED (Razorpay Live)</span>
-              </div>
-            </div>
 
-            <div style="margin-top: 20px; padding: 14px; background: #f8fafc; border-radius: 12px; font-size: 11px; color: #475569; border: 1px solid #e2e8f0; display: flex; gap: 16px; align-items: center;">
-              ${locationQrDataUrl ? `
-              <div style="text-align: center; flex-shrink: 0; background: #ffffff; padding: 6px; border-radius: 8px; border: 1px solid #cbd5e1;">
-                <img src="${locationQrDataUrl}" alt="Turf Location QR" style="width: 82px; height: 82px; display: block;" />
-                <span style="display: block; font-size: 8px; font-weight: 800; color: #006b30; text-transform: uppercase; margin-top: 4px; letter-spacing: 0.5px;">Scan Location</span>
+              ${allSlots.length > 1 ? `
+              <!-- All Sessions in Group Strip -->
+              <div style="margin: 14px 0; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; font-size: 11px;">
+                <div style="background: #f1f5f9; padding: 8px 12px; font-weight: 800; color: #1e293b; display: flex; justify-content: space-between;">
+                  <span>ALL SESSIONS UNDER THIS COMMON GATE PASS (${allSlots.length} SESSIONS)</span>
+                  <span style="color: #006b30; font-weight: 700;">COMMON OTP: ${otpCode}</span>
+                </div>
+                <table style="width: 100%; border-collapse: collapse; font-size: 11.5px;">
+                  <tbody>
+                    ${allSlots.map((item, itemIdx) => {
+                      const isCurrent = item.start_time === s.start_time && item.end_time === s.end_time;
+                      return `
+                      <tr style="border-top: 1px solid #f1f5f9; background: ${isCurrent ? '#f0fdf4' : (itemIdx % 2 === 0 ? '#ffffff' : '#f8fafc')};">
+                        <td style="padding: 7px 12px; font-weight: ${isCurrent ? '800' : '600'}; color: ${isCurrent ? '#006b30' : '#64748b'}; width: 25%;">
+                          Pass ${itemIdx + 1} ${isCurrent ? '★ THIS PASS' : ''}
+                        </td>
+                        <td style="padding: 7px 12px; font-weight: 800; color: ${isCurrent ? '#006b30' : '#0f172a'};">
+                          ${formatTime12hPlain(item.start_time)} – ${formatTime12hPlain(item.end_time)}
+                        </td>
+                        <td style="padding: 7px 12px; text-align: right; color: #64748b;">
+                          ₹${item.price || Math.round(grandTotalPaid / allSlots.length)}
+                        </td>
+                      </tr>
+                      `;
+                    }).join('')}
+                  </tbody>
+                </table>
               </div>
               ` : ''}
-              <div style="flex: 1; line-height: 1.6;">
-                <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
-                  <strong>Venue Location:</strong> ${venue.address}
+
+              <div class="info-grid">
+                <div class="info-item">
+                  <span class="info-label">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 17v2"/><path d="M13 11v2"/></svg>
+                    Pass Reference
+                  </span>
+                  <span class="info-value" style="color: #006b30; font-family: monospace;">${slotRef}</span>
                 </div>
-                <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                  <strong>GSTIN:</strong> ${venue.gst_number || '27AABCT1234F1Z0'} &bull; <strong>Contact:</strong> ${venue.contact_phone}
+                <div class="info-item">
+                  <span class="info-label">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                    Common Group Ref
+                  </span>
+                  <span class="info-value" style="color: #006b30; font-family: monospace;">${groupRef}</span>
                 </div>
-                <div style="margin-top: 6px;">
-                  <a href="${venueLocationUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; gap: 5px; color: #006b30; font-weight: 800; text-decoration: none; background: #e8f5e9; padding: 4px 10px; border-radius: 6px; border: 1px solid #a5d6a7; font-size: 11px;">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
-                    Open Directions in Google Maps &rarr;
-                  </a>
+                <div class="info-item">
+                  <span class="info-label">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+                    Reserved Pitch
+                  </span>
+                  <span class="info-value">${court?.name || 'Pitch'}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+                    Booking Date
+                  </span>
+                  <span class="info-value">${formatDateDDMMYYYY(booking.booking_date)}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    Customer Name
+                  </span>
+                  <span class="info-value">${customer?.name || 'Customer'}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                    Mobile Phone
+                  </span>
+                  <span class="info-value">${cleanPhone}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+                    This Slot Amount
+                  </span>
+                  <span class="info-value" style="font-size: 15px; color: #006b30;">₹${slotPrice} (PAID)</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                    Total Order (${allSlots.length} Slots)
+                  </span>
+                  <span class="info-value" style="color: #006b30;">₹${grandTotalPaid} (Verified Live)</span>
+                </div>
+              </div>
+
+              <div style="margin-top: 20px; padding: 14px; background: #f8fafc; border-radius: 12px; font-size: 11px; color: #475569; border: 1px solid #e2e8f0; display: flex; gap: 16px; align-items: center;">
+                ${locationQrDataUrl ? `
+                <div style="text-align: center; flex-shrink: 0; background: #ffffff; padding: 6px; border-radius: 8px; border: 1px solid #cbd5e1;">
+                  <img src="${locationQrDataUrl}" alt="Turf Location QR" style="width: 82px; height: 82px; display: block;" />
+                  <span style="display: block; font-size: 8px; font-weight: 800; color: #006b30; text-transform: uppercase; margin-top: 4px; letter-spacing: 0.5px;">Scan Location</span>
+                </div>
+                ` : ''}
+                <div style="flex: 1; line-height: 1.6;">
+                  <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+                    <strong>Venue Location:</strong> ${venue.address}
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    <strong>GSTIN:</strong> ${venue.gst_number || '27AABCT1234F1Z0'} &bull; <strong>Contact:</strong> ${venue.contact_phone}
+                  </div>
+                  <div style="margin-top: 6px;">
+                    <a href="${venueLocationUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; gap: 5px; color: #006b30; font-weight: 800; text-decoration: none; background: #e8f5e9; padding: 4px 10px; border-radius: 6px; border: 1px solid #a5d6a7; font-size: 11px;">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+                      Open Directions in Google Maps &rarr;
+                    </a>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          <div class="ticket-footer">
-            Thank you for booking with ${venue.name}. Please arrive 10 minutes prior to your slot time.
+            <div class="ticket-footer">
+              Thank you for booking with ${venue.name}. Please arrive 10 minutes prior to your slot time.
+            </div>
           </div>
-        </div>
+          `;
+        }).join('')}
 
         <script>
           window.onload = function() {
@@ -377,17 +409,26 @@ export const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> =
 
           {/* Reserved Slot Sessions Summary (When multi-slot) */}
           {allSlots.length > 1 && (
-            <div className="bg-surface-container-low px-2.5 py-1.5 rounded-xl border border-outline-variant/30 flex items-center justify-between text-[11px]">
-              <span className="font-bold text-on-surface flex items-center gap-1">
-                <Clock className="w-3.5 h-3.5 text-primary" /> {allSlots.length} Sessions Reserved
-              </span>
-              <span className="font-bold text-primary text-xs inline-flex items-center gap-1">
-                <TimeOfDayIcon time24={allSlots[0].start_time} className="w-3.5 h-3.5" />
-                <span>{formatTime12hPlain(allSlots[0].start_time)}</span>
-                <span>–</span>
-                <TimeOfDayIcon time24={allSlots[allSlots.length - 1].end_time} className="w-3.5 h-3.5" />
-                <span>{formatTime12hPlain(allSlots[allSlots.length - 1].end_time)}</span>
-              </span>
+            <div className="bg-surface-container-low p-2 rounded-xl border border-outline-variant/30 space-y-1.5 text-[11px]">
+              <div className="flex items-center justify-between font-bold text-on-surface text-[10.5px]">
+                <span className="flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5 text-primary" /> {allSlots.length} Individual Slot Passes Generated
+                </span>
+                <span className="text-[9.5px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded-full border border-emerald-200">
+                  Common Gate OTP: <strong className="font-mono font-black">{otpCode}</strong>
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-28 overflow-y-auto pr-0.5">
+                {allSlots.map((s, idx) => (
+                  <div key={idx} className="bg-white px-2 py-1 rounded-lg border border-outline-variant/40 flex items-center justify-between text-xs shadow-xs">
+                    <span className="font-bold text-primary text-[10.5px]">Pass {idx + 1}:</span>
+                    <span className="font-bold text-on-surface text-xs inline-flex items-center gap-1">
+                      <TimeOfDayIcon time24={s.start_time} className="w-3 h-3" />
+                      <span>{formatTime12hPlain(s.start_time)} – {formatTime12hPlain(s.end_time)}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
@@ -417,7 +458,7 @@ export const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> =
                   </div>
                 ) : (
                   <span className="font-headline font-bold text-primary text-[11px] block leading-tight mt-0.5">
-                    {allSlots.length} Sessions
+                    {allSlots.length} Separate Passes
                   </span>
                 )}
               </div>
@@ -462,7 +503,7 @@ export const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> =
               className="btn-cta w-full py-2 text-xs font-headline font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-sm hover:shadow-md transition cursor-pointer disabled:opacity-60"
             >
               <FileDown className={`w-3.5 h-3.5 ${isDownloadingPdf ? 'animate-bounce' : ''}`} /> 
-              {isDownloadingPdf ? 'Generating PDF...' : 'Download PDF Gate Pass'}
+              {isDownloadingPdf ? 'Generating PDF...' : (allSlots.length > 1 ? `Download All ${allSlots.length} PDF Passes` : 'Download PDF Gate Pass')}
             </button>
 
             <div className="grid grid-cols-2 gap-1.5">

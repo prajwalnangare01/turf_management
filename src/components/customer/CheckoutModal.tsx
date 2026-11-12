@@ -150,8 +150,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const finalTotal = Math.max(0, rawTotal - discount);
 
   const contiguousBlocks = groupContiguousSlots(selectedSlots);
-  const formattedSlotsSummary = contiguousBlocks
-    .map(b => formatTimeRange12hPlain(b.start_time, b.end_time))
+  const sortedSlots = [...selectedSlots].sort((a, b) => a.start_time.localeCompare(b.start_time));
+  const formattedSlotsSummary = sortedSlots
+    .map(s => formatTimeRange12hPlain(s.start_time, s.end_time))
     .join(', ');
 
   const handleApplyCoupon = () => {
@@ -230,24 +231,24 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         console.warn('❌ [CheckoutModal] Error syncing customer to Supabase:', err);
       });
 
-      // EDGE CASE: Pre-check locks and DB overlaps across ALL blocks before creating any booking
-      for (const block of contiguousBlocks) {
+      // EDGE CASE: Pre-check locks and DB overlaps across ALL individual slots before creating any booking
+      for (const slot of sortedSlots) {
         const hasConflict = store.getBookings().some(b =>
           b.court_id === court.id &&
           b.booking_date === dateStr &&
           (b.status === 'pending_payment' || b.status === 'confirmed') &&
-          PostgresEngine.isTimeOverlap(block.start_time, block.end_time, b.start_time, b.end_time)
+          PostgresEngine.isTimeOverlap(slot.start_time, slot.end_time, b.start_time, b.end_time)
         );
 
         if (hasConflict) {
           setIsProcessingPayment(false);
-          setPaymentError(`Slot interval ${formatTimeRange12hPlain(block.start_time, block.end_time)} is no longer available. Please select another slot.`);
+          setPaymentError(`Slot interval ${formatTimeRange12hPlain(slot.start_time, slot.end_time)} is no longer available. Please select another slot.`);
           return;
         }
       }
 
       // Pre-check Redis locks
-      for (const slot of selectedSlots) {
+      for (const slot of sortedSlots) {
         const lock = RedisLockService.getLock(court.id, dateStr, slot.start_time);
         if (lock && lock.locked_by !== sessionId && (!currentCustomer || lock.locked_by !== currentCustomer.id)) {
           setIsProcessingPayment(false);
@@ -263,20 +264,21 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       const primaryRef = `TRF-${dateStr.replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
       const commonGatePassOtp = primaryRef.slice(-4);
       const commonPaymentId = `pay_live_${Date.now()}`;
-      const allSlotsData = selectedSlots.map(s => ({
+      const allSlotsData = sortedSlots.map(s => ({
         start_time: s.start_time,
         end_time: s.end_time,
         price: s.price
       }));
 
-      // Create pending DB Bookings for EACH contiguous block linked by common group_ref and gate_pass_otp
+      // Create pending DB Bookings for EACH individual slot linked by common group_ref and gate_pass_otp.
+      // Even if slots are continuous (e.g. 6-7 and 7-8), each slot has its own entry pass and can be canceled individually!
       const createdBookings: Booking[] = [];
 
-      for (let i = 0; i < contiguousBlocks.length; i++) {
-        const block = contiguousBlocks[i];
-        const blockRawRatio = rawTotal > 0 ? block.blockPrice / rawTotal : 1 / contiguousBlocks.length;
-        const blockDiscount = Math.round(discount * blockRawRatio);
-        const blockTotal = Math.max(0, block.blockPrice - blockDiscount);
+      for (let i = 0; i < sortedSlots.length; i++) {
+        const slot = sortedSlots[i];
+        const slotRawRatio = rawTotal > 0 ? slot.price / rawTotal : 1 / sortedSlots.length;
+        const slotDiscount = Math.round(discount * slotRawRatio);
+        const slotTotal = Math.max(0, slot.price - slotDiscount);
 
         const bookingRef = i === 0 ? primaryRef : `${primaryRef}-${i + 1}`;
 
@@ -292,12 +294,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           court_id: court.id,
           sport_id: courtSportId,
           booking_date: dateStr,
-          start_time: block.start_time,
-          end_time: block.end_time,
+          start_time: slot.start_time,
+          end_time: slot.end_time,
           source: 'online',
           status: 'pending_payment',
-          total_amount: blockTotal,
-          discount_amount: blockDiscount,
+          total_amount: slotTotal,
+          discount_amount: slotDiscount,
           coupon_id: appliedCoupon?.id
         });
 
@@ -359,7 +361,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           sessionStorage.removeItem('turfflow_pending_checkout');
         }
 
-        // Confirm ALL created contiguous block bookings in this multi-slot transaction
+        // Confirm ALL created individual slot bookings in this multi-slot transaction
         for (let i = 1; i < createdBookings.length; i++) {
           PostgresEngine.updateBookingStatus(createdBookings[i].id, 'confirmed');
           const sibling = store.getBookings().find(b => b.id === createdBookings[i].id);
@@ -374,11 +376,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           }
         }
 
-        // Release Redis locks for all contiguous blocks
-        for (const block of contiguousBlocks) {
-          RedisLockService.releaseLocksForBooking(court.id, dateStr, block.start_time, block.end_time, sessionId);
+        // Release Redis locks for all individual slots
+        for (const slot of sortedSlots) {
+          RedisLockService.releaseLock(court.id, dateStr, slot.start_time, sessionId);
           if (currentCustomer) {
-            RedisLockService.releaseLocksForBooking(court.id, dateStr, block.start_time, block.end_time, currentCustomer.id);
+            RedisLockService.releaseLock(court.id, dateStr, slot.start_time, currentCustomer.id);
           }
         }
 
@@ -464,7 +466,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             <div className="flex items-center gap-1.5 min-w-0">
               <Clock className="w-3.5 h-3.5 text-primary shrink-0" />
               <div className="font-bold text-on-surface truncate text-xs flex items-center gap-1">
-                {contiguousBlocks.map((b, idx) => (
+                {sortedSlots.map((b, idx) => (
                   <span key={idx} className="inline-flex items-center gap-1">
                     {idx > 0 && <span>, </span>}
                     <TimeOfDayIcon time24={b.start_time} className="w-3.5 h-3.5" />
@@ -722,7 +724,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               <div className="flex justify-between items-center">
                 <span className="text-on-surface-variant">Slots:</span>
                 <div className="text-primary font-bold flex items-center gap-1">
-                  {contiguousBlocks.map((b, idx) => (
+                  {sortedSlots.map((b, idx) => (
                     <span key={idx} className="inline-flex items-center gap-1">
                       {idx > 0 && <span>, </span>}
                       <TimeOfDayIcon time24={b.start_time} className="w-3.5 h-3.5" />
