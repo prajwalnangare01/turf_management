@@ -212,7 +212,7 @@ export interface NotificationLog {
   id: string;
   booking_id: string;
   channel: 'whatsapp' | 'sms' | 'email';
-  type: 'confirmation' | 'reminder' | 'cancellation' | 'reschedule' | 'welcome' | 'otp' | 'test';
+  type: 'confirmation' | 'reminder' | 'cancellation' | 'refund' | 'reschedule' | 'welcome' | 'otp' | 'test';
   status: 'sent' | 'failed' | 'delivered';
   recipient: string;
   message_preview: string;

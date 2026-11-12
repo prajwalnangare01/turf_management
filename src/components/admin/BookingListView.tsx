@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { store } from '../../services/store';
 import { PostgresEngine } from '../../services/postgresEngine';
 import { AuditLogger } from '../../services/auditLogger';
 import { AdminUser, BookingStatus, Booking } from '../../types/schema';
 import { ConfirmModal } from '../common/ConfirmModal';
+import { Toast } from '../common/Toast';
 import { AdminRefundModal } from './AdminRefundModal';
 import { formatTimeRange12h, formatTimeRange12hPlain, formatDateDDMMYYYY, getBookingGatePassOtp, formatPhoneNumber } from '../../utils/formatters';
 import { ReminderScheduler } from '../../services/reminderScheduler';
@@ -46,6 +47,23 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
 
   const closeConfirm = () => setConfirmState(prev => ({ ...prev, isOpen: false }));
 
+  // Toastbar State for Actions (e.g. Refund Success)
+  const [toastState, setToastState] = useState<{
+    isOpen: boolean;
+    type: 'success' | 'error' | 'warning' | 'info';
+    title: string;
+    message: string;
+  }>({
+    isOpen: false,
+    type: 'success',
+    title: '',
+    message: ''
+  });
+
+  const handleCloseToast = useCallback(() => {
+    setToastState(prev => ({ ...prev, isOpen: false }));
+  }, []);
+
   const [bookings, setBookings] = useState<Booking[]>(() => store.getBookings());
 
   useEffect(() => {
@@ -75,6 +93,9 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
 
   const filteredBookings = bookings
     .filter(b => {
+      // Exclude hold slots / pending payments from booking directory
+      if (b.status === 'pending_payment') return false;
+
       const cust = customers.find(c => c.id === b.customer_id);
       const bRef = b.booking_ref || '';
       const otpCode = getBookingGatePassOtp(b);
@@ -119,7 +140,12 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
       confirmText: actionLabel,
       variant: targetStatus === 'cancelled' ? 'danger' : 'success',
       onConfirm: () => {
-        const res = PostgresEngine.updateBookingStatus(b.id, targetStatus);
+        const res = PostgresEngine.updateBookingStatus(b.id, targetStatus, {
+          adminId: currentAdmin.id,
+          cancelledBy: 'admin',
+          refundReason: targetStatus === 'cancelled' ? 'Cancelled by venue management from Bookings Directory' : undefined,
+          refundAmount: 0
+        });
         if (res.success) {
           AuditLogger.log(currentAdmin.id, `UPDATE_BOOKING_${targetStatus.toUpperCase()}`, 'Booking', b.id);
           closeConfirm();
@@ -163,7 +189,7 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
         {/* Quick Segmented Status Tabs */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
           {[
-            { id: 'all', label: 'All Bookings', count: bookings.length },
+            { id: 'all', label: 'All Bookings', count: bookings.filter(b => b.status !== 'pending_payment').length },
             { id: 'confirmed', label: 'Upcoming / Confirmed', count: bookings.filter(b => b.status === 'confirmed').length },
             { id: 'completed', label: 'Completed', count: bookings.filter(b => b.status === 'completed').length },
             { id: 'cancelled_all', label: 'Cancelled & Refunded', count: bookings.filter(b => b.status === 'cancelled' || b.status === 'refunded').length }
@@ -233,7 +259,6 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
             >
               <option value="all">All Statuses</option>
               <option value="confirmed">Confirmed / Active</option>
-              <option value="pending_payment">Pending Payment</option>
               <option value="completed">Completed</option>
               <option value="cancelled_all">All Cancelled & Refunded</option>
               <option value="cancelled">Cancelled (No Refund)</option>
@@ -565,10 +590,27 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
         booking={refundModalBooking}
         currentAdmin={currentAdmin}
         onClose={() => setRefundModalBooking(null)}
-        onSuccess={() => {
+        onSuccess={(data) => {
           setBookings([...store.getBookings()]);
           setRefundModalBooking(null);
+          if (data?.message) {
+            setToastState({
+              isOpen: true,
+              type: 'success',
+              title: data.refundAmount > 0 ? 'Refund Successfully Processed' : 'Booking Cancelled (Zero Refund)',
+              message: data.message
+            });
+          }
         }}
+      />
+
+      {/* Success Toastbar Notification */}
+      <Toast
+        isOpen={toastState.isOpen}
+        type={toastState.type}
+        title={toastState.title}
+        message={toastState.message}
+        onClose={handleCloseToast}
       />
     </div>
   );

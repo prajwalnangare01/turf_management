@@ -3,6 +3,7 @@ import { Booking, AdminUser } from '../../types/schema';
 import { store } from '../../services/store';
 import { PostgresEngine } from '../../services/postgresEngine';
 import { AuditLogger } from '../../services/auditLogger';
+import { ConfirmModal } from '../common/ConfirmModal';
 import { formatTimeRange12h, formatTimeRange12hPlain, formatDateDDMMYYYY, formatPhoneNumber } from '../../utils/formatters';
 import { 
   X, 
@@ -20,12 +21,22 @@ import {
   Moon
 } from 'lucide-react';
 
+export interface RefundSuccessData {
+  bookingRef: string;
+  customerName: string;
+  refundAmount: number;
+  refundMode: string;
+  reason: string;
+  targetStatus: 'refunded' | 'cancelled';
+  message: string;
+}
+
 interface AdminRefundModalProps {
   booking: Booking | null;
   isOpen: boolean;
   currentAdmin: AdminUser;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (data?: RefundSuccessData) => void;
 }
 
 export const AdminRefundModal: React.FC<AdminRefundModalProps> = ({
@@ -41,6 +52,7 @@ export const AdminRefundModal: React.FC<AdminRefundModalProps> = ({
   const [reason, setReason] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   const customers = store.getCustomers();
   const courts = store.getCourts();
@@ -115,6 +127,7 @@ export const AdminRefundModal: React.FC<AdminRefundModalProps> = ({
 
   const canExecuteRefund = currentAdmin.role === 'owner' || currentAdmin.role === 'manager';
 
+  // Step 1: Open popup confirmation modal on button click
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!canExecuteRefund) {
@@ -132,6 +145,12 @@ export const AdminRefundModal: React.FC<AdminRefundModalProps> = ({
       return;
     }
 
+    setErrorMsg('');
+    setShowConfirmModal(true);
+  };
+
+  // Step 2: Execute refund only when admin confirms the popup confirmation
+  const handleExecuteConfirmedRefund = () => {
     setIsSubmitting(true);
     const finalReason = reason.trim();
     const targetStatus = refundAmount > 0 ? 'refunded' : 'cancelled';
@@ -156,10 +175,22 @@ export const AdminRefundModal: React.FC<AdminRefundModalProps> = ({
       });
 
       setIsSubmitting(false);
-      onSuccess();
+      setShowConfirmModal(false);
+      onSuccess({
+        bookingRef: booking.booking_ref,
+        customerName: customer?.name || 'Customer',
+        refundAmount,
+        refundMode,
+        reason: finalReason,
+        targetStatus,
+        message: refundAmount > 0
+          ? `Refund of ₹${refundAmount.toLocaleString('en-IN')} for ${customer?.name || 'Customer'} (${booking.booking_ref}) has been successfully processed, recorded in ledger, and refund email dispatched.`
+          : `Booking ${booking.booking_ref} for ${customer?.name || 'Customer'} has been successfully cancelled with zero refund and cancellation email dispatched.`
+      });
       onClose();
     } else {
       setIsSubmitting(false);
+      setShowConfirmModal(false);
       setErrorMsg(result.message);
     }
   };
@@ -477,6 +508,20 @@ export const AdminRefundModal: React.FC<AdminRefundModalProps> = ({
           </div>
         </form>
       </div>
+
+      {/* Popup Confirmation before final refund authorization */}
+      {showConfirmModal && (
+        <ConfirmModal
+          isOpen={showConfirmModal}
+          title={refundAmount > 0 ? `Confirm Refund of ₹${refundAmount.toLocaleString('en-IN')}` : 'Confirm Zero Refund Cancellation'}
+          message={`Are you sure you want to authorize and issue a refund of ₹${refundAmount.toLocaleString('en-IN')} for booking ${booking.booking_ref} (${customer?.name || 'Customer'})?\n\nReason: "${reason.trim()}"\n\nThis action will update the booking status to "${refundAmount > 0 ? 'refunded' : 'cancelled'}" and permanently record the refund in the audit ledger.`}
+          confirmText={refundAmount > 0 ? `Yes, Process ₹${refundAmount.toLocaleString('en-IN')} Refund` : 'Yes, Confirm Cancellation'}
+          cancelText="Cancel & Review"
+          variant={refundAmount > 0 ? 'danger' : 'warning'}
+          onConfirm={handleExecuteConfirmedRefund}
+          onCancel={() => setShowConfirmModal(false)}
+        />
+      )}
     </div>
   );
 };

@@ -372,7 +372,7 @@ export class EmailService {
   }
 
   /**
-   * 2. Send Booking Cancellation & Refund Receipt Email
+   * 2. Send Booking Cancellation Notice Email
    */
   public static async sendBookingCancellation(params: {
     booking: Booking;
@@ -385,25 +385,35 @@ export class EmailService {
     noticeHours?: number;
   }): Promise<EmailDispatchResult> {
     const { booking, customer, courtName, venue, refundAmount, refundPercentage, metTerms, noticeHours } = params;
-    const recipient = customer.email || 'customer@example.com';
+    const recipient = customer.email || (booking as any).customer_email || 'customer@example.com';
     const timeRangeStr = formatTimeRange12h(booking.start_time, booking.end_time);
-    const subject = refundAmount > 0
-      ? `Booking Cancelled & Refund Initiated: ${booking.booking_ref}`
-      : `Booking Cancelled: ${booking.booking_ref}`;
+
+    const isCancelledByAdmin = booking.cancelled_by === 'admin';
+    const isRainout = booking.refund_reason?.toLowerCase().includes('rain') || booking.refund_reason?.toLowerCase().includes('weather');
+    const subject = isRainout
+      ? `🌧️ Match Cancelled by Venue due to Rain: ${booking.booking_ref} — ${venue.name}`
+      : isCancelledByAdmin
+        ? `❌ Booking Cancelled by Venue Management: ${booking.booking_ref} — ${venue.name}`
+        : (refundAmount > 0
+            ? `Booking Cancelled & Refund Initiated: ${booking.booking_ref} — ${venue.name}`
+            : `Booking Cancelled: ${booking.booking_ref} — ${venue.name}`);
 
     const text = [
-      `TURFFLOW - CANCELLATION & REFUND NOTICE`,
+      `TURFFLOW - CANCELLATION NOTICE`,
       `Hi ${customer.name},`,
-      `Your booking ref ${booking.booking_ref} at ${venue.name} has been cancelled.`,
+      isCancelledByAdmin
+        ? `Your booking ref ${booking.booking_ref} at ${venue.name} has been cancelled by venue management.`
+        : `Your booking ref ${booking.booking_ref} at ${venue.name} has been cancelled.`,
       ``,
       `Court: ${courtName}`,
       `Date: ${formatDateDDMMYYYY(booking.booking_date)} (${timeRangeStr})`,
       `Total Booking Amount: INR ${booking.total_amount}`,
+      booking.refund_reason ? `Cancellation Reason: ${booking.refund_reason}` : '',
       refundAmount > 0
         ? `Refund Amount Approved: INR ${refundAmount} (${refundPercentage || 100}% refund)`
         : `Refund: INR 0 (Per venue cancellation cutoff policy)`,
       refundAmount > 0
-        ? `Timeline: The refund will reflect in your original payment method within 5-7 business days.`
+        ? `Timeline: The refund will reflect in your original payment method within 5-7 business days. A separate refund receipt has also been dispatched.`
         : ``,
       `Venue Support: ${venue.contact_phone}`,
       `Team ${venue.name}`
@@ -431,12 +441,17 @@ export class EmailService {
     <!-- Body Content -->
     <tr>
       <td style="padding: 28px 24px;">
-        <p style="font-size: 15px; margin: 0 0 20px 0; color: #334155;">
+        <p style="font-size: 15px; margin: 0 0 20px 0; color: #334155; line-height: 1.5;">
           Hi <strong>${customer.name}</strong>,<br/>
-          Your reservation for <strong>${courtName}</strong> on <strong>${formatDateDDMMYYYY(booking.booking_date)} (${timeRangeStr})</strong> has been cancelled.
+          Your reservation for <strong>${courtName}</strong> on <strong>${formatDateDDMMYYYY(booking.booking_date)} (${timeRangeStr})</strong> has been cancelled${isCancelledByAdmin ? ' by <strong>venue management</strong>' : ''}.
         </p>
 
-        <!-- Refund Card -->
+        ${booking.refund_reason ? `
+        <div style="background: #fff1f2; border: 1px solid #fecdd3; border-radius: 10px; padding: 12px 16px; margin-bottom: 20px; font-size: 13px; color: #9f1239;">
+          <strong>Cancellation Reason / Ledger Note:</strong> ${booking.refund_reason}
+        </div>` : ''}
+
+        <!-- Refund Summary Card -->
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background: ${refundAmount > 0 ? '#f0fdf4' : '#fef2f2'}; border: 1px solid ${refundAmount > 0 ? '#86efac' : '#fecaca'}; border-radius: 12px; margin-bottom: 24px;">
           <tr>
             <td style="padding: 20px; text-align: center;">
@@ -449,11 +464,11 @@ export class EmailService {
               <div style="font-size: 13px; color: #475569; font-weight: 600;">
                 ${refundAmount > 0
                   ? `Refund of ₹${refundAmount} initiated back to your original payment method.`
-                  : 'Notice period was below the cutoff threshold; no refund is due per venue policy.'}
+                  : 'Notice period was below the cutoff threshold or zero refund applied per venue terms.'}
               </div>
               ${refundAmount > 0 ? `
               <div style="margin-top: 10px; font-size: 11px; color: #166534; background: #dcfce7; display: inline-block; padding: 4px 12px; border-radius: 999px; font-weight: 700;">
-                ⚡ Crediting in 5-7 business days via Razorpay
+                ⚡ Crediting in 5-7 business days via Razorpay (Separate refund confirmation email dispatched)
               </div>` : ''}
             </td>
           </tr>
@@ -512,6 +527,192 @@ export class EmailService {
           customerName: customer.name,
           bookingRef: booking.booking_ref,
           refundAmount,
+          status: res.success ? 'sent' : 'failed'
+        }
+      );
+    } catch {}
+
+    return res;
+  }
+
+  /**
+   * 2b. Send Dedicated Refund Confirmation Email
+   */
+  public static async sendRefundConfirmation(params: {
+    booking: Booking;
+    customer: Customer;
+    courtName: string;
+    venue: Venue;
+    refundAmount: number;
+    refundReason?: string;
+    refundMode?: string;
+    processedBy?: string;
+  }): Promise<EmailDispatchResult> {
+    const {
+      booking,
+      customer,
+      courtName,
+      venue,
+      refundAmount,
+      refundReason,
+      refundMode = 'Original Payment Method (Razorpay UPI / Cards)',
+      processedBy = 'Venue Management'
+    } = params;
+
+    const recipient = customer.email || (booking as any).customer_email || 'customer@example.com';
+    const timeRangeStr = formatTimeRange12h(booking.start_time, booking.end_time);
+    const subject = `💳 Refund Initiated: ₹${refundAmount.toLocaleString('en-IN')} for Booking ${booking.booking_ref} — ${venue.name}`;
+
+    const text = [
+      `TURFFLOW - PAYMENT REFUND RECEIPT`,
+      `Hi ${customer.name},`,
+      ``,
+      `A payment refund of INR ${refundAmount.toLocaleString('en-IN')} has been initiated for your booking at ${venue.name}.`,
+      ``,
+      `TRANSACTION BREAKDOWN:`,
+      `- Booking Reference: ${booking.booking_ref}`,
+      `- Pitch / Court: ${courtName}`,
+      `- Match Date & Slot: ${formatDateDDMMYYYY(booking.booking_date)} (${timeRangeStr})`,
+      `- Original Amount Paid: INR ${booking.total_amount.toLocaleString('en-IN')}`,
+      `- Refunded Amount: INR ${refundAmount.toLocaleString('en-IN')}`,
+      `- Refund Reason / Note: ${refundReason || 'Approved by venue administration'}`,
+      `- Payout Destination: ${refundMode}`,
+      `- Settlement Timeline: 5 to 7 business days to reflect in your bank/UPI statement.`,
+      ``,
+      `For any questions or ledger assistance, please call venue operations at ${venue.contact_phone}.`,
+      `Team ${venue.name}`
+    ].join('\n');
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${subject}</title>
+</head>
+<body style="margin: 0; padding: 24px; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #0f172a;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.06); border: 1px solid #e2e8f0;">
+    <!-- Emerald Header -->
+    <tr>
+      <td style="background: linear-gradient(135deg, #047857 0%, #065f46 100%); padding: 32px 24px; text-align: center; color: #ffffff;">
+        <div style="font-size: 12px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; color: #a7f3d0; margin-bottom: 6px;">TurfFlow &bull; Payment Refund Receipt</div>
+        <h1 style="margin: 0; font-size: 26px; font-weight: 900; letter-spacing: -0.5px;">Refund Initiated</h1>
+        <p style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.95; color: #ecfdf5;">Ref: <strong style="font-family: monospace; letter-spacing: 1px;">${booking.booking_ref}</strong></p>
+      </td>
+    </tr>
+
+    <!-- Body Content -->
+    <tr>
+      <td style="padding: 28px 24px;">
+        <p style="font-size: 15px; margin: 0 0 20px 0; color: #334155; line-height: 1.5;">
+          Hi <strong>${customer.name}</strong>,<br/>
+          A payment refund of <strong style="color: #047857;">₹${refundAmount.toLocaleString('en-IN')}</strong> has been approved and initiated for your reservation at <strong>${venue.name}</strong>.
+        </p>
+
+        <!-- Big Highlight Refund Amount Card -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background: #f0fdf4; border: 2px dashed #10b981; border-radius: 14px; margin-bottom: 24px;">
+          <tr>
+            <td style="padding: 24px 20px; text-align: center;">
+              <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; color: #065f46;">Approved Refund Amount</div>
+              <div style="font-size: 38px; font-weight: 900; color: #047857; margin: 8px 0; letter-spacing: -1px;">
+                ₹${refundAmount.toLocaleString('en-IN')}
+              </div>
+              <div style="display: inline-block; background: #dcfce7; border: 1px solid #86efac; color: #166534; font-size: 12px; font-weight: 700; padding: 4px 14px; border-radius: 999px;">
+                ⚡ Status: INITIATED &bull; Reversal in Progress
+              </div>
+              <div style="margin-top: 10px; font-size: 12px; color: #475569; font-weight: 500;">
+                Funds typically reflect in your bank account or UPI source within <strong>5–7 business days</strong>.
+              </div>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Refund Ledger Breakdown Table -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; margin-bottom: 24px; font-size: 13px;">
+          <tr style="background: #f8fafc;">
+            <td colspan="2" style="padding: 10px 16px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #475569; border-bottom: 1px solid #e2e8f0;">
+              Financial Settlement Details
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 16px; color: #64748b; border-bottom: 1px solid #f1f5f9; width: 45%;">Booking Reference</td>
+            <td style="padding: 10px 16px; font-weight: 700; font-family: monospace; color: #0f172a; border-bottom: 1px solid #f1f5f9;">${booking.booking_ref}</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 16px; color: #64748b; border-bottom: 1px solid #f1f5f9;">Pitch / Court</td>
+            <td style="padding: 10px 16px; font-weight: 600; color: #0f172a; border-bottom: 1px solid #f1f5f9;">${courtName}</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 16px; color: #64748b; border-bottom: 1px solid #f1f5f9;">Reserved Slot</td>
+            <td style="padding: 10px 16px; font-weight: 600; color: #0f172a; border-bottom: 1px solid #f1f5f9;">${formatDateDDMMYYYY(booking.booking_date)} (${timeRangeStr})</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 16px; color: #64748b; border-bottom: 1px solid #f1f5f9;">Original Booking Total</td>
+            <td style="padding: 10px 16px; font-weight: 700; color: #0f172a; border-bottom: 1px solid #f1f5f9;">₹${booking.total_amount.toLocaleString('en-IN')}</td>
+          </tr>
+          <tr style="background: #f0fdf4;">
+            <td style="padding: 12px 16px; font-weight: 800; color: #166534; border-bottom: 1px solid #dcfce7;">Refund Issued</td>
+            <td style="padding: 12px 16px; font-weight: 900; color: #047857; font-size: 15px; border-bottom: 1px solid #dcfce7;">₹${refundAmount.toLocaleString('en-IN')}</td>
+          </tr>
+          ${refundReason ? `
+          <tr>
+            <td style="padding: 10px 16px; color: #64748b; border-bottom: 1px solid #f1f5f9;">Ledger Reason</td>
+            <td style="padding: 10px 16px; font-weight: 600; color: #334155; font-style: italic; border-bottom: 1px solid #f1f5f9;">${refundReason}</td>
+          </tr>` : ''}
+          <tr>
+            <td style="padding: 10px 16px; color: #64748b; border-bottom: 1px solid #f1f5f9;">Payout Channel</td>
+            <td style="padding: 10px 16px; font-weight: 600; color: #334155; border-bottom: 1px solid #f1f5f9;">${refundMode}</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 16px; color: #64748b;">Processed By</td>
+            <td style="padding: 10px 16px; font-weight: 600; color: #334155;">${processedBy}</td>
+          </tr>
+        </table>
+
+        <!-- Security / Help Box -->
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; font-size: 12px; color: #64748b; line-height: 1.6;">
+          <p style="margin: 0 0 6px 0; font-weight: 700; color: #334155;">💡 When will I see the refund?</p>
+          <p style="margin: 0;">
+            Depending on your issuing bank or UPI application, funds will credit to your account within <strong>5 to 7 business days</strong>. If you do not see the credit by then, please contact our support desk at <strong>${venue.contact_phone}</strong> quoting reference <strong>${booking.booking_ref}</strong>.
+          </p>
+        </div>
+      </td>
+    </tr>
+
+    <!-- Footer -->
+    <tr>
+      <td style="background: #f8fafc; padding: 20px 24px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8;">
+        <p style="margin: 0 0 4px 0;"><strong>${venue.name}</strong> &bull; ${venue.address}</p>
+        <p style="margin: 0;">Helpline: ${venue.contact_phone} &bull; Powered by Razorpay Payment Gateway</p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `;
+
+    const res = await this.sendEmail({
+      to: recipient,
+      subject,
+      html,
+      text,
+      from: venue.email_sender || this.DEFAULT_SENDER
+    });
+
+    try {
+      AuditLogger.log(
+        'SYSTEM',
+        'SEND_EMAIL_REFUND_CONFIRMATION',
+        'Booking',
+        booking.booking_ref || booking.id,
+        null,
+        {
+          recipient,
+          customerName: customer.name,
+          bookingRef: booking.booking_ref,
+          refundAmount,
+          refundReason,
           status: res.success ? 'sent' : 'failed'
         }
       );

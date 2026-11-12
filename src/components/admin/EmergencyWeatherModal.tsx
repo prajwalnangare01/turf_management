@@ -112,11 +112,6 @@ export const EmergencyWeatherModal: React.FC<EmergencyWeatherModalProps> = ({
       if (res.success) {
         cancelledCount++;
         refundedSum += booking.total_amount;
-        // Release Redis lock
-        RedisLockService.releaseLocksForBooking(booking.court_id, booking.booking_date, booking.start_time, booking.end_time);
-
-        // Dispatch customer notification (WhatsApp / Email / SMS)
-        NotificationService.enqueueNotification(booking, 'cancellation');
       }
     }
 

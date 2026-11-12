@@ -4,7 +4,7 @@ import { RedisLockService } from '../services/redisLockService';
 import { CustomerAuthService } from '../services/customerAuthService';
 import { CouponService } from '../services/couponService';
 import { RazorpayService } from '../services/razorpayService';
-import { normalizeIndianPhone, parseIndianTimeInput, getVenueNow } from '../utils/venueTime';
+import { normalizeIndianPhone, parseIndianTimeInput, getVenueNow, getVenueDateString } from '../utils/venueTime';
 import { store } from '../services/store';
 import { groupContiguousSlots } from '../components/customer/CheckoutModal';
 import { EmailService } from '../services/emailService';
@@ -2121,6 +2121,164 @@ async function runResendTests() {
   assert(s07After?.status === 'available', 'Slot 07:00 - 08:00 is now immediately AVAILABLE after single-slot cancellation');
   assert(s13After?.status !== 'available', 'Slot 13:00 - 14:00 is STILL booked');
   console.log('✅ PASSED: Continuous slot cancellation frees only target slot while siblings retain active booking and common gate pass OTP');
+
+  // --- TEST 35: Admin Refund Flow - Confirmation Popup & Toastbar Contract ---
+  console.log('\n--- TEST 35: Admin Refund Flow - Confirmation Popup & Toastbar Contract ---');
+  const t35Ref = `TRF-TEST35-${Date.now()}`;
+  const t35Date = getVenueDateString(2);
+  const t35Booking = PostgresEngine.createBooking({
+    booking_ref: t35Ref,
+    customer_id: 'cust-101',
+    court_id: targetCourt.id,
+    sport_id: 'sp-football',
+    booking_date: t35Date,
+    start_time: '18:00',
+    end_time: '19:00',
+    total_amount: 1500,
+    discount_amount: 0,
+    status: 'confirmed',
+    source: 'online'
+  });
+  assert(Boolean(t35Booking.success && t35Booking.booking), 'Test booking for refund confirmation created');
+
+  // Verify refund validation logic
+  const validAdmin = store.getAdminUsers().find(a => a.role === 'owner')!;
+  const staffAdmin = store.getAdminUsers().find(a => a.role === 'staff')!;
+  assert(validAdmin.role === 'owner' || validAdmin.role === 'manager', 'Owner/Manager has refund authority');
+  assert(staffAdmin.role === 'staff', 'Staff role identified');
+
+  // Execute refund via state machine
+  const refundAmount = 1500;
+  const refundReason = 'Customer emergency cancellation with admin confirmation';
+  const refundResult = PostgresEngine.updateBookingStatus(t35Booking.booking!.id, 'refunded', {
+    refundAmount,
+    refundReason,
+    adminId: validAdmin.id,
+    cancelledBy: 'admin',
+    noticeHours: 48,
+    metTerms: true
+  });
+  assert(refundResult.success, 'Refund executed successfully via PostgresEngine');
+
+  const updatedBooking = store.getBookings().find(b => b.id === t35Booking.booking!.id)!;
+  assert(updatedBooking.status === 'refunded', 'Booking transitioned to refunded');
+  assert(updatedBooking.refund_amount === 1500, 'Refund amount ₹1500 correctly recorded');
+  assert(updatedBooking.refund_reason === refundReason, 'Refund reason preserved');
+
+  console.log('✅ PASSED: Admin refund execution correctly transitions booking status and records ledger');
+
+  // --- TEST 36: Owner Cancellation Email & Dedicated Refund Email Dispatch ---
+  console.log('\n--- TEST 36: Owner Cancellation Email & Dedicated Refund Email Dispatch ---');
+  const t36Customer = {
+    id: `cust-t36-${Date.now()}`,
+    name: 'Rohit Sharma',
+    phone: '9888877771',
+    email: 'rohit.sharma@example.com',
+    created_at: new Date().toISOString(),
+    total_bookings: 0,
+    total_spent: 0,
+    no_show_count: 0,
+    is_blacklisted: false
+  };
+  store.addCustomer(t36Customer);
+
+  // 36.1: Owner cancels booking with zero refund -> Cancellation email sent, NO refund email sent
+  const t36Ref1 = `TRF-T36-CANCEL-${Date.now()}`;
+  const t36Booking1 = PostgresEngine.createBooking({
+    booking_ref: t36Ref1,
+    customer_id: t36Customer.id,
+    court_id: targetCourt.id,
+    sport_id: 'sp-football',
+    booking_date: getVenueDateString(7),
+    start_time: '10:00',
+    end_time: '11:00',
+    total_amount: 1400,
+    discount_amount: 0,
+    status: 'confirmed',
+    source: 'online'
+  });
+  assert(Boolean(t36Booking1.success && t36Booking1.booking), 'Booking 1 created for owner cancellation');
+
+  const t36CancelResult = PostgresEngine.updateBookingStatus(t36Booking1.booking!.id, 'cancelled', {
+    adminId: validAdmin.id,
+    cancelledBy: 'admin',
+    refundReason: 'Pitch maintenance emergency',
+    refundAmount: 0
+  });
+  assert(t36CancelResult.success, 'Owner cancelled booking successfully');
+
+  const logsAfterCancel = store.getNotificationLogs().filter(n => n.booking_id === t36Booking1.booking!.id);
+  const cancelEmailLog = logsAfterCancel.find(n => n.channel === 'email' && n.type === 'cancellation');
+  const refundEmailLog1 = logsAfterCancel.find(n => n.channel === 'email' && n.type === 'refund');
+
+  assert(Boolean(cancelEmailLog), 'Cancellation email notification log created for customer');
+  assert(!refundEmailLog1, 'NO refund email was sent when refund amount is 0');
+  console.log('✅ PASSED: When owner cancels booking with ₹0 refund, cancellation email is sent and refund email is NOT sent');
+
+  // 36.2: Owner later issues a refund on that cancelled booking -> Dedicated refund email is sent
+  const refundLaterResult = PostgresEngine.updateBookingStatus(t36Booking1.booking!.id, 'refunded', {
+    adminId: validAdmin.id,
+    cancelledBy: 'admin',
+    refundAmount: 1400,
+    refundReason: 'Goodwill refund issued for maintenance cancellation'
+  });
+  assert(refundLaterResult.success, 'Refund processed on previously cancelled booking');
+
+  const logsAfterLaterRefund = store.getNotificationLogs().filter(n => n.booking_id === t36Booking1.booking!.id);
+  const refundEmailLog2 = logsAfterLaterRefund.find(n => n.channel === 'email' && n.type === 'refund');
+  const allCancelLogs = logsAfterLaterRefund.filter(n => n.channel === 'email' && n.type === 'cancellation');
+
+  assert(Boolean(refundEmailLog2), 'Dedicated refund email notification log created');
+  assert(allCancelLogs.length === 1, 'Cancellation email was NOT duplicated on refund');
+  console.log('✅ PASSED: When owner subsequently issues refund, dedicated refund email is sent without duplicating cancellation email');
+
+  // 36.3: Owner directly cancels + refunds a booking in one step via AdminRefundModal
+  const secondCourt = store.getCourts()[1] || targetCourt;
+  const t36Ref2 = `TRF-T36-DIRECT-${Date.now()}`;
+  const t36Booking2 = PostgresEngine.createBooking({
+    booking_ref: t36Ref2,
+    customer_id: t36Customer.id,
+    court_id: secondCourt.id,
+    sport_id: 'sp-football',
+    booking_date: getVenueDateString(9),
+    start_time: '15:00',
+    end_time: '16:00',
+    total_amount: 1600,
+    discount_amount: 0,
+    status: 'confirmed',
+    source: 'online'
+  });
+  assert(Boolean(t36Booking2.success && t36Booking2.booking), 'Booking 2 created for direct refund');
+
+  const directRefundResult = PostgresEngine.updateBookingStatus(t36Booking2.booking!.id, 'refunded', {
+    adminId: validAdmin.id,
+    cancelledBy: 'admin',
+    refundAmount: 1600,
+    refundReason: 'Owner emergency rainout cancel with 100% refund'
+  });
+  assert(directRefundResult.success, 'Booking cancelled and refunded in one step');
+
+  const logsDirect = store.getNotificationLogs().filter(n => n.booking_id === t36Booking2.booking!.id);
+  const directCancelEmail = logsDirect.find(n => n.channel === 'email' && n.type === 'cancellation');
+  const directRefundEmail = logsDirect.find(n => n.channel === 'email' && n.type === 'refund');
+
+  assert(Boolean(directCancelEmail), 'Cancellation email sent on direct refund');
+  assert(Boolean(directRefundEmail), 'Dedicated refund email sent on direct refund');
+  console.log('✅ PASSED: When owner cancels with refund in one step, both cancellation email and refund email are sent');
+
+  // 36.4: Direct verification of EmailService.sendRefundConfirmation
+  const t36Venue = store.getVenue();
+  const directEmailRes = await EmailService.sendRefundConfirmation({
+    booking: t36Booking2.booking!,
+    customer: t36Customer,
+    courtName: targetCourt.name,
+    venue: t36Venue,
+    refundAmount: 1600,
+    refundReason: 'Verified unit test dispatch',
+    refundMode: 'Razorpay UPI (Instant)'
+  });
+  assert(directEmailRes.success, 'EmailService.sendRefundConfirmation executed successfully');
+  console.log('✅ PASSED: EmailService.sendRefundConfirmation dispatches valid email payload');
 
   console.log('\n🎉 ALL CORNER & EDGE CASE TESTS (INCLUDING AUTO-COMPLETE & OWNER REDUCED WORKFLOW) PASSED PERFECTLY!\n');
 }

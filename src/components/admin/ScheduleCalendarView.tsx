@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { store } from '../../services/store';
 import { PostgresEngine } from '../../services/postgresEngine';
 import { AuditLogger } from '../../services/auditLogger';
@@ -13,6 +13,7 @@ import { AdminRefundModal } from './AdminRefundModal';
 import { EmergencyWeatherModal } from './EmergencyWeatherModal';
 import { ActiveCustomerHoldModal } from '../common/ActiveCustomerHoldModal';
 import { ConfirmModal } from '../common/ConfirmModal';
+import { Toast } from '../common/Toast';
 import { CalendarTableSkeleton } from '../common/SkeletonLoaders';
 import { Calendar, ChevronLeft, ChevronRight, Plus, XCircle, CheckCircle, Lock, KeyRound, RotateCcw, CloudRain, ShieldAlert, Unlock, Wrench, Clock, AlertTriangle, Sun, Moon, X } from 'lucide-react';
 
@@ -59,6 +60,23 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
   });
 
   const closeConfirm = () => setConfirmState(prev => ({ ...prev, isOpen: false }));
+
+  // Toastbar State for Actions (e.g. Refund Success)
+  const [toastState, setToastState] = useState<{
+    isOpen: boolean;
+    type: 'success' | 'error' | 'warning' | 'info';
+    title: string;
+    message: string;
+  }>({
+    isOpen: false,
+    type: 'success',
+    title: '',
+    message: ''
+  });
+
+  const handleCloseToast = useCallback(() => {
+    setToastState(prev => ({ ...prev, isOpen: false }));
+  }, []);
 
   // Re-render when store updates via Supabase Realtime (e.g. WhatsApp hold/booking)
   const [, setStoreVersion] = useState(0);
@@ -250,7 +268,12 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
       cancelText: 'Keep Booking',
       variant: isCancel ? 'danger' : 'success',
       onConfirm: () => {
-        const res = PostgresEngine.updateBookingStatus(b.id, targetStatus);
+        const res = PostgresEngine.updateBookingStatus(b.id, targetStatus, {
+          adminId: currentAdmin.id,
+          cancelledBy: 'admin',
+          refundReason: isCancel ? 'Cancelled by venue management from Schedule Calendar' : undefined,
+          refundAmount: 0
+        });
         if (res.success) {
           AuditLogger.log(currentAdmin.id, `UPDATE_BOOKING_STATUS_${targetStatus.toUpperCase()}`, 'Booking', b.id);
           closeConfirm();
@@ -809,7 +832,18 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
         booking={refundBooking}
         currentAdmin={currentAdmin}
         onClose={() => setRefundBooking(null)}
-        onSuccess={() => setRefundBooking(null)}
+        onSuccess={(data) => {
+          setRefundBooking(null);
+          setStoreVersion(v => v + 1);
+          if (data?.message) {
+            setToastState({
+              isOpen: true,
+              type: 'success',
+              title: data.refundAmount > 0 ? 'Refund Successfully Processed' : 'Booking Cancelled (Zero Refund)',
+              message: data.message
+            });
+          }
+        }}
       />
 
       {/* CC-D02: Emergency Weather Rainout Modal */}
@@ -1027,6 +1061,15 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
         variant={confirmState.variant}
         onConfirm={confirmState.onConfirm}
         onCancel={closeConfirm}
+      />
+
+      {/* Success Toastbar Notification */}
+      <Toast
+        isOpen={toastState.isOpen}
+        type={toastState.type}
+        title={toastState.title}
+        message={toastState.message}
+        onClose={handleCloseToast}
       />
 
     </div>

@@ -288,7 +288,16 @@ export class PostgresEngine {
     // If booking cancelled or refunded, release any corresponding Redis locks & trigger notification
     if (newStatus === 'cancelled' || newStatus === 'refunded') {
       RedisLockService.releaseLocksForBooking(booking.court_id, booking.booking_date, booking.start_time, booking.end_time);
-      NotificationService.enqueueNotification(booking, 'cancellation');
+
+      // 1. Dispatch cancellation notification/email if transitioning from active state
+      if (oldStatus !== 'cancelled' && oldStatus !== 'refunded') {
+        NotificationService.enqueueNotification(booking, 'cancellation');
+      }
+
+      // 2. Dispatch dedicated refund notification/email if refund amount was approved
+      if (booking.refund_amount && booking.refund_amount > 0) {
+        NotificationService.enqueueNotification(booking, 'refund');
+      }
     }
 
     // Persist booking update to Supabase PostgreSQL immediately
