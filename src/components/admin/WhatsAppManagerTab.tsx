@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  MessageSquare, Bot, CheckCircle2, ShieldCheck, Zap, 
+  MessageSquare, Bot, CheckCircle2, Zap, 
   ExternalLink, Phone, Send, RotateCw, Sparkles, AlertCircle, 
   Ticket, Copy, Check, Users, ArrowRight, QrCode, Key, LogOut,
   Sun, Moon
@@ -21,8 +21,6 @@ interface Props {
 }
 
 export const WhatsAppManagerTab: React.FC<Props> = ({ currentAdmin }) => {
-  const [copiedWebhook, setCopiedWebhook] = useState(false);
-  const [copiedToken, setCopiedToken] = useState(false);
   const [copiedPairingCode, setCopiedPairingCode] = useState(false);
   const [simulatedPhone, setSimulatedPhone] = useState('+919876543210');
   const [chatInput, setChatInput] = useState('');
@@ -70,8 +68,6 @@ export const WhatsAppManagerTab: React.FC<Props> = ({ currentAdmin }) => {
   const venue = store.getVenue();
   const courts = store.getCourts();
   const getCourtName = (courtId: string) => courts.find(c => c.id === courtId)?.name || courtId;
-  const webhookUrl = `${window.location.origin}/api/webhooks/whatsapp`;
-  const verifyToken = 'turfflow_secret_token_123';
   const targetPhoneNumber = '9579158374';
   const rawActivePhone = (waClientStatus.linkedPhone || waClientStatus.targetPhone || targetPhoneNumber).replace(/\D/g, '');
   const activeTenDigitPhone = rawActivePhone.length >= 10 ? rawActivePhone.slice(-10) : rawActivePhone;
@@ -118,19 +114,10 @@ export const WhatsAppManagerTab: React.FC<Props> = ({ currentAdmin }) => {
     const interval = setInterval(refreshData, 3000);
     return () => clearInterval(interval);
   }, []);
-
-  const handleCopy = (text: string, type: 'webhook' | 'token' | 'pairing') => {
+  const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
-    if (type === 'webhook') {
-      setCopiedWebhook(true);
-      setTimeout(() => setCopiedWebhook(false), 2000);
-    } else if (type === 'token') {
-      setCopiedToken(true);
-      setTimeout(() => setCopiedToken(false), 2000);
-    } else {
-      setCopiedPairingCode(true);
-      setTimeout(() => setCopiedPairingCode(false), 2000);
-    }
+    setCopiedPairingCode(true);
+    setTimeout(() => setCopiedPairingCode(false), 2000);
   };
 
   const handleRequestPairingCode = async () => {
@@ -431,7 +418,7 @@ export const WhatsAppManagerTab: React.FC<Props> = ({ currentAdmin }) => {
                     {waClientStatus.pairingCode || 'Generating...'}
                   </div>
                   <button
-                    onClick={() => handleCopy(waClientStatus.pairingCode || '', 'pairing')}
+                    onClick={() => handleCopy(waClientStatus.pairingCode || '')}
                     disabled={!waClientStatus.pairingCode}
                     className="mt-2 text-xs bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold px-3 py-1 rounded-md border border-slate-600 inline-flex items-center gap-1.5 transition disabled:opacity-50"
                   >
@@ -575,7 +562,7 @@ export const WhatsAppManagerTab: React.FC<Props> = ({ currentAdmin }) => {
 
         </div>
 
-        {/* RIGHT: WhatsApp Bookings Ledger & Cloud Webhook Fallback (7 cols) */}
+        {/* RIGHT: WhatsApp Bookings Ledger (7 cols) */}
         <div className="lg:col-span-7 space-y-6">
 
           {/* Bookings Originating from WhatsApp */}
@@ -665,54 +652,6 @@ export const WhatsAppManagerTab: React.FC<Props> = ({ currentAdmin }) => {
               </table>
             </div>
           </div>
-
-          {/* Meta WhatsApp Cloud API & Webhook Connectivity Card */}
-          <div className="bg-white rounded-2xl p-5 border border-outline-variant/60 shadow-sm space-y-4">
-            <div>
-              <h3 className="text-sm font-headline font-bold text-on-surface flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-primary" />
-                Meta WhatsApp Cloud API Webhook (Alternative)
-              </h3>
-              <p className="text-[11px] text-on-surface-variant">
-                If using official Meta Cloud API or n8n instead of Direct Phone Linking
-              </p>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="text-[11px] font-headline font-bold text-on-surface-variant uppercase tracking-wider block mb-1">
-                  Webhook Callback URL
-                </label>
-                <div className="flex items-center gap-2 bg-surface-container-low p-2 rounded-xl border border-outline-variant/40 font-mono text-[11px]">
-                  <span className="flex-1 truncate text-on-surface">{webhookUrl}</span>
-                  <button
-                    onClick={() => handleCopy(webhookUrl, 'webhook')}
-                    className="p-1 text-on-surface-variant hover:text-primary transition shrink-0"
-                    title="Copy URL"
-                  >
-                    {copiedWebhook ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-[11px] font-headline font-bold text-on-surface-variant uppercase tracking-wider block mb-1">
-                  Webhook Verification Token
-                </label>
-                <div className="flex items-center gap-2 bg-surface-container-low p-2 rounded-xl border border-outline-variant/40 font-mono text-[11px]">
-                  <span className="flex-1 text-on-surface">{verifyToken}</span>
-                  <button
-                    onClick={() => handleCopy(verifyToken, 'token')}
-                    className="p-1 text-on-surface-variant hover:text-primary transition shrink-0"
-                    title="Copy Token"
-                  >
-                    {copiedToken ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
         </div>
 
       </div>
