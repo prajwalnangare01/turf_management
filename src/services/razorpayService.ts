@@ -16,6 +16,53 @@ export interface RazorpayOrder {
 
 export class RazorpayService {
   /**
+   * Create Razorpay payment order via backend Orders API
+   */
+  public static async createOrderAsync(bookingRef: string, amount: number): Promise<RazorpayOrder> {
+    try {
+      const res = await fetch('/api/payments/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingRef, amount })
+      });
+      const data = await res.json();
+      if (res.ok && data.order_id) {
+        return {
+          order_id: data.order_id,
+          booking_id: bookingRef,
+          amount,
+          currency: 'INR',
+          status: 'created'
+        };
+      }
+    } catch (err) {
+      console.warn('Backend Razorpay order creation failed, using client order:', err);
+    }
+    return this.createOrder(bookingRef, amount);
+  }
+
+  /**
+   * Verify Razorpay Payment Signature server-side before confirming booking
+   */
+  public static async verifyPaymentAsync(params: {
+    bookingRef: string;
+    razorpay_order_id: string;
+    razorpay_payment_id: string;
+    razorpay_signature: string;
+  }): Promise<{ success: boolean; message?: string; error?: string }> {
+    try {
+      const res = await fetch('/api/payments/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params)
+      });
+      const data = await res.json();
+      return data;
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Payment verification endpoint unreachable.' };
+    }
+  }
+  /**
    * Create Razorpay payment order for booking
    */
   public static createOrder(bookingId: string, amount: number): RazorpayOrder {

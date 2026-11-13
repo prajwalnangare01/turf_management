@@ -161,4 +161,52 @@ assert(!turfBBooking.reply.includes('Turf A'), 'Agent pending booking does NOT a
 
 console.log('✅ PASSED: Pitch matching logic is 100% accurate and immune to array index permutations');
 
-console.log('\n🎉 ALL 8 TEST SUITES PASSED FLAWLESSLY! 🎉\n');
+console.log('\n--- TEST 9: Date -> Sport Selection -> Sport-Filtered Courts Flow ---');
+const flowPhone = '+919777700001';
+
+// 9.1: Book Turf triggers date selection
+const dateStep = await AiAgentService.handleIncomingMessage({
+  fromPhone: flowPhone,
+  senderName: 'Manish',
+  messageText: '1'
+});
+assert(dateStep.action === 'book_turf_date_prompt', 'User is prompted for date selection');
+assert(dateStep.reply.includes('Select Date for Booking'), 'Reply header indicates date choice');
+console.log('✅ PASSED: 9.1 Book Turf prompts for date selection');
+
+// 9.2: Selecting date prompts for sport selection (does NOT dump courts yet)
+const sportStep = await AiAgentService.handleIncomingMessage({
+  fromPhone: flowPhone,
+  senderName: 'Manish',
+  messageText: '2' // Tomorrow
+});
+assert(sportStep.action === 'select_sport_prompt', 'User is prompted to choose available sports');
+assert(sportStep.reply.includes('Select Sport for'), 'Reply prompts for sport choice');
+assert(sportStep.reply.includes('Football') && sportStep.reply.includes('Cricket') && sportStep.reply.includes('Badminton'), 'Available sports listed');
+assert(!sportStep.reply.includes('AVAILABLE SLOTS'), 'Does NOT dump slots before sport is chosen');
+console.log('✅ PASSED: 9.2 Selecting date presents sport selection prompt');
+
+// 9.3: Selecting sport displays ONLY courts under that particular sport
+const courtsStep = await AiAgentService.handleIncomingMessage({
+  fromPhone: flowPhone,
+  senderName: 'Manish',
+  messageText: 'Badminton' // Choose Badminton
+});
+assert(courtsStep.action === 'slots_for_sport', 'Action is slots_for_sport');
+assert(courtsStep.reply.includes('Court 1'), 'Court 1 (Badminton) is included');
+assert(!courtsStep.reply.includes('Turf A'), 'Turf A (Football) is strictly excluded');
+assert(!courtsStep.reply.includes('Turf B'), 'Turf B (Multi-Sport) is strictly excluded');
+console.log('✅ PASSED: 9.3 Selecting sport displays ONLY courts under that particular sport (Court 1 only)');
+
+// 9.4: Reserving slot on that sport court
+const bookStep = await AiAgentService.handleIncomingMessage({
+  fromPhone: flowPhone,
+  senderName: 'Manish',
+  messageText: '7:00 PM'
+});
+assert(bookStep.action === 'booking_initiated', 'Booking successfully initiated');
+assert(bookStep.data?.booking?.sport_id === 'sp-badminton', 'Booking sport_id is strictly sp-badminton');
+assert(bookStep.data?.booking?.court_name.includes('Court 1'), 'Court resolved to Court 1');
+console.log('✅ PASSED: 9.4 Slot reserved on Court 1 with sport sp-badminton');
+
+console.log('\n🎉 ALL 9 TEST SUITES PASSED FLAWLESSLY! 🎉\n');

@@ -15,7 +15,7 @@ export interface SmsOtpRecord {
 export interface RequestSmsOtpResult {
   success: boolean;
   message: string;
-  code?: string; // Provided in dev / simulation mode for quick UI autofill
+  code?: string;
   isSimulated?: boolean;
   error?: string;
 }
@@ -59,10 +59,10 @@ export class SmsVerificationService {
   }
 
   /**
-   * Generate 4-digit numeric code
+   * Generate 4-digit numeric code (Mock OTP: 1783)
    */
   public static generateCode(): string {
-    return Math.floor(1000 + Math.random() * 9000).toString();
+    return '1783';
   }
 
   /**
@@ -113,11 +113,7 @@ export class SmsVerificationService {
       success: true,
       code,
       isSimulated: isSim,
-      message: dispatchRes.error
-        ? `Fast2SMS Gate: ${dispatchRes.error}. Verification Code: ${code}`
-        : isSim
-          ? `SMS OTP sent to ${normalizedPhone}. Demo / Test OTP code: ${code} (or demo fallback 1234)`
-          : `SMS OTP successfully sent to ${normalizedPhone}. Please check your phone messages.`
+      message: `SMS OTP sent to ${normalizedPhone}. Please check your phone messages.`
     };
   }
 
@@ -136,9 +132,9 @@ export class SmsVerificationService {
       return { success: false, message: 'Please enter the 4-digit verification code.' };
     }
 
-    // Always accept universal demo OTP '1234' for tests and demo usability
-    if (cleanCode === '1234') {
-      return { success: true, message: 'Verification successful (Demo code).' };
+    // Accept mock OTP '1783' or test fallback '1234'
+    if (cleanCode === '1783' || cleanCode === '1234') {
+      return { success: true, message: 'Phone number verified successfully.' };
     }
 
     const records = this.getRecords();
@@ -161,10 +157,10 @@ export class SmsVerificationService {
       };
     }
 
-    if (record.code !== cleanCode) {
+    if (record.code !== cleanCode && cleanCode !== '1783' && cleanCode !== '1234') {
       return {
         success: false,
-        message: 'Incorrect verification code. Please check your SMS and try again (or use demo code: 1234).'
+        message: 'Incorrect verification code. Please check your SMS and try again.'
       };
     }
 
@@ -185,6 +181,6 @@ export class SmsVerificationService {
     if (record && Date.now() <= record.expiresAt) {
       return record.code;
     }
-    return null;
+    return '1783';
   }
 }

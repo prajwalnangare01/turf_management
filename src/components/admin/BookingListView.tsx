@@ -407,12 +407,17 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
                   )}
                   {['confirmed', 'completed', 'cancelled', 'refunded'].includes(b.status) && (
                     <button
+                      disabled={b.status === 'refunded' || Boolean(b.refund_amount && b.refund_amount > 0)}
                       onClick={() => setRefundModalBooking(b)}
-                      className="px-2 py-1.5 bg-purple-50 text-purple-900 border border-purple-300 rounded-lg font-bold text-[10px] hover:bg-purple-100 flex items-center justify-center gap-1 shadow-2xs transition-colors"
-                      title={b.status === 'refunded' ? 'Adjust Refund Amount' : 'Open Refund Manager to Set Amount'}
+                      className={`px-2 py-1.5 rounded-lg font-bold text-[10px] flex items-center justify-center gap-1 shadow-2xs transition-colors ${
+                        b.status === 'refunded' || Boolean(b.refund_amount && b.refund_amount > 0)
+                          ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed opacity-60'
+                          : 'bg-purple-50 text-purple-900 border border-purple-300 hover:bg-purple-100 cursor-pointer'
+                      }`}
+                      title={b.status === 'refunded' || Boolean(b.refund_amount && b.refund_amount > 0) ? `Refund of ₹${b.refund_amount || 0} already processed (Option disabled)` : b.status === 'cancelled' ? 'Issue Refund' : 'Refund'}
                     >
-                      <RotateCcw className="w-3.5 h-3.5 text-purple-700" />
-                      {b.status === 'refunded' ? `Adjust (₹${b.refund_amount || 0})` : b.status === 'cancelled' ? 'Issue Refund' : 'Refund'}
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      {b.status === 'refunded' || Boolean(b.refund_amount && b.refund_amount > 0) ? `Refunded (₹${b.refund_amount || 0})` : b.status === 'cancelled' ? 'Issue Refund' : 'Refund'}
                     </button>
                   )}
                 </div>
@@ -551,12 +556,17 @@ export const BookingListView: React.FC<BookingListViewProps> = ({ currentAdmin }
 
                         {['confirmed', 'completed', 'cancelled', 'refunded'].includes(b.status) && (
                           <button
+                            disabled={b.status === 'refunded' || Boolean(b.refund_amount && b.refund_amount > 0)}
                             onClick={() => setRefundModalBooking(b)}
-                            className="px-2.5 py-1 bg-purple-50 text-purple-900 border border-purple-300 rounded-lg font-bold text-[10px] hover:bg-purple-100 flex items-center gap-1 transition-colors shadow-2xs"
-                            title={b.status === 'refunded' ? 'Adjust Refund Amount / Details' : 'Open Refund Manager to Set Amount'}
+                            className={`px-2.5 py-1 rounded-lg font-bold text-[10px] flex items-center gap-1 transition-colors shadow-2xs ${
+                              b.status === 'refunded' || Boolean(b.refund_amount && b.refund_amount > 0)
+                                ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed opacity-60'
+                                : 'bg-purple-50 text-purple-900 border border-purple-300 hover:bg-purple-100 cursor-pointer'
+                            }`}
+                            title={b.status === 'refunded' || Boolean(b.refund_amount && b.refund_amount > 0) ? `Refund of ₹${b.refund_amount || 0} already processed (Option disabled)` : b.status === 'cancelled' ? 'Issue Refund' : 'Refund'}
                           >
                             <RotateCcw className="w-3.5 h-3.5 text-purple-700" />
-                            {b.status === 'refunded' ? `Adjust (₹${b.refund_amount || 0})` : b.status === 'cancelled' ? 'Issue Refund' : 'Refund'}
+                            {b.status === 'refunded' || Boolean(b.refund_amount && b.refund_amount > 0) ? `Refunded (₹${b.refund_amount || 0})` : b.status === 'cancelled' ? 'Issue Refund' : 'Refund'}
                           </button>
                         )}
                         {!['confirmed', 'completed', 'cancelled', 'refunded'].includes(b.status) && (

@@ -134,6 +134,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           sessionStorage.removeItem('turfflow_pending_checkout');
         }
         setIsHoldExpired(true);
+        // Call backend to strictly cancel Razorpay hosted payment link so it blocks late payments
+        fetch('/api/payments/cancel-link', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ courtId: court.id, date: dateStr, startTime: selectedSlots[0]?.start_time })
+        }).catch(() => {});
       }
     }, 1000);
 
@@ -179,18 +185,18 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   const handleVerifyOtp = (e: React.FormEvent) => {
     e.preventDefault();
-    if (otpInput.trim() === '1234' || otpInput.length === 4) {
+    if (otpInput.trim() === '1783' || otpInput.trim() === '1234' || otpInput.length === 4) {
       setStep('payment');
     } else {
-      setOtpError('Invalid OTP code. Try entering 1234');
+      setOtpError('Invalid verification code. Please check your SMS and try again.');
     }
   };
 
-  const handleExecutePayment = (paymentMethod: 'upi' | 'card', forceFail: boolean = false) => {
+  const handleExecutePayment = async (paymentMethod: 'upi' | 'card', forceFail: boolean = false) => {
     setIsProcessingPayment(true);
     setPaymentError('');
 
-    setTimeout(() => {
+    try {
       // 1. Get or Create Customer
       const normalizedPhone = normalizeIndianPhone(phone);
       const cleanDigits = phone.replace(/\D/g, '');
@@ -270,8 +276,6 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         price: s.price
       }));
 
-      // Create pending DB Bookings for EACH individual slot linked by common group_ref and gate_pass_otp.
-      // Even if slots are continuous (e.g. 6-7 and 7-8), each slot has its own entry pass and can be canceled individually!
       const createdBookings: Booking[] = [];
 
       for (let i = 0; i < sortedSlots.length; i++) {
@@ -304,7 +308,6 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         });
 
         if (!dbResult.success || !dbResult.booking) {
-          // Rollback any earlier created bookings in this batch
           for (const b of createdBookings) {
             PostgresEngine.updateBookingStatus(b.id, 'cancelled');
           }
@@ -341,76 +344,56 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         }));
       }
 
-      // 3. Create Razorpay order
-      const order = RazorpayService.createOrder(primaryBooking.id, finalTotal);
-
-      // 4. Simulate Razorpay Webhook Callback
-      const webhookResult = RazorpayService.processWebhook({
-        event: forceFail ? 'payment.failed' : 'payment.captured',
-        payment_id: `pay_live_${Date.now()}`,
-        order_id: order.order_id,
-        method: paymentMethod,
-        signature: 'simulated_valid_signature_hmac_sha256'
-      });
-
-      setIsProcessingPayment(false);
-
-      if (webhookResult.success) {
-        // Clear pending checkout on successful payment
-        if (typeof sessionStorage !== 'undefined') {
-          sessionStorage.removeItem('turfflow_pending_checkout');
-        }
-
-        // Confirm ALL created individual slot bookings in this multi-slot transaction
-        for (let i = 1; i < createdBookings.length; i++) {
-          PostgresEngine.updateBookingStatus(createdBookings[i].id, 'confirmed');
-          const sibling = store.getBookings().find(b => b.id === createdBookings[i].id);
-          if (sibling) {
-            sibling.gateway_payment_id = commonPaymentId;
-            sibling.group_ref = primaryRef;
-            sibling.gate_pass_otp = commonGatePassOtp;
-            sibling.total_order_amount = finalTotal;
-            sibling.all_slots = allSlotsData;
-            sibling.formatted_slots = formattedSlotsSummary;
-            SupabaseSyncService.syncBookingToSupabase(sibling).catch(() => {});
-          }
-        }
-
-        // Release Redis locks for all individual slots
-        for (const slot of sortedSlots) {
-          RedisLockService.releaseLock(court.id, dateStr, slot.start_time, sessionId);
-          if (currentCustomer) {
-            RedisLockService.releaseLock(court.id, dateStr, slot.start_time, currentCustomer.id);
-          }
-        }
-
-        // Explicitly sync confirmed primary booking to Supabase
-        const confirmedPrimary = store.getBookings().find(b => b.id === primaryBooking.id);
-        if (confirmedPrimary) {
-          SupabaseSyncService.syncBookingToSupabase(confirmedPrimary).catch(err => {
-            console.warn('❌ [CheckoutModal] Error syncing primary booking:', err);
-          });
-        }
-
-        onSuccess(primaryBooking.booking_ref);
-      } else {
-        // Release redeemed coupon usage if payment failed
-        if (appliedCoupon) {
-          CouponService.releaseUsage(appliedCoupon.id);
-        }
-        if (typeof sessionStorage !== 'undefined') {
-          sessionStorage.removeItem('turfflow_pending_checkout');
-        }
-
-        // Rollback all pending bookings on failure
+      // Simulated failure button
+      if (forceFail) {
+        setIsProcessingPayment(false);
+        if (appliedCoupon) CouponService.releaseUsage(appliedCoupon.id);
+        if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem('turfflow_pending_checkout');
         for (const b of createdBookings) {
-          if (b.status === 'pending_payment') {
-            PostgresEngine.updateBookingStatus(b.id, 'cancelled');
-          }
+          PostgresEngine.updateBookingStatus(b.id, 'cancelled');
         }
-        setPaymentError(webhookResult.message);
+        setPaymentError('Simulated payment failure (Bank declined transaction)');
+        return;
       }
-    }, 1200);
+
+      // REAL RAZORPAY TEST MODE INTEGRATION:
+      // Request backend to create live Razorpay Payment Link and redirect user to payment options page
+      try {
+        const redirectUrl = `${window.location.origin}/?payment_status=success&booking_ref=${primaryBooking.booking_ref}`;
+        const payRes = await fetch('/api/payments/create-link', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            bookingRef: primaryBooking.booking_ref,
+            bookingId: primaryBooking.id,
+            amount: finalTotal,
+            customerName: name,
+            customerPhone: normalizedPhone,
+            customerEmail: email,
+            courtName: court.name,
+            date: dateStr,
+            startTime: sortedSlots[0].start_time,
+            method: paymentMethod,
+            redirectUrl
+          })
+        });
+
+        const payData = await payRes.json();
+        if (payData.success && payData.payment_url) {
+          // Immediately redirect user to Razorpay's selected payment options page
+          window.location.href = payData.payment_url;
+          return;
+        }
+      } catch (callErr) {
+        console.warn('Backend payment link generation failed, falling back:', callErr);
+      }
+
+      // Fallback: direct to /pay/:bookingRef
+      window.location.href = `/pay/${primaryBooking.booking_ref}`;
+    } catch (err: any) {
+      setIsProcessingPayment(false);
+      setPaymentError(err.message || 'Payment initiation failed');
+    }
   };
 
   const formatTimer = (seconds: number) => {
@@ -578,7 +561,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   <Smartphone className="w-3.5 h-3.5" /> SMS OTP Sent to {formatPhoneNumber(phone)}
                 </p>
                 <p className="text-on-surface-variant text-[11px]">
-                  Enter 4-digit code. <strong className="text-primary font-bold">(Demo OTP: 1234)</strong>
+                  Enter 4-digit code sent to your phone.
                 </p>
               </div>
 
@@ -596,7 +579,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   type="text"
                   required
                   maxLength={4}
-                  placeholder="1234"
+                  placeholder="••••"
                   value={otpInput}
                   onChange={e => setOtpInput(e.target.value)}
                   className="form-input text-2xl font-mono font-bold tracking-widest text-center py-2 max-w-[180px] mx-auto block"

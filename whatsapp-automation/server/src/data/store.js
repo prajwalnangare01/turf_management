@@ -131,6 +131,13 @@ export const DEFAULT_CUSTOMERS = [
 
 export const DEFAULT_BOOKINGS = [];
 
+export const DEFAULT_ADMIN_USERS = [
+  { id: 'adm-001', name: 'Sanjay Kumar (Owner)', email: 'owner@turfflow.com', phone: '9876500001', role: 'owner', is_active: true },
+  { id: 'adm-002', name: 'Priya Mehta (Manager)', email: 'manager@turfflow.com', phone: '9876500002', role: 'manager', is_active: true },
+  { id: 'adm-003', name: 'Arjun Das (Staff)', email: 'staff@turfflow.com', phone: '9876500003', role: 'staff', is_active: true },
+  { id: 'adm-004', name: 'Owner', email: 'rajupainter84688@gmail.com', phone: '9876500001', role: 'owner', is_active: true }
+];
+
 class Store {
   constructor() {
     this.reset();
@@ -142,7 +149,9 @@ class Store {
     this.courts = JSON.parse(JSON.stringify(DEFAULT_COURTS));
     this.cancellationPolicies = [...DEFAULT_CANCELLATION_POLICIES];
     this.customers = JSON.parse(JSON.stringify(DEFAULT_CUSTOMERS));
+    this.adminUsers = JSON.parse(JSON.stringify(DEFAULT_ADMIN_USERS));
     this.bookings = JSON.parse(JSON.stringify(DEFAULT_BOOKINGS));
+    this.payments = [];
     this.blockedSlots = [];
     this.locks = new Map(); // key: `${court_id}:${date}:${start_time}`, value: { expires_at, locked_by }
     this.notifications = [];
@@ -163,7 +172,11 @@ class Store {
   getCourts() { return this.courts; }
   getCancellationPolicies() { return this.cancellationPolicies; }
   getCustomers() { return this.customers; }
+  setCustomers(customers) { this.customers = customers; }
+  getAdminUsers() { return this.adminUsers; }
   getBookings() { return this.bookings; }
+  getPayments() { return this.payments; }
+  setPayments(payments) { this.payments = payments; }
   getBlockedSlots() { return this.blockedSlots; }
   getNotifications() { return this.notifications; }
 

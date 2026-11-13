@@ -287,6 +287,80 @@ export class AiAgentService {
   }
 
   /**
+   * Helper to retrieve available sports supported by active courts
+   */
+  static getAvailableSports() {
+    const allSports = store.getSports();
+    const activeCourts = store.getCourts().filter(c => c.status === 'active');
+    const sportsWithCourts = allSports.filter(s =>
+      activeCourts.some(c => c.sport_ids && c.sport_ids.includes(s.id))
+    );
+    return sportsWithCourts.length > 0 ? sportsWithCourts : allSports;
+  }
+
+  /**
+   * Helper to format sport selection prompt for a given date
+   */
+  static getSportSelectionPrompt(dateStr) {
+    const sports = this.getAvailableSports();
+    const formattedDate = WhatsAppFormatter.formatDate(dateStr);
+    const numberEmojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
+
+    const sportLines = sports.map((s, idx) => {
+      const numEmoji = numberEmojis[idx] || `${idx + 1}️⃣`;
+      const icon = s.icon ? `${s.icon} ` : '';
+      return `${numEmoji} ${icon}*${s.name}*`;
+    }).join('\n');
+
+    return `🏆 *Select Sport for ${formattedDate}:*\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `${sportLines}\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `👉 _Reply with the number (e.g. *1*) or sport name._\n` +
+      `_(Or reply *date* to change date, or *menu* for main options)_`;
+  }
+
+  /**
+   * Helper to resolve sport from user input (number or text name/alias)
+   */
+  static resolveSportFromInput(text) {
+    if (!text) return null;
+    const lower = text.toLowerCase().trim();
+    const sports = this.getAvailableSports();
+
+    // 1. Match by number (1-based index)
+    const num = parseInt(lower, 10);
+    if (!isNaN(num) && num >= 1 && num <= sports.length) {
+      return sports[num - 1];
+    }
+
+    // 2. Match by exact or partial sport name or id
+    for (const s of sports) {
+      const sName = s.name.toLowerCase();
+      if (lower === sName || lower.includes(sName) || lower === s.id.toLowerCase()) {
+        return s;
+      }
+    }
+
+    // 3. Match common synonyms
+    if (lower.includes('soccer')) {
+      return sports.find(s => s.name.toLowerCase().includes('football') || s.id === 'sp-football') || null;
+    }
+    if (lower.includes('box cricket')) {
+      return sports.find(s => s.name.toLowerCase().includes('cricket') || s.id === 'sp-cricket') || null;
+    }
+    if (lower.includes('shuttle')) {
+      return sports.find(s => s.name.toLowerCase().includes('badminton') || s.id === 'sp-badminton') || null;
+    }
+    if (lower.includes('paddle') || lower.includes('pickle')) {
+      return sports.find(s => s.name.toLowerCase().includes('pickleball') || s.id === 'sp-pickleball') || null;
+    }
+
+    return null;
+  }
+
+
+  /**
    * Main Conversational Agent Handler
    */
   static async handleIncomingMessage({ fromPhone, senderName, messageText }) {
@@ -329,46 +403,27 @@ export class AiAgentService {
         const tomorrowStr = getVenueDateString(1);
 
         if (lower === '1' || lower === 'today' || lower === 'aaj') {
-          const availData = SlotEngine.getAvailableSlots(null, todayStr, phone);
-          const slotsFormatted = WhatsAppFormatter.formatAvailableSlots(availData);
-          const totalAvail = availData.courts.reduce((sum, c) => sum + c.slots.length, 0);
-
-          if (totalAvail > 0) {
-            dialogSessions.set(phone, { step: 'awaiting_slot_selection', date: todayStr, updatedAt: Date.now() });
-          } else {
-            // Keep in awaiting_date_choice so customer can pick tomorrow (2) or another date (3)
-            dialogSessions.set(phone, { step: 'awaiting_date_choice', updatedAt: Date.now() });
-          }
-
+          dialogSessions.set(phone, {
+            step: 'awaiting_sport_choice',
+            date: todayStr,
+            updatedAt: Date.now()
+          });
           return {
-            reply: `🏟️ *Available Slots for Today (${WhatsAppFormatter.formatDate(todayStr)}):*\n\n` +
-              slotsFormatted + `\n\n` +
-              (totalAvail > 0
-                ? `👉 *To reserve:* Reply with your court and time (e.g. *"Turf A at 7pm"* or *"Turf B at 8:30 PM"*).\n_(Or reply *1* to choose another date)_`
-                : `👉 _Reply *2* for Tomorrow, *3* for another date, or *menu* for main options._`),
-            action: 'slots_for_today',
+            reply: this.getSportSelectionPrompt(todayStr),
+            action: 'select_sport_prompt',
             date: todayStr
           };
         }
 
         if (lower === '2' || lower === 'tomorrow' || lower === 'kal') {
-          const availData = SlotEngine.getAvailableSlots(null, tomorrowStr, phone);
-          const slotsFormatted = WhatsAppFormatter.formatAvailableSlots(availData);
-          const totalAvail = availData.courts.reduce((sum, c) => sum + c.slots.length, 0);
-
-          if (totalAvail > 0) {
-            dialogSessions.set(phone, { step: 'awaiting_slot_selection', date: tomorrowStr, updatedAt: Date.now() });
-          } else {
-            dialogSessions.set(phone, { step: 'awaiting_date_choice', updatedAt: Date.now() });
-          }
-
+          dialogSessions.set(phone, {
+            step: 'awaiting_sport_choice',
+            date: tomorrowStr,
+            updatedAt: Date.now()
+          });
           return {
-            reply: `🏟️ *Available Slots for Tomorrow (${WhatsAppFormatter.formatDate(tomorrowStr)}):*\n\n` +
-              slotsFormatted + `\n\n` +
-              (totalAvail > 0
-                ? `👉 *To reserve:* Reply with your court and time (e.g. *"Turf A at 7pm"* or *"Court 1 at 7:00 PM"*).\n_(Or reply *1* to choose another date)_`
-                : `👉 _Reply *1* for Today, *3* for another date, or *menu* for main options._`),
-            action: 'slots_for_tomorrow',
+            reply: this.getSportSelectionPrompt(tomorrowStr),
+            action: 'select_sport_prompt',
             date: tomorrowStr
           };
         }
@@ -377,7 +432,7 @@ export class AiAgentService {
           dialogSessions.set(phone, { step: 'awaiting_custom_date', updatedAt: Date.now() });
           return {
             reply: `📅 *Please enter your desired booking date:*\n` +
-              `_(Must be within the next 10 days, e.g. *${WhatsAppFormatter.formatDate(tomorrowStr)}*, *15/11/2026*, or *Friday*)_\n\n` +
+              `_(Must be within the next 10 days, e.g. *${WhatsAppFormatter.formatDate(tomorrowStr)}*, *15/11/2026*, or *Friday*)\n\n` +
               `👉 Type the date below:`,
             action: 'awaiting_custom_date'
           };
@@ -403,23 +458,14 @@ export class AiAgentService {
             };
           }
 
-          const availData = SlotEngine.getAvailableSlots(null, directParsedDate, phone);
-          const slotsFormatted = WhatsAppFormatter.formatAvailableSlots(availData);
-          const totalAvail = availData.courts.reduce((sum, c) => sum + c.slots.length, 0);
-
-          if (totalAvail > 0) {
-            dialogSessions.set(phone, { step: 'awaiting_slot_selection', date: directParsedDate, updatedAt: Date.now() });
-          } else {
-            dialogSessions.set(phone, { step: 'awaiting_date_choice', updatedAt: Date.now() });
-          }
-
+          dialogSessions.set(phone, {
+            step: 'awaiting_sport_choice',
+            date: directParsedDate,
+            updatedAt: Date.now()
+          });
           return {
-            reply: `🏟️ *Available Slots for ${WhatsAppFormatter.formatDate(directParsedDate)}:*\n\n` +
-              slotsFormatted + `\n\n` +
-              (totalAvail > 0
-                ? `👉 *To reserve:* Reply with your court and time (e.g. *"Turf A at 7pm"*).`
-                : `👉 Reply *1* to pick another date, or *menu* to return to main options.`),
-            action: 'slots_for_date',
+            reply: this.getSportSelectionPrompt(directParsedDate),
+            action: 'select_sport_prompt',
             date: directParsedDate
           };
         }
@@ -460,32 +506,110 @@ export class AiAgentService {
           };
         }
 
-        const availData = SlotEngine.getAvailableSlots(null, parsedDate, phone);
-        const slotsFormatted = WhatsAppFormatter.formatAvailableSlots(availData);
-        const totalAvail = availData.courts.reduce((sum, c) => sum + c.slots.length, 0);
-
-        if (totalAvail > 0) {
-          dialogSessions.set(phone, { step: 'awaiting_slot_selection', date: parsedDate, updatedAt: Date.now() });
-        } else {
-          dialogSessions.set(phone, { step: 'awaiting_date_choice', updatedAt: Date.now() });
-        }
-
+        dialogSessions.set(phone, {
+          step: 'awaiting_sport_choice',
+          date: parsedDate,
+          updatedAt: Date.now()
+        });
         return {
-          reply: `🏟️ *Available Slots for ${WhatsAppFormatter.formatDate(parsedDate)}:*\n\n` +
-            slotsFormatted + `\n\n` +
-            (totalAvail > 0
-              ? `👉 *To reserve:* Reply with your court and time (e.g. *"Turf A at 7pm"* or *"Turf B at 8:30 PM"*).`
-              : `👉 Reply *1* to pick another date, or *menu* to return to main options.`),
-          action: 'slots_for_custom_date',
+          reply: this.getSportSelectionPrompt(parsedDate),
+          action: 'select_sport_prompt',
           date: parsedDate
         };
       }
 
-      // Step C: User is picking Slot/Time for the chosen date
+      // Step B.2: User is picking Sport for the chosen Date
+      if (session.step === 'awaiting_sport_choice') {
+        // Option to change date
+        if (lower === 'change date' || lower === 'date' || lower === 'other date' || lower === 'back' || lower === 'select date') {
+          dialogSessions.set(phone, { step: 'awaiting_date_choice', updatedAt: Date.now() });
+          return {
+            reply: this.getDateSelectionPrompt(),
+            action: 'book_turf_date_prompt'
+          };
+        }
+
+        // Direct date attempt while in sport selection (e.g. user changes mind and types "tomorrow" or "Friday")
+        const parsedDateAttempt = this.parseDate(text, true);
+        const isSportKeyword = this.resolveSportFromInput(text);
+        if (parsedDateAttempt && !isSportKeyword) {
+          const windowCheck = this.validate10DayWindow(parsedDateAttempt);
+          if (windowCheck.valid) {
+            session.date = parsedDateAttempt;
+            session.updatedAt = Date.now();
+            dialogSessions.set(phone, session);
+            return {
+              reply: `📅 Date updated to *${WhatsAppFormatter.formatDate(parsedDateAttempt)}*.\n\n` +
+                this.getSportSelectionPrompt(parsedDateAttempt),
+              action: 'select_sport_prompt',
+              date: parsedDateAttempt
+            };
+          }
+        }
+
+        const selectedSport = this.resolveSportFromInput(text);
+        if (!selectedSport) {
+          return {
+            reply: `⚠️ Please choose a valid sport for ${WhatsAppFormatter.formatDate(session.date)}:\n\n` +
+              this.getSportSelectionPrompt(session.date),
+            action: 'invalid_sport_choice'
+          };
+        }
+
+        // Fetch slots ONLY for this selected sport
+        const availData = SlotEngine.getAvailableSlots(selectedSport.id, session.date, phone);
+        const exampleCourt = availData.courts[0]?.court_name?.split(/[—–\-]/)[0].trim() || 'Court';
+        const slotsFormatted = WhatsAppFormatter.formatAvailableSlots(availData);
+        const totalAvail = availData.courts.reduce((sum, c) => sum + c.slots.length, 0);
+
+        if (totalAvail > 0) {
+          dialogSessions.set(phone, {
+            step: 'awaiting_slot_selection',
+            date: session.date,
+            sportId: selectedSport.id,
+            sportName: selectedSport.name,
+            updatedAt: Date.now()
+          });
+        } else {
+          // Keep in awaiting_sport_choice so customer can pick another sport or change date
+          dialogSessions.set(phone, {
+            step: 'awaiting_sport_choice',
+            date: session.date,
+            updatedAt: Date.now()
+          });
+        }
+
+        const sportIcon = selectedSport.icon ? `${selectedSport.icon} ` : '';
+        return {
+          reply: `🏟️ *Available Slots for ${sportIcon}${selectedSport.name} (${WhatsAppFormatter.formatDate(session.date)}):*\n\n` +
+            slotsFormatted + `\n\n` +
+            (totalAvail > 0
+              ? `👉 *To reserve:* Reply with your court and time (e.g. *"${exampleCourt} at 7pm"* or *"8pm"*).\n_(Or reply *sport* to choose another sport, or *date* to pick another date)_`
+              : `👉 _No open slots found for ${selectedSport.name} on this date. Reply *sport* to choose another sport, or *date* to pick another date._`),
+          action: 'slots_for_sport',
+          date: session.date,
+          sport: selectedSport
+        };
+      }
+      // Step C: User is picking Slot/Time for the chosen date and sport
       if (session.step === 'awaiting_slot_selection') {
         // INTERCEPT NAVIGATION & MENU NUMBERS FIRST:
+        // Option to Change Sport
+        if (lower === 'sport' || lower === 'sports' || lower === 'change sport' || lower === 'select sport' || lower === 'other sport') {
+          dialogSessions.set(phone, {
+            step: 'awaiting_sport_choice',
+            date: session.date,
+            updatedAt: Date.now()
+          });
+          return {
+            reply: this.getSportSelectionPrompt(session.date),
+            action: 'select_sport_prompt',
+            date: session.date
+          };
+        }
+
         // Option 1: User wants to pick another date / book turf
-        if (lower === '1' || lower === 'book turf' || lower === 'change date' || lower === 'select date' || lower === 'other date') {
+        if (lower === '1' || lower === 'book turf' || lower === 'change date' || lower === 'select date' || lower === 'other date' || lower === 'date') {
           dialogSessions.set(phone, { step: 'awaiting_date_choice', updatedAt: Date.now() });
           return {
             reply: this.getDateSelectionPrompt(),
@@ -496,24 +620,11 @@ export class AiAgentService {
         // Option 2: User wants to see available slots for today
         if (lower === '2' || lower === 'today' || lower === 'slots today' || lower.includes('available slots for today')) {
           const todayStr = getVenueDateString(0);
-          const availData = SlotEngine.getAvailableSlots(null, todayStr, phone);
-          const slotsFormatted = WhatsAppFormatter.formatAvailableSlots(availData);
-          const totalAvail = availData.courts.reduce((sum, c) => sum + c.slots.length, 0);
-
-          if (totalAvail > 0) {
-            dialogSessions.set(phone, { step: 'awaiting_slot_selection', date: todayStr, updatedAt: Date.now() });
-          } else {
-            dialogSessions.set(phone, { step: 'awaiting_date_choice', updatedAt: Date.now() });
-          }
-
+          dialogSessions.set(phone, { step: 'awaiting_sport_choice', date: todayStr, updatedAt: Date.now() });
           return {
-            reply: `🏟️ *Available Slots for Today (${WhatsAppFormatter.formatDate(todayStr)}):*\n\n` +
-              slotsFormatted + `\n\n` +
-              (totalAvail > 0
-                ? `👉 *To reserve:* Reply with your court and time (e.g. *"Turf A at 7pm"*), or reply *1* to pick another date.`
-                : `👉 Reply *2* for Tomorrow, or reply *1* to pick another date.`),
-            action: 'slots_today',
-            data: availData
+            reply: this.getSportSelectionPrompt(todayStr),
+            action: 'select_sport_prompt',
+            date: todayStr
           };
         }
 
@@ -531,41 +642,43 @@ export class AiAgentService {
         // Date switches while in slot selection
         if (lower === 'tomorrow' || lower === 'kal') {
           const tomorrowStr = getVenueDateString(1);
-          dialogSessions.set(phone, { step: 'awaiting_slot_selection', date: tomorrowStr, updatedAt: Date.now() });
-          const availData = SlotEngine.getAvailableSlots(null, tomorrowStr, phone);
-          const slotsFormatted = WhatsAppFormatter.formatAvailableSlots(availData);
+          dialogSessions.set(phone, { step: 'awaiting_sport_choice', date: tomorrowStr, updatedAt: Date.now() });
           return {
-            reply: `🏟️ *Available Slots for Tomorrow (${WhatsAppFormatter.formatDate(tomorrowStr)}):*\n\n` +
-              slotsFormatted + `\n\n` +
-              `👉 *To reserve:* Reply with your court and time (e.g. *"Turf A at 7pm"*).`,
-            action: 'slots_for_tomorrow',
+            reply: this.getSportSelectionPrompt(tomorrowStr),
+            action: 'select_sport_prompt',
             date: tomorrowStr
           };
         }
 
         const parsedTime = this.parseTime(text);
         if (!parsedTime) {
+          const sportLabel = session.sportName ? ` for *${session.sportName}*` : '';
           return {
-            reply: `⏰ What time would you like to play on *${WhatsAppFormatter.formatDate(session.date)}*?\n\n` +
+            reply: `⏰ What time would you like to play${sportLabel} on *${WhatsAppFormatter.formatDate(session.date)}*?\n\n` +
               `👉 Example: *"Turf A at 7:00 PM"*, *"8pm"*, or *"7 baje"*.\n\n` +
-              `_(Or reply *1* to pick another date, or *menu* to start over)_`,
+              `_(Or reply *sport* to choose another sport, *date* to change date, or *menu* to start over)_`,
             action: 'need_time_for_slot'
           };
         }
 
-        // Identify court
+        // Identify court - restrict to candidate courts supporting selected sport if known
         const courts = store.getCourts().filter(c => c.status === 'active');
-        const explicitlySpecified = this.resolveCourt(text, courts, false);
+        const sportCourts = session.sportId
+          ? courts.filter(c => c.sport_ids && c.sport_ids.includes(session.sportId))
+          : courts;
+        const candidateCourts = sportCourts.length > 0 ? sportCourts : courts;
+
+        const explicitlySpecified = this.resolveCourt(text, candidateCourts, false);
         let court = explicitlySpecified;
         if (!court && session.courtId) {
-          court = courts.find(c => c.id === session.courtId);
+          court = candidateCourts.find(c => c.id === session.courtId);
         }
         if (!court) {
-          court = this.resolveCourt(text, courts, true);
+          court = this.resolveCourt(text, candidateCourts, true);
         }
 
-        let sportId = court.sport_ids?.[0] || 'sp-football';
-        if (court.sport_ids && court.sport_ids.length > 1) {
+        let sportId = session.sportId || court.sport_ids?.[0] || 'sp-football';
+        if (!session.sportId && court.sport_ids && court.sport_ids.length > 1) {
           const sports = store.getSports();
           for (const sId of court.sport_ids) {
             const sportObj = sports.find(s => s.id === sId);
@@ -595,7 +708,7 @@ export class AiAgentService {
           return {
             reply: `⚠️ *Slot Unavailable:*\n${bookingRes.message}\n\n` +
               (timesText ? `🏟️ *Remaining open timings on ${court.name}${sportLabel ? ` (${sportLabel})` : ''} for ${WhatsAppFormatter.formatDate(session.date)}:*\n${timesText}\n\n` : '') +
-              `👉 Reply with any of the available times above, or reply *1* to pick another date! ⚽`,
+              `👉 Reply with any of the available times above, reply *sport* to choose another sport, or reply *date* to pick another date! ⚽`,
             action: 'booking_conflict'
           };
         }
@@ -613,7 +726,6 @@ export class AiAgentService {
         };
       }
     }
-
     // 3. ROOT MENU OPTIONS
     // OPTION 1: BOOK TURF -> Asks for Date (1. Today, 2. Tomorrow, 3. Any other date)
     if (lower === '1' || lower === 'book turf' || lower === 'book a turf' || lower === 'book court' || lower === 'book a court') {
@@ -624,27 +736,18 @@ export class AiAgentService {
       };
     }
 
-    // OPTION 2: SHOW AVAILABLE SLOTS FOR TODAY
+    // OPTION 2: SHOW AVAILABLE SLOTS FOR TODAY -> Prompts for sport
     if (lower === '2' || lower.includes('available slots for today') || lower === 'show available slots for today' || lower === 'slots today' || lower === 'today slots') {
       const todayStr = getVenueDateString(0);
-      const availData = SlotEngine.getAvailableSlots(null, todayStr, phone);
-      const slotsFormatted = WhatsAppFormatter.formatAvailableSlots(availData);
-      const totalAvail = availData.courts.reduce((sum, c) => sum + c.slots.length, 0);
-
-      if (totalAvail > 0) {
-        dialogSessions.set(phone, { step: 'awaiting_slot_selection', date: todayStr, updatedAt: Date.now() });
-      } else {
-        dialogSessions.set(phone, { step: 'awaiting_date_choice', updatedAt: Date.now() });
-      }
-
+      dialogSessions.set(phone, {
+        step: 'awaiting_sport_choice',
+        date: todayStr,
+        updatedAt: Date.now()
+      });
       return {
-        reply: `🏟️ *Available Slots for Today (${WhatsAppFormatter.formatDate(todayStr)}):*\n\n` +
-          slotsFormatted + `\n\n` +
-          (totalAvail > 0
-            ? `👉 *To reserve:* Reply with your court and time (e.g. *"Turf A at 7pm"*), or reply *1* to pick another date.`
-            : `👉 Reply *2* for Tomorrow, or reply *1* to pick another date.`),
-        action: 'slots_today',
-        data: availData
+        reply: this.getSportSelectionPrompt(todayStr),
+        action: 'select_sport_prompt',
+        date: todayStr
       };
     }
 
@@ -657,33 +760,59 @@ export class AiAgentService {
         sport = sports.find(s => s.name.toLowerCase().includes('football'));
       } else if (lower.includes('cricket')) {
         sport = sports.find(s => s.name.toLowerCase().includes('cricket'));
-      }
-      const availData = SlotEngine.getAvailableSlots(sport?.id, parsedDate, phone);
-      const courts = store.getCourts().filter(c => c.status === 'active');
-      const requestedCourt = this.resolveCourt(text, courts, false);
-      if (requestedCourt) {
-        availData.courts = availData.courts.filter(c => c.court_id === requestedCourt.id || c.id === requestedCourt.id);
-      }
-      const slotsFormatted = WhatsAppFormatter.formatAvailableSlots(availData);
-      const totalAvail = availData.courts.reduce((sum, c) => sum + c.slots.length, 0);
-
-      if (totalAvail > 0) {
-        dialogSessions.set(phone, { step: 'awaiting_slot_selection', date: parsedDate, courtId: requestedCourt?.id, updatedAt: Date.now() });
-      } else {
-        dialogSessions.set(phone, { step: 'awaiting_date_choice', updatedAt: Date.now() });
+      } else if (lower.includes('badminton')) {
+        sport = sports.find(s => s.name.toLowerCase().includes('badminton'));
+      } else if (lower.includes('pickleball') || lower.includes('pickle')) {
+        sport = sports.find(s => s.name.toLowerCase().includes('pickleball'));
       }
 
+      // If user specified sport in natural language (e.g. "football slots for tomorrow"):
+      if (sport) {
+        const availData = SlotEngine.getAvailableSlots(sport.id, parsedDate, phone);
+        const courts = store.getCourts().filter(c => c.status === 'active');
+        const requestedCourt = this.resolveCourt(text, courts, false);
+        if (requestedCourt) {
+          availData.courts = availData.courts.filter(c => c.court_id === requestedCourt.id || c.id === requestedCourt.id);
+        }
+        const slotsFormatted = WhatsAppFormatter.formatAvailableSlots(availData);
+        const totalAvail = availData.courts.reduce((sum, c) => sum + c.slots.length, 0);
+
+        if (totalAvail > 0) {
+          dialogSessions.set(phone, {
+            step: 'awaiting_slot_selection',
+            date: parsedDate,
+            sportId: sport.id,
+            sportName: sport.name,
+            courtId: requestedCourt?.id,
+            updatedAt: Date.now()
+          });
+        } else {
+          dialogSessions.set(phone, { step: 'awaiting_sport_choice', date: parsedDate, updatedAt: Date.now() });
+        }
+
+        return {
+          reply: `🏟️ *Available Slots for ${sport.icon ? sport.icon + ' ' : ''}${sport.name} on ${WhatsAppFormatter.formatDate(parsedDate)}:*\n\n` +
+            slotsFormatted + `\n\n` +
+            (totalAvail > 0
+              ? `👉 *To reserve:* Reply with your court and time (e.g. *"Turf A at 7pm"* or *"Court 1 at 7:00 PM"*).\n_(Or reply *sport* to choose another sport, or *date* to pick another date)_`
+              : `👉 No open slots found for ${sport.name} on this date. Reply *sport* to choose another sport, or *date* to pick another date.`),
+          action: 'check_availability',
+          data: availData
+        };
+      }
+
+      // No sport was specified -> Prompt user to select sport for the chosen date!
+      dialogSessions.set(phone, {
+        step: 'awaiting_sport_choice',
+        date: parsedDate,
+        updatedAt: Date.now()
+      });
       return {
-        reply: `🏟️ *Available Slots for ${WhatsAppFormatter.formatDate(parsedDate)}:*\n\n` +
-          slotsFormatted + `\n\n` +
-          (totalAvail > 0
-            ? `👉 *To reserve:* Reply with your court and time (e.g. *"Turf A at 7pm"* or *"Court 1 at 7:00 PM"*).`
-            : `👉 Reply *1* to pick another date, or *menu* to return to main options.`),
-        action: 'check_availability',
-        data: availData
+        reply: this.getSportSelectionPrompt(parsedDate),
+        action: 'select_sport_prompt',
+        date: parsedDate
       };
     }
-
     // OPTION 3: SHOW MY BOOKINGS
     if (lower === '3' || lower.includes('my booking') || lower.includes('my bookings') || lower.includes('show my bookings') || lower.includes('check booking')) {
       const matchRef = text.match(/TRF-\d{8}-\d{4}/i);

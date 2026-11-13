@@ -787,14 +787,20 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
                   </button>
 
                   <button
+                    disabled={selectedBooking.status === 'refunded' || Boolean(selectedBooking.refund_amount && selectedBooking.refund_amount > 0)}
                     onClick={() => {
                       setRefundBooking(selectedBooking);
                       setSelectedBooking(null);
                     }}
-                    className="py-2 text-xs bg-purple-50 text-purple-900 border border-purple-300 rounded-lg font-bold hover:bg-purple-100 flex items-center justify-center gap-1"
-                    title="Issue Refund"
+                    className={`py-2 text-xs rounded-lg font-bold flex items-center justify-center gap-1 transition-colors ${
+                      selectedBooking.status === 'refunded' || Boolean(selectedBooking.refund_amount && selectedBooking.refund_amount > 0)
+                        ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed opacity-60'
+                        : 'bg-purple-50 text-purple-900 border border-purple-300 hover:bg-purple-100 cursor-pointer'
+                    }`}
+                    title={selectedBooking.status === 'refunded' || Boolean(selectedBooking.refund_amount && selectedBooking.refund_amount > 0) ? `Refund of ₹${selectedBooking.refund_amount || 0} already processed (Option disabled)` : 'Issue Refund'}
                   >
-                    <RotateCcw className="w-3.5 h-3.5 text-purple-700" /> Refund
+                    <RotateCcw className="w-3.5 h-3.5 text-purple-700" />
+                    {selectedBooking.status === 'refunded' || Boolean(selectedBooking.refund_amount && selectedBooking.refund_amount > 0) ? `Refunded (₹${selectedBooking.refund_amount || 0})` : 'Refund'}
                   </button>
                 </div>
               </div>

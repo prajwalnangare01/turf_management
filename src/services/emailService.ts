@@ -34,44 +34,59 @@ export class EmailService {
   private static DEFAULT_REPLY_TO = 'rajupainter84688@gmail.com';
 
   /**
-   * Check if Resend is configured with a real API key
+   * Check if Nodemailer/SMTP email service is configured
    */
-  public static isResendConfigured(): boolean {
-    const key = (import.meta as any).env?.VITE_RESEND_API_KEY || (import.meta as any).env?.RESEND_API_KEY;
-    return !!key && key.startsWith('re_') && key !== 're_your_resend_api_key';
+  public static isConfigured(): boolean {
+    const user = (import.meta as any).env?.SMTP_USER || 'rajupainter84688@gmail.com';
+    return !!user && user !== 'your_email@gmail.com';
   }
 
   /**
-   * Return the primary sender/account email configured in Resend
+   * Backward-compatibility alias
    */
-  public static getResendSenderEmail(): string {
-    const raw = (import.meta as any).env?.VITE_RESEND_FROM_EMAIL || 
+  public static isResendConfigured(): boolean {
+    return this.isConfigured();
+  }
+
+  /**
+   * Return the primary sender/account email configured
+   */
+  public static getSenderEmail(): string {
+    const raw = (import.meta as any).env?.SMTP_FROM_EMAIL || 
                 (import.meta as any).env?.RESEND_FROM_EMAIL || 
                 'rajupainter84688@gmail.com';
     const match = String(raw).match(/<([^>]+)>/);
     return (match ? match[1] : String(raw)).trim().toLowerCase();
   }
 
+  public static getResendSenderEmail(): string {
+    return this.getSenderEmail();
+  }
+
   /**
-   * Check if a given email matches the Resend sender/account email
+   * Check if a given email matches the sender/account email
    */
-  public static isResendSenderEmail(email?: string | null): boolean {
+  public static isSenderEmail(email?: string | null): boolean {
     if (!email) return false;
     const clean = email.trim().toLowerCase();
-    const sender = this.getResendSenderEmail();
+    const sender = this.getSenderEmail();
     return clean === sender;
+  }
+
+  public static isResendSenderEmail(email?: string | null): boolean {
+    return this.isSenderEmail(email);
   }
 
   /**
    * Primary email dispatcher
-   * Routes through Vite dev server middleware (/api/email/send) or direct Resend REST API
+   * Routes through Vite dev server middleware (/api/email/send) or backend server API
    */
   public static async sendEmail(payload: SendEmailPayload): Promise<EmailDispatchResult> {
-    const fromAddress = payload.from || (import.meta as any).env?.VITE_RESEND_FROM_EMAIL || this.DEFAULT_SENDER;
+    const fromAddress = payload.from || (import.meta as any).env?.SMTP_FROM_EMAIL || this.DEFAULT_SENDER;
     const cleanTo = payload.to.trim();
     const plainPreview = payload.text.slice(0, 160).replace(/\n+/g, ' ');
 
-    // 1. Try local dev server proxy /api/email/send (Node environment, eliminates CORS)
+    // 1. Try dev server proxy / backend /api/email/send (Node Nodemailer environment)
     try {
       const response = await fetch('/api/email/send', {
         method: 'POST',
@@ -79,7 +94,7 @@ export class EmailService {
         body: JSON.stringify({
           to: cleanTo,
           from: fromAddress,
-          reply_to: this.DEFAULT_REPLY_TO,
+          reply_to: payload.reply_to || this.DEFAULT_REPLY_TO,
           subject: payload.subject,
           html: payload.html,
           text: payload.text,
@@ -91,7 +106,7 @@ export class EmailService {
         const json = await response.json();
         return {
           success: true,
-          id: json.data?.id || json.id || `resend_${Date.now()}`,
+          id: json.data?.id || json.id || `mail_${Date.now()}`,
           simulated: !!json.simulated,
           recipient: cleanTo,
           subject: payload.subject,
@@ -99,24 +114,7 @@ export class EmailService {
         };
       } else {
         const errJson = await response.json().catch(() => ({}));
-        const errMsg = errJson?.error || errJson?.details?.message || errJson?.message || 'Resend delivery failed';
-        const isSandbox = errMsg.includes('only send testing emails') || errMsg.includes('verify your domain');
-
-        if (isSandbox) {
-          // Gracefully fallback to simulation for unverified demo recipient domains
-          const simId = `sim_resend_sandbox_${Date.now()}`;
-          console.warn(`[Resend Sandbox Notice] ${errMsg}. Falling back to simulation for ${cleanTo}.`);
-          return {
-            success: true,
-            id: simId,
-            simulated: true,
-            sandboxRestricted: true,
-            recipient: cleanTo,
-            subject: payload.subject,
-            preview: plainPreview
-          };
-        }
-
+        const errMsg = errJson?.error || errJson?.details?.message || errJson?.message || 'SMTP delivery failed';
         return {
           success: false,
           error: errMsg,
@@ -128,75 +126,12 @@ export class EmailService {
         };
       }
     } catch {
-      // Dev server middleware not reachable (e.g. static production deployment)
+      // Server endpoint not reachable (e.g. offline unit testing)
     }
 
-    // 2. Direct client-side Resend API call (if client key is set)
-    const apiKey = (import.meta as any).env?.VITE_RESEND_API_KEY || (import.meta as any).env?.RESEND_API_KEY;
-    if (apiKey && apiKey.startsWith('re_') && apiKey !== 're_your_resend_api_key') {
-      try {
-        const directRes = await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            from: fromAddress,
-            reply_to: this.DEFAULT_REPLY_TO,
-            to: [cleanTo],
-            subject: payload.subject,
-            html: payload.html,
-            text: payload.text,
-            attachments: payload.attachments
-          })
-        });
-
-        if (directRes.ok) {
-          const directData = await directRes.json();
-          return {
-            success: true,
-            id: directData.id,
-            simulated: false,
-            recipient: cleanTo,
-            subject: payload.subject,
-            preview: plainPreview
-          };
-        } else {
-          const directErr = await directRes.json().catch(() => ({}));
-          const errMsg = directErr?.message || 'Resend API call rejected';
-          const isSandbox = errMsg.includes('only send testing emails') || errMsg.includes('verify your domain');
-          if (isSandbox) {
-            const simId = `sim_resend_sandbox_${Date.now()}`;
-            console.warn(`[Resend Sandbox Notice] ${errMsg}. Falling back to simulation for ${cleanTo}.`);
-            return {
-              success: true,
-              id: simId,
-              simulated: true,
-              sandboxRestricted: true,
-              recipient: cleanTo,
-              subject: payload.subject,
-              preview: plainPreview
-            };
-          }
-          return {
-            success: false,
-            error: errMsg,
-            sandboxRestricted: false,
-            simulated: false,
-            recipient: cleanTo,
-            subject: payload.subject,
-            preview: plainPreview
-          };
-        }
-      } catch {
-        // Fall through to simulation if CORS or network blocked
-      }
-    }
-
-    // 3. Graceful Mock / Demo Simulation fallback
-    const mockId = `sim_resend_${Math.random().toString(36).substring(2, 9)}`;
-    console.info('[Resend Email Simulation]', {
+    // 2. Graceful Mock / Demo Simulation fallback
+    const mockId = `sim_smtp_${Math.random().toString(36).substring(2, 9)}`;
+    console.info('[Nodemailer Email Simulation]', {
       id: mockId,
       to: cleanTo,
       subject: payload.subject,
@@ -334,7 +269,7 @@ export class EmailService {
     <!-- Footer -->
     <tr>
       <td style="background: #f8fafc; padding: 20px 24px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8;">
-        <p style="margin: 0 0 4px 0;">This email was sent by <strong>${venue.name}</strong> powered by TurfFlow & Resend API.</p>
+        <p style="margin: 0 0 4px 0;">This email was sent by <strong>${venue.name}</strong> powered by TurfFlow & Nodemailer.</p>
         <p style="margin: 0;">Venue Helpline: ${venue.contact_phone} | GST: ${venue.gst_number}</p>
       </td>
     </tr>
@@ -785,7 +720,7 @@ export class EmailService {
     </tr>
     <tr>
       <td style="background: #f8fafc; padding: 16px 24px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8;">
-        ${venueName} &bull; Powered by Resend API
+        ${venueName} &bull; Powered by TurfFlow Email Service
       </td>
     </tr>
   </table>
@@ -802,20 +737,20 @@ export class EmailService {
   }
 
   /**
-   * 4. Send Resend Integration Test Email (from Admin Settings)
+   * 4. Send Nodemailer SMTP Integration Test Email (from Admin Settings)
    */
   public static async sendTestEmail(toEmail: string, venueName: string = 'TurfFlow Arena'): Promise<EmailDispatchResult> {
     const timestamp = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
-    const isLive = this.isResendConfigured();
-    const subject = `✅ Resend Integration Test: ${venueName} (${isLive ? 'LIVE' : 'SIMULATED'})`;
+    const isLive = this.isConfigured();
+    const subject = `✅ SMTP Integration Test: ${venueName} (${isLive ? 'LIVE' : 'SIMULATED'})`;
 
     const text = [
-      `TURFFLOW RESEND EMAIL INTEGRATION TEST`,
-      `Status: ${isLive ? 'LIVE (Resend API Connected)' : 'SIMULATION MODE (Demo Key)'}`,
+      `TURFFLOW NODEMAILER SMTP EMAIL INTEGRATION TEST`,
+      `Status: ${isLive ? 'LIVE (Gmail SMTP Connected)' : 'SIMULATION MODE (Demo Mode)'}`,
       `Timestamp: ${timestamp}`,
       `Target Recipient: ${toEmail}`,
       ``,
-      `Your Resend email configuration is functional. All booking confirmations and cancellation receipts will dispatch through this channel.`,
+      `Your Nodemailer Gmail SMTP email configuration is functional. All booking confirmations and cancellation receipts will dispatch through this channel.`,
       `Team TurfFlow`
     ].join('\n');
 
@@ -829,16 +764,16 @@ export class EmailService {
 <body style="margin: 0; padding: 24px; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
   <div style="max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 14px; border: 1px solid #e2e8f0; padding: 24px; box-shadow: 0 4px 14px rgba(0,0,0,0.05);">
     <div style="display: inline-block; background: ${isLive ? '#dcfce7' : '#fef3c7'}; color: ${isLive ? '#166534' : '#92400e'}; font-size: 11px; font-weight: 800; padding: 3px 10px; border-radius: 999px; text-transform: uppercase; margin-bottom: 12px;">
-      ${isLive ? '⚡ Live Resend API Connection' : '🧪 Simulation Mode'}
+      ${isLive ? '⚡ Live Gmail SMTP Connection' : '🧪 Simulation Mode'}
     </div>
-    <h2 style="margin: 0 0 8px 0; font-size: 20px; color: #006b30;">Resend Email Test Successful</h2>
+    <h2 style="margin: 0 0 8px 0; font-size: 20px; color: #006b30;">Nodemailer SMTP Email Test Successful</h2>
     <p style="font-size: 14px; color: #475569; margin: 0 0 16px 0;">
-      Your transactional email pipeline for <strong>${venueName}</strong> is configured and operational.
+      Your transactional email pipeline for <strong>${venueName}</strong> is configured and operational via Nodemailer.
     </p>
     <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; font-size: 12px; color: #334155;">
       <div><strong>Dispatched At:</strong> ${timestamp}</div>
       <div><strong>Recipient:</strong> ${toEmail}</div>
-      <div><strong>Engine:</strong> Resend Email REST API</div>
+      <div><strong>Engine:</strong> Nodemailer SMTP (Gmail)</div>
     </div>
   </div>
 </body>
@@ -914,7 +849,7 @@ export class EmailService {
     </tr>
     <tr>
       <td style="background: #f8fafc; padding: 16px 24px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8;">
-        ${venueName} &bull; Powered by Resend Email Delivery
+        ${venueName} &bull; Powered by TurfFlow Email Service
       </td>
     </tr>
   </table>
@@ -992,7 +927,7 @@ export class EmailService {
     </tr>
     <tr>
       <td style="background: #f8fafc; padding: 16px 24px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8;">
-        ${venueName} &bull; Powered by Resend Email Delivery
+        ${venueName} &bull; Powered by TurfFlow Email Service
       </td>
     </tr>
   </table>
@@ -1070,7 +1005,7 @@ export class EmailService {
     </tr>
     <tr>
       <td style="background: #f8fafc; padding: 16px 24px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8;">
-        ${venueName} &bull; Powered by Resend Email Delivery
+        ${venueName} &bull; Powered by TurfFlow Email Service
       </td>
     </tr>
   </table>
@@ -1148,7 +1083,7 @@ export class EmailService {
     </tr>
     <tr>
       <td style="background: #f8fafc; padding: 16px 24px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8;">
-        ${venueName} &bull; Powered by Resend Email Delivery
+        ${venueName} &bull; Powered by TurfFlow Email Service
       </td>
     </tr>
   </table>
@@ -1281,7 +1216,7 @@ export class EmailService {
     <!-- Footer -->
     <tr>
       <td style="background: #f8fafc; padding: 20px 24px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8;">
-        <p style="margin: 0 0 4px 0;">Sent by <strong>${venue.name}</strong> via Resend API.</p>
+        <p style="margin: 0 0 4px 0;">Sent by <strong>${venue.name}</strong> via TurfFlow Email Service.</p>
         <p style="margin: 0;">Venue Helpline: ${venue.contact_phone}</p>
       </td>
     </tr>

@@ -8,6 +8,7 @@
     "dev:site": "vite",
     "dev:server": "node whatsapp-automation/server/src/server.js",
     "build": "tsc && vite build",
+    "build:render": "npm install && npm run build && cd whatsapp-automation/server && npm install",
     "start": "node whatsapp-automation/server/src/server.js",
     "preview": "vite preview",
     "test": "npx tsx src/tests/edgeCases.test.ts",
@@ -17,12 +18,13 @@
     "@supabase/supabase-js": "^2.119.0",
     "@types/qrcode": "^1.5.6",
     "lucide-react": "^0.344.0",
+    "nodemailer": "^10.5.0",
     "qrcode": "^1.5.4",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "resend": "^6.37.0"
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@types/nodemailer": "^8.0.2",
     "@types/react": "^18.2.66",
     "@types/react-dom": "^18.2.22",
     "@vitejs/plugin-react": "^4.2.1",

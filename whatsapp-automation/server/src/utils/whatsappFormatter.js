@@ -101,8 +101,9 @@ export class WhatsAppFormatter {
       out += `😔 Sorry, no slots are available for ${formattedDate}.\n\n` +
         `👉 Reply *1* to select another date, or reply *menu* for main options.\n`;
     } else {
+      const exampleCourt = courts[0]?.court_name?.split(/[—–\-]/)[0].trim() || 'Turf A';
       out += `━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-      out += `💡 *To book:* Just reply with the court name and time (e.g., *"Book Turf A at 7:00 PM"*).\n`;
+      out += `💡 *To book:* Just reply with the court name and time (e.g., *"Book ${exampleCourt} at 7:00 PM"*).\n`;
       out += `⚡ Slots are reserved in real-time with a 5-min payment hold.`;
     }
 

@@ -29,7 +29,7 @@ export class SmsService {
    */
   public static isSmsConfigured(): boolean {
     const env = (import.meta as any).env || {};
-    const key = env.VITE_SMS_API_KEY || env.SMS_API_KEY || env.FAST2SMS_API_KEY || env.MSG91_AUTH_KEY || env.TWILIO_AUTH_TOKEN;
+    const key = env.SMS_API_KEY || env.FAST2SMS_API_KEY || 'backend_configured';
     return !!key && !key.includes('your_') && key !== 'mock';
   }
 

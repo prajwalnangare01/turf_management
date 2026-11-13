@@ -259,6 +259,22 @@ export class SupabaseService {
             }
           }
         )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'sports' },
+          async (payload) => {
+            console.log(`⚡ [Realtime DB Change] Sports ${payload.eventType}:`, payload.new?.name || payload.old?.id);
+            await SupabaseService.refreshSports(store);
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'court_sports' },
+          async (payload) => {
+            console.log(`⚡ [Realtime DB Change] Court Sports ${payload.eventType}`);
+            await SupabaseService.refreshCourts(store);
+          }
+        )
         .subscribe((status) => {
           console.log(`📡 Supabase Realtime status: ${status}`);
         });
@@ -502,11 +518,35 @@ export class SupabaseService {
   /**
    * Re-fetch and refresh courts & junction sports from Supabase
    */
+  /**
+   * Re-fetch and refresh sports list from Supabase
+   */
+  static async refreshSports(store) {
+    if (!isSupabaseConfigured()) return;
+    try {
+      const supabase = getSupabase();
+      if (!supabase) return;
+
+      const { data: sports, error: sErr } = await supabase.from('sports').select('*');
+      if (!sErr && sports && sports.length > 0) {
+        store.sports = sports;
+        console.log(`🔄 [Realtime DB Sync] Refreshed ${sports.length} sports from Supabase database.`);
+      }
+    } catch (err) {
+      console.warn('⚠️ SupabaseService.refreshSports error:', err.message);
+    }
+  }
+
   static async refreshCourts(store) {
     if (!isSupabaseConfigured()) return;
     try {
       const supabase = getSupabase();
       if (!supabase) return;
+
+      const { data: sports, error: sErr } = await supabase.from('sports').select('*');
+      if (!sErr && sports && sports.length > 0) {
+        store.sports = sports;
+      }
 
       const { data: courts, error: cErr } = await supabase.from('courts').select('*');
       const { data: courtSports, error: csErr } = await supabase.from('court_sports').select('*');

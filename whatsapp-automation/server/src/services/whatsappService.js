@@ -13,6 +13,7 @@ import qrcodeTerminal from 'qrcode-terminal';
 import QRCode from 'qrcode';
 import { AiAgentService } from './aiAgentService.js';
 import { store } from '../data/store.js';
+import { WhatsAppSessionStore } from './whatsappSessionStore.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,6 +30,19 @@ export class WhatsAppService {
   static lastError = null;
   static isInitializing = false;
   static reconnectAttempts = 0;
+
+  /**
+   * Resolves WhatsApp session directory.
+   * Can be configured via WHATSAPP_SESSION_PATH to mount a persistent cloud volume (e.g. Render /var/data/whatsapp_session).
+   */
+  static getSessionDir() {
+    if (process.env.WHATSAPP_SESSION_PATH) {
+      return process.env.WHATSAPP_SESSION_PATH;
+    }
+    return process.platform === 'win32'
+      ? path.resolve(__dirname, '../../whatsapp_session')
+      : '/tmp/whatsapp_session';
+  }
 
   /**
    * Return current status, pairing code, and link information
@@ -96,13 +110,13 @@ export class WhatsAppService {
       this.targetPhone = targetPhoneNumber.replace(/\D/g, '');
     }
 
-    const sessionDir = path.resolve(__dirname, '../../whatsapp_session');
+    const sessionDir = this.getSessionDir();
     if (!fs.existsSync(sessionDir)) {
       fs.mkdirSync(sessionDir, { recursive: true });
     }
 
     try {
-      const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
+      const { state, saveCreds } = await WhatsAppSessionStore.createSupabaseAuthState(sessionDir);
       const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: [2, 3000, 1015901307] }));
 
       const logger = pino({ level: 'silent' });
@@ -179,9 +193,9 @@ export class WhatsAppService {
           console.log(`⚠️ WhatsApp connection closed (Status: ${statusCode}, Reason: ${lastDisconnect?.error?.message}). Logged out: ${isLoggedOut}`);
 
           if (isLoggedOut) {
-            const sessionDir = path.resolve(__dirname, '../../whatsapp_session');
-            if (fs.existsSync(sessionDir)) {
-              try { fs.rmSync(sessionDir, { recursive: true, force: true }); } catch {}
+            const sessionDir = this.getSessionDir();
+            if (sessionDir) {
+              try { await WhatsAppSessionStore.clearSession(sessionDir); } catch {}
             }
             this.lastError = 'Pairing timed out. Click Request Pairing Code to generate a fresh one.';
           } else {
@@ -337,13 +351,13 @@ export class WhatsAppService {
     this.status = 'connecting';
 
     // Clear stale session state if not registered
-    const sessionDir = path.resolve(__dirname, '../../whatsapp_session');
+    const sessionDir = this.getSessionDir();
     const credsPath = path.join(sessionDir, 'creds.json');
     if (fs.existsSync(credsPath)) {
       try {
         const creds = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
         if (!creds?.registered) {
-          fs.rmSync(sessionDir, { recursive: true, force: true });
+          await WhatsAppSessionStore.clearSession(sessionDir);
         }
       } catch {}
     }
@@ -383,10 +397,10 @@ export class WhatsAppService {
       this.sock = null;
     }
 
-    const sessionDir = path.resolve(__dirname, '../../whatsapp_session');
-    if (fs.existsSync(sessionDir)) {
+    const sessionDir = this.getSessionDir();
+    if (sessionDir) {
       try {
-        fs.rmSync(sessionDir, { recursive: true, force: true });
+        await WhatsAppSessionStore.clearSession(sessionDir);
       } catch {}
     }
 

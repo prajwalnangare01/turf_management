@@ -10,8 +10,25 @@ import { GatePassService } from '../services/gatePassService.js';
 import { EmailService } from '../services/emailService.js';
 import { SmsService } from '../services/smsService.js';
 import { WhatsAppFormatter } from '../utils/whatsappFormatter.js';
+import { RazorpayService } from '../services/razorpayService.js';
 import { getSupabase } from '../data/supabaseClient.js';
 import { getVenueDateString } from '../utils/venueTime.js';
+import { ServerAuthService } from '../services/authService.js';
+import { requireAuth, requireAdmin, requireRole, requireCustomer, optionalAuth } from '../middleware/authMiddleware.js';
+import { OtpService } from '../services/otpService.js';
+import { authLimiter, otpLimiter, lockLimiter, generalLimiter } from '../middleware/rateLimiter.js';
+import {
+  validateBody,
+  adminLoginSchema,
+  customerLoginSchema,
+  customerSignupSchema,
+  passwordResetSchema,
+  otpRequestSchema,
+  otpVerifySchema,
+  slotLockSchema,
+  createPaymentOrderSchema,
+  verifyPaymentSchema
+} from '../middleware/validate.js';
 
 export const apiRouter = express.Router();
 
@@ -38,6 +55,7 @@ async function findOrResolveBooking(ref, fallbackData = {}) {
         }
       }
     }
+    const parentRef = WhatsAppFormatter.getBookingGroupRef(booking);
     // Aggregate siblings ONLY when viewing the entire order group, NOT when targeting a specific single slot pass
     const isSingleSlotRequest = (fallbackData && Array.isArray(fallbackData.all_slots) && fallbackData.all_slots.length === 1) ||
                                 (parentRef && cleanRef !== parentRef && cleanRef.includes('-'));
@@ -175,6 +193,164 @@ async function findOrResolveBooking(ref, fallbackData = {}) {
   return null;
 }
 
+// =============================================================================
+// AUTHENTICATION & SESSION MANAGEMENT (JWT & BCRYPT)
+// =============================================================================
+
+/**
+ * Admin Login (Owner, Manager, Staff) -> returns signed JWT
+ */
+apiRouter.post('/auth/admin/login', authLimiter, validateBody(adminLoginSchema), (req, res) => {
+  const { identity, password } = req.body;
+  const result = ServerAuthService.loginAdmin(identity, password);
+  if (!result.success) {
+    return res.status(401).json(result);
+  }
+  res.json(result);
+});
+
+/**
+ * Customer Login -> returns signed JWT
+ */
+apiRouter.post('/auth/customer/login', authLimiter, validateBody(customerLoginSchema), (req, res) => {
+  const { identity, password } = req.body;
+  const result = ServerAuthService.loginCustomer(identity, password);
+  if (!result.success) {
+    return res.status(401).json(result);
+  }
+  res.json(result);
+});
+
+/**
+ * Customer Signup -> creates account with hashed password and returns signed JWT
+ */
+apiRouter.post('/auth/customer/signup', authLimiter, validateBody(customerSignupSchema), (req, res) => {
+  const { name, phone, email, password, mobileTicket, emailTicket } = req.body;
+
+  if (mobileTicket && !OtpService.consumeTicket(phone, 'signup', mobileTicket)) {
+    return res.status(400).json({ success: false, error: 'Mobile verification expired or invalid. Please verify phone again.' });
+  }
+  if (email && emailTicket && !OtpService.consumeTicket(email, 'signup', emailTicket)) {
+    return res.status(400).json({ success: false, error: 'Email verification expired or invalid. Please verify email again.' });
+  }
+
+  const result = ServerAuthService.signupCustomer({ name, phone, email, password });
+  if (!result.success) {
+    return res.status(400).json(result);
+  }
+  res.status(201).json(result);
+});
+
+/**
+ * Customer Password Reset
+ */
+apiRouter.post('/auth/customer/forgot-password', authLimiter, validateBody(passwordResetSchema), (req, res) => {
+  const { identity, newPassword, ticket } = req.body;
+  if (ticket && !OtpService.consumeTicket(identity, 'forgot_password', ticket)) {
+    return res.status(400).json({ success: false, error: 'Verification expired or invalid. Please verify code again.' });
+  }
+  const result = ServerAuthService.resetCustomerPassword(identity, newPassword);
+  if (!result.success) {
+    return res.status(400).json(result);
+  }
+  res.json(result);
+});
+
+/**
+ * Current User Profile (Admin or Customer)
+ */
+apiRouter.get('/auth/me', requireAuth, (req, res) => {
+  res.json({ success: true, user: req.user });
+});
+
+// =============================================================================
+// BACKEND-DRIVEN OTP ENDPOINTS (EMAIL & SMS)
+// =============================================================================
+
+/**
+ * Request OTP (Email or SMS)
+ */
+apiRouter.post('/otp/send', otpLimiter, validateBody(otpRequestSchema), async (req, res) => {
+  try {
+    const { target, channel, purpose, name } = req.body;
+    const result = await OtpService.requestOtp({ target, channel, purpose, name });
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * Verify OTP (Email or SMS) -> returns verification ticket
+ */
+apiRouter.post('/otp/verify', otpLimiter, validateBody(otpVerifySchema), (req, res) => {
+  const { target, code, purpose } = req.body;
+  const result = OtpService.verifyOtp({ target, code, purpose });
+  if (!result.success) {
+    return res.status(400).json(result);
+  }
+  res.json(result);
+});
+
+// =============================================================================
+// PRODUCTION PAYMENTS (RAZORPAY ORDERS & SERVER SIGNATURE VERIFY)
+// =============================================================================
+
+/**
+ * Create Razorpay Order server-side via Orders API
+ */
+apiRouter.post('/payments/create-order', validateBody(createPaymentOrderSchema), async (req, res) => {
+  try {
+    const { bookingRef, amount, currency } = req.body;
+    const result = await RazorpayService.createOrderAsync({ bookingRef, amount, currency });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * Verify Razorpay Payment Signature and Confirm Booking
+ */
+apiRouter.post('/payments/verify', validateBody(verifyPaymentSchema), async (req, res) => {
+  try {
+    const { bookingRef, razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+
+    const isValid = RazorpayService.verifyPaymentSignature({
+      orderId: razorpay_order_id,
+      paymentId: razorpay_payment_id,
+      signature: razorpay_signature
+    });
+
+    if (!isValid) {
+      console.warn(`🚨 [FRAUD DETECTED]: Invalid Razorpay signature for booking ${bookingRef}, payment: ${razorpay_payment_id}`);
+      return res.status(400).json({
+        success: false,
+        error: 'Payment verification failed: Invalid transaction signature.',
+        code: 'PAYMENT_SIGNATURE_MISMATCH'
+      });
+    }
+
+    // Confirm booking
+    const confirmResult = BookingService.confirmBooking(bookingRef, razorpay_payment_id);
+    if (!confirmResult.success) {
+      return res.status(400).json(confirmResult);
+    }
+
+    res.json({
+      success: true,
+      message: 'Payment verified and booking confirmed successfully!',
+      booking: confirmResult.booking,
+      payment_id: razorpay_payment_id
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 /**
  * 1. Venue Details
  */
@@ -182,7 +358,7 @@ apiRouter.get('/venue', (req, res) => {
   res.json({ success: true, venue: store.getVenue() });
 });
 
-apiRouter.post('/venue', (req, res) => {
+apiRouter.post('/venue', requireRole(['owner', 'manager']), (req, res) => {
   const { venue } = req.body || {};
   if (venue) {
     const updated = store.setVenue(venue);
@@ -191,7 +367,7 @@ apiRouter.post('/venue', (req, res) => {
   res.status(400).json({ success: false, message: 'Missing venue data' });
 });
 
-apiRouter.put('/venue', (req, res) => {
+apiRouter.put('/venue', requireRole(['owner', 'manager']), (req, res) => {
   const { venue } = req.body || {};
   if (venue) {
     const updated = store.setVenue(venue);
@@ -207,6 +383,31 @@ apiRouter.get('/sports', (req, res) => {
   res.json({ success: true, sports: store.getSports() });
 });
 
+apiRouter.post('/sports', requireRole(['owner', 'manager']), (req, res) => {
+  const sportData = req.body;
+  if (!sportData || !sportData.name) {
+    return res.status(400).json({ success: false, message: 'Invalid sport payload: name is required' });
+  }
+
+  const cleanName = sportData.name.trim();
+  const existingIdx = store.sports.findIndex(s => s.id === sportData.id || s.name.toLowerCase() === cleanName.toLowerCase());
+  const sportObj = {
+    id: sportData.id || 'sp-' + Date.now(),
+    name: cleanName,
+    icon: sportData.icon || '🏅',
+    image_url: sportData.image_url,
+    subtitle: sportData.subtitle
+  };
+
+  if (existingIdx !== -1) {
+    store.sports[existingIdx] = { ...store.sports[existingIdx], ...sportObj };
+  } else {
+    store.sports.push(sportObj);
+  }
+
+  res.json({ success: true, sports: store.getSports() });
+});
+
 /**
  * 3. Courts List & Management
  */
@@ -214,7 +415,7 @@ apiRouter.get('/courts', (req, res) => {
   res.json({ success: true, courts: store.getCourts() });
 });
 
-apiRouter.post('/courts', async (req, res) => {
+apiRouter.post('/courts', requireRole(['owner', 'manager']), async (req, res) => {
   const courtData = req.body;
   if (!courtData || !courtData.id || !courtData.name) {
     return res.status(400).json({ success: false, message: 'Invalid court payload: id and name are required' });
@@ -232,7 +433,7 @@ apiRouter.post('/courts', async (req, res) => {
   res.json({ success: true, court: courtData, courts: store.getCourts() });
 });
 
-apiRouter.put('/courts/:id', async (req, res) => {
+apiRouter.put('/courts/:id', requireRole(['owner', 'manager']), async (req, res) => {
   const { id } = req.params;
   const updates = req.body;
   const existingIdx = store.courts.findIndex(c => c.id === id);
@@ -251,7 +452,7 @@ apiRouter.put('/courts/:id', async (req, res) => {
   res.json({ success: true, court: savedCourt, courts: store.getCourts() });
 });
 
-apiRouter.delete('/courts/:id', async (req, res) => {
+apiRouter.delete('/courts/:id', requireRole(['owner', 'manager']), async (req, res) => {
   const { id } = req.params;
   const courtIdx = store.courts.findIndex(c => c.id === id);
   let courtName = id;
@@ -273,7 +474,7 @@ apiRouter.delete('/courts/:id', async (req, res) => {
   res.json({ success: true, message: `Court '${courtName}' deleted successfully.`, courts: store.getCourts() });
 });
 
-apiRouter.post('/courts/sync', async (req, res) => {
+apiRouter.post('/courts/sync', requireRole(['owner', 'manager']), async (req, res) => {
   const { courts } = req.body;
   if (Array.isArray(courts) && courts.length > 0) {
     const active = courts.filter(c => c && c.id && c.status !== 'inactive');
@@ -314,7 +515,7 @@ apiRouter.get('/slots', (req, res) => {
 /**
  * 5. Concurrency Layer 1: Slot Lock
  */
-apiRouter.post('/slots/lock', (req, res) => {
+apiRouter.post('/slots/lock', lockLimiter, validateBody(slotLockSchema), (req, res) => {
   const { courtId, date, startTime, lockedBy, ttlSeconds } = req.body;
   if (!courtId || !date || !startTime || !lockedBy) {
     return res.status(400).json({ success: false, message: 'Missing courtId, date, startTime, or lockedBy' });
@@ -348,6 +549,9 @@ apiRouter.post('/bookings/simulate-expire', (req, res) => {
     return res.status(404).json({ success: false, message: 'Booking not found' });
   }
   booking.created_at = new Date(Date.now() - 305 * 1000).toISOString();
+  if (booking.payment_link_id) {
+    RazorpayService.cancelPaymentLink(booking.payment_link_id).catch(() => {});
+  }
   const expiredCount = BookingService.expireUnpaidPendingBookings();
   res.json({ success: true, booking, expiredCount });
 });
@@ -406,14 +610,14 @@ apiRouter.get('/bookings/lookup', (req, res) => {
 /**
  * 10. List All Bookings (Admin / Sync)
  */
-apiRouter.get('/bookings', (req, res) => {
+apiRouter.get('/bookings', optionalAuth, (req, res) => {
   res.json({ success: true, bookings: store.getBookings() });
 });
 
 /**
  * 10b. Reset / Clear All Bookings (Dev / Fresh Test)
  */
-apiRouter.post('/bookings/reset', async (req, res) => {
+apiRouter.post('/bookings/reset', requireRole(['owner']), async (req, res) => {
   try {
     const supabase = getSupabase();
     if (supabase) {
@@ -452,6 +656,83 @@ apiRouter.post('/bookings/cancel', (req, res) => {
   }
 
   res.json(result);
+});
+
+/**
+ * 11b. Admin Refund Endpoint (Explicitly triggered by admin from dashboard)
+ * Once a refund is done, duplicate refunds are strictly disabled
+ */
+apiRouter.post('/bookings/admin-refund', requireRole(['owner', 'manager']), async (req, res) => {
+  try {
+    const { bookingRef, refundAmount, reason, adminId } = req.body;
+    if (!bookingRef) {
+      return res.status(400).json({ success: false, message: 'Missing bookingRef' });
+    }
+
+    const booking = store.getBookings().find(b => b.booking_ref === bookingRef || b.id === bookingRef);
+    if (!booking) {
+      return res.status(404).json({ success: false, message: `Booking ${bookingRef} not found` });
+    }
+
+    // Guard: Once a refund is done, the refund option must be disabled and cannot be refunded again
+    if (booking.status === 'refunded' || (booking.refund_amount !== undefined && booking.refund_amount > 0 && booking.refunded_at)) {
+      return res.status(400).json({
+        success: false,
+        message: `Booking ${bookingRef} has already been refunded (₹${booking.refund_amount}). Duplicate refunds are disabled.`
+      });
+    }
+
+    const parsedRefundAmount = Number(refundAmount) || 0;
+    const targetStatus = parsedRefundAmount > 0 ? 'refunded' : 'cancelled';
+
+    booking.status = targetStatus;
+    booking.refund_amount = parsedRefundAmount;
+    booking.refund_reason = reason || 'Admin authorized refund';
+    booking.refunded_at = new Date().toISOString();
+    booking.cancelled_by = 'admin';
+    booking.updated_at = new Date().toISOString();
+
+    // Release any lingering lock
+    LockService.releaseLock(booking.court_id, booking.booking_date, booking.start_time, booking.customer_phone);
+
+    // Call official Razorpay Refund API if payment was done via gateway
+    let razorpayResult = null;
+    if (booking.gateway_payment_id && parsedRefundAmount > 0) {
+      razorpayResult = await RazorpayService.refundPayment(booking.gateway_payment_id, parsedRefundAmount, {
+        booking_ref: booking.booking_ref,
+        reason: booking.refund_reason,
+        admin_id: adminId || 'admin'
+      });
+      if (razorpayResult?.refund_id) {
+        booking.gateway_refund_id = razorpayResult.refund_id;
+      }
+    }
+
+    // Persist to Supabase
+    SupabaseService.updateBooking(booking.id, {
+      status: targetStatus,
+      refund_amount: parsedRefundAmount,
+      refund_reason: booking.refund_reason,
+      refunded_at: booking.refunded_at,
+      gateway_refund_id: booking.gateway_refund_id || null,
+      updated_at: booking.updated_at
+    }).catch(err => console.warn('Supabase admin-refund sync error:', err.message));
+
+    // Send notification
+    const refundPct = booking.total_amount > 0 ? Math.round((parsedRefundAmount / booking.total_amount) * 100) : 0;
+    NotificationService.sendCancellationNotice(booking, parsedRefundAmount, refundPct);
+
+    return res.json({
+      success: true,
+      booking,
+      refundAmount: parsedRefundAmount,
+      gatewayRefundId: booking.gateway_refund_id || null,
+      message: `Refund of ₹${parsedRefundAmount} successfully executed for ${booking.booking_ref}`
+    });
+  } catch (err) {
+    console.error('Error processing admin refund:', err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 /**
@@ -512,7 +793,7 @@ apiRouter.get('/whatsapp/qr', (req, res) => {
 /**
  * 16. Request 8-Digit Pairing Code for a Phone Number
  */
-apiRouter.post('/whatsapp/pair', async (req, res) => {
+apiRouter.post('/whatsapp/pair', requireRole(['owner', 'manager']), async (req, res) => {
   try {
     const { phone } = req.body || {};
     const target = phone || process.env.WHATSAPP_PHONE_NUMBER || '9579158374';
@@ -526,7 +807,7 @@ apiRouter.post('/whatsapp/pair', async (req, res) => {
 /**
  * 17. Connect or Re-initialize WhatsApp Multi-Device Agent
  */
-apiRouter.post('/whatsapp/connect', (req, res) => {
+apiRouter.post('/whatsapp/connect', requireRole(['owner', 'manager']), (req, res) => {
   const { usePairingCode = true, phone } = req.body || {};
   WhatsAppService.init({
     usePairingCode: Boolean(usePairingCode),
@@ -538,7 +819,7 @@ apiRouter.post('/whatsapp/connect', (req, res) => {
 /**
  * 18. Disconnect and Clear WhatsApp Session
  */
-apiRouter.post('/whatsapp/disconnect', async (req, res) => {
+apiRouter.post('/whatsapp/disconnect', requireRole(['owner', 'manager']), async (req, res) => {
   const result = await WhatsAppService.disconnect();
   res.json(result);
 });
@@ -637,9 +918,9 @@ apiRouter.post('/bookings/generate-pass-html', async (req, res) => {
 });
 
 /**
- * 23. Dispatch Outbound Email via Resend
+ * 23. Dispatch Outbound Email via Nodemailer
  */
-apiRouter.post('/email/send', async (req, res) => {
+apiRouter.post('/email/send', otpLimiter, async (req, res) => {
   try {
     const { to, subject, html, text, from, attachments } = req.body || {};
     if (!to || !subject) {
@@ -682,7 +963,7 @@ apiRouter.post('/email/reminder/:ref', async (req, res) => {
 /**
  * 25. Dispatch Outbound SMS via Fast2SMS / Twilio / Simulation
  */
-apiRouter.post('/sms/send', async (req, res) => {
+apiRouter.post('/sms/send', otpLimiter, async (req, res) => {
   try {
     const { to, message, senderId, route, otpCode } = req.body || {};
     if (!to || !message) {
@@ -723,7 +1004,134 @@ apiRouter.post('/sms/reminder/:ref', async (req, res) => {
 });
 
 /**
- * 27. Interactive Razorpay Payment Checkout Portal with Live 5-Minute Countdown
+ * 27. Razorpay Payment Link Callback Receiver (Redirects here after payment on hosted page)
+ */
+apiRouter.get('/pay/callback', async (req, res) => {
+  const {
+    ref,
+    razorpay_payment_id,
+    razorpay_payment_link_id,
+    razorpay_payment_link_reference_id,
+    razorpay_payment_link_status,
+    razorpay_signature,
+    source
+  } = req.query;
+
+  const bookingRef = (ref || razorpay_payment_link_reference_id || '').toUpperCase();
+  const paymentId = razorpay_payment_id || `pay_${Date.now()}`;
+  const isPaid = razorpay_payment_link_status === 'paid' || Boolean(razorpay_payment_id);
+
+  console.log(`🔔 [RAZORPAY CALLBACK]: Ref=${bookingRef}, Status=${razorpay_payment_link_status}, PaymentId=${paymentId}`);
+
+  if (bookingRef && isPaid) {
+    BookingService.confirmBooking(bookingRef, paymentId);
+  }
+
+  const clientUrl = (process.env.CLIENT_URL || 'http://localhost:3000').replace(/\/$/, '');
+  if (source === 'site' || req.headers.referer?.includes(':3000')) {
+    return res.redirect(`${clientUrl}/?payment_status=success&booking_ref=${bookingRef}&payment_id=${paymentId}`);
+  }
+
+  res.redirect(`/pay/${bookingRef}?status=success`);
+});
+
+/**
+ * 28. Create a live Razorpay test mode payment link (for Website & WhatsApp)
+ */
+apiRouter.post('/payments/create-link', async (req, res) => {
+  try {
+    const {
+      bookingRef,
+      bookingId,
+      amount,
+      customerName,
+      customerPhone,
+      customerEmail,
+      courtName,
+      date,
+      startTime,
+      method,
+      redirectUrl
+    } = req.body || {};
+
+    const payment = await RazorpayService.createPaymentLinkAsync({
+      bookingId: bookingId || bookingRef,
+      bookingRef,
+      amount: Number(amount) || 1000,
+      customerName,
+      customerPhone,
+      customerEmail,
+      courtName,
+      date,
+      startTime,
+      redirectUrl
+    });
+
+    // Associate payment link with the booking in store
+    const targetRef = bookingRef || bookingId;
+    if (targetRef) {
+      const b = store.getBookings().find(bk => bk.booking_ref === targetRef || bk.id === targetRef);
+      if (b) {
+        b.payment_link_id = payment.payment_link_id;
+      }
+    }
+
+    res.json({
+      success: true,
+      payment_url: payment.payment_url,
+      payment_link_id: payment.payment_link_id,
+      order_id: payment.order_id,
+      amount: payment.amount
+    });
+  } catch (err) {
+    console.error('Error creating payment link:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+/**
+ * 28b. Cancel Razorpay Payment Link when slot lock ends or checkout modal is closed/expired
+ */
+apiRouter.post('/payments/cancel-link', async (req, res) => {
+  try {
+    const { bookingRef, paymentLinkId } = req.body || {};
+    let linkId = paymentLinkId;
+    let targetBooking = null;
+
+    if (bookingRef) {
+      targetBooking = store.getBookings().find(b => b.booking_ref === bookingRef || b.id === bookingRef);
+      if (targetBooking?.payment_link_id) {
+        linkId = targetBooking.payment_link_id;
+      }
+    }
+
+    if (!linkId) {
+      return res.status(400).json({ success: false, message: 'Missing bookingRef or paymentLinkId' });
+    }
+
+    const cancelRes = await RazorpayService.cancelPaymentLink(linkId);
+
+    if (targetBooking && targetBooking.status === 'pending_payment') {
+      targetBooking.status = 'cancelled';
+      targetBooking.notes = (targetBooking.notes ? targetBooking.notes + ' | ' : '') + 'Hold Expired - Razorpay link cancelled';
+      targetBooking.updated_at = new Date().toISOString();
+      LockService.releaseLock(targetBooking.court_id, targetBooking.booking_date, targetBooking.start_time, targetBooking.customer_phone);
+    }
+
+    res.json({
+      success: true,
+      cancelled: true,
+      paymentLinkId: linkId,
+      result: cancelRes
+    });
+  } catch (err) {
+    console.error('Error cancelling payment link:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+/**
+ * 29. Interactive Razorpay Payment Checkout Portal with Live 5-Minute Countdown & Redirect
  */
 apiRouter.get('/pay/:ref', async (req, res) => {
   BookingService.expireUnpaidPendingBookings();
@@ -768,7 +1176,7 @@ apiRouter.get('/pay/:ref', async (req, res) => {
             <p class="flex items-center gap-1.5"><svg class="w-3.5 h-3.5 text-emerald-700 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 9H4.5a2.5 2.5 0 010-5H6m12 5h1.5a2.5 2.5 0 000-5H18m-14 13h16m-10-7.34V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22m7-7.34V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22m1-20H6v7a6 6 0 0012 0V2z"/></svg><strong>Court:</strong> ${courtName}</p>
             <p class="flex items-center gap-1.5"><svg class="w-3.5 h-3.5 text-emerald-700 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" stroke-width="2"/><line x1="16" y1="2" x2="16" y2="6" stroke-width="2"/><line x1="8" y1="2" x2="8" y2="6" stroke-width="2"/><line x1="3" y1="10" x2="21" y2="10" stroke-width="2"/></svg><strong>Date:</strong> ${WhatsAppFormatter.formatDate(booking.booking_date)}</p>
             <p class="flex items-center gap-1.5"><svg class="w-3.5 h-3.5 text-emerald-700 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><polyline points="12 6 12 12 16 14" stroke-width="2"/></svg><strong>Time:</strong> ${WhatsAppFormatter.formatTime(booking.start_time)} — ${WhatsAppFormatter.formatTime(booking.end_time)}</p>
-            <p class="flex items-center gap-1.5"><svg class="w-3.5 h-3.5 text-emerald-700 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2" stroke-width="2"/><line x1="2" y1="10" x2="22" y2="10" stroke-width="2"/></svg><strong>Paid:</strong> ₹${booking.total_amount} (Razorpay UPI)</p>
+            <p class="flex items-center gap-1.5"><svg class="w-3.5 h-3.5 text-emerald-700 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2" stroke-width="2"/><line x1="2" y1="10" x2="22" y2="10" stroke-width="2"/></svg><strong>Paid:</strong> ₹${booking.total_amount} (Razorpay Verified)</p>
           </div>
           <div class="pt-2 flex flex-col gap-2">
             <a href="/api/bookings/${booking.booking_ref}/pass.pdf" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-3 px-4 rounded-xl text-xs shadow transition flex items-center justify-center gap-2">
@@ -787,6 +1195,9 @@ apiRouter.get('/pay/:ref', async (req, res) => {
 
   // If expired or cancelled:
   if (booking.status === 'cancelled' || booking.status === 'expired' || remainingSec <= 0) {
+    if (booking.payment_link_id) {
+      RazorpayService.cancelPaymentLink(booking.payment_link_id).catch(() => {});
+    }
     return res.send(`
       <!DOCTYPE html>
       <html><head><title>Hold Expired - ${booking.booking_ref}</title><meta name="viewport" content="width=device-width, initial-scale=1.0"><script src="https://cdn.tailwindcss.com"></script></head>
@@ -810,7 +1221,27 @@ apiRouter.get('/pay/:ref', async (req, res) => {
     `);
   }
 
-  // Active Pending Hold - Show Interactive Checkout with Live Countdown
+  // Generate live Razorpay Test Mode Payment Link
+  const razorpayPayment = await RazorpayService.createPaymentLinkAsync({
+    bookingId: booking.id,
+    bookingRef: booking.booking_ref,
+    amount: booking.total_amount,
+    customerName: booking.customer_name,
+    customerPhone: booking.customer_phone,
+    courtName,
+    date: booking.booking_date,
+    startTime: booking.start_time
+  });
+
+  const paymentUrl = razorpayPayment.payment_url;
+  booking.payment_link_id = razorpayPayment.payment_link_id;
+
+  // Immediate redirect if requested
+  if (req.query.redirect === '1' || req.query.direct === '1') {
+    return res.redirect(paymentUrl);
+  }
+
+  // Active Pending Hold - Show Interactive Checkout with Selected Payment Options
   return res.send(`
     <!DOCTYPE html>
     <html>
@@ -826,17 +1257,20 @@ apiRouter.get('/pay/:ref', async (req, res) => {
         <!-- Header -->
         <div class="bg-[#006b30] text-white p-5 text-center">
           <div class="text-2xl font-black tracking-tight">${venue.name}</div>
-          <p class="text-xs text-white/80 uppercase tracking-widest mt-0.5 font-bold">Secure Razorpay Payment Portal</p>
+          <div class="inline-flex items-center gap-1.5 bg-emerald-800/80 px-3 py-1 rounded-full mt-1.5 text-[11px] font-bold text-emerald-100">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            Razorpay Test Mode Gateway
+          </div>
         </div>
 
         <div class="p-6 space-y-4">
           
           <!-- Live 5-Minute Countdown Box -->
-          <div id="timer-box" class="bg-amber-50 border-2 border-dashed border-amber-400 rounded-2xl p-4 text-center">
+          <div id="timer-box" class="bg-amber-50 border-2 border-dashed border-amber-400 rounded-2xl p-3.5 text-center">
             <span class="text-[10px] font-extrabold text-amber-800 uppercase tracking-wider block">
               Slot Held on Website & WhatsApp
             </span>
-            <div id="countdown" class="text-3xl font-mono font-black text-amber-700 my-1">
+            <div id="countdown" class="text-3xl font-mono font-black text-amber-700 my-0.5">
               --:--
             </div>
             <p class="text-[11px] text-amber-800 font-medium">
@@ -862,21 +1296,50 @@ apiRouter.get('/pay/:ref', async (req, res) => {
               <span class="text-slate-500 font-bold uppercase text-[10px]">Customer</span>
               <span class="font-medium text-slate-800">${booking.customer_name || 'Player'}</span>
             </div>
-            <div class="flex justify-between items-center">
-              <span class="text-slate-500 font-bold uppercase text-[10px]">Gate Entry Pass</span>
-              <span class="text-slate-400 italic text-[11px]">Minted securely upon payment</span>
-            </div>
             <div class="flex justify-between items-center pt-2 border-t border-slate-200">
               <span class="text-slate-700 font-extrabold text-xs">Total Amount</span>
               <span class="font-black text-lg text-emerald-700">₹${booking.total_amount}</span>
             </div>
           </div>
 
-          <!-- Pay Button -->
-          <button id="pay-btn" onclick="executePayment()" class="w-full bg-[#006b30] hover:bg-[#005224] text-white font-black py-3.5 px-4 rounded-2xl text-sm shadow-lg transition flex items-center justify-center gap-2 cursor-pointer">
-            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2" stroke-width="2"/><line x1="2" y1="10" x2="22" y2="10" stroke-width="2"/></svg>
-            <span>Pay ₹${booking.total_amount} with Razorpay UPI</span>
-          </button>
+          <!-- Payment Options Grid -->
+          <div class="space-y-2">
+            <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wide">Choose Payment Option:</h4>
+            
+            <div class="grid grid-cols-2 gap-2">
+              <!-- Option 1: Instant UPI -->
+              <a href="${paymentUrl}" class="p-3 rounded-2xl border-2 border-emerald-500/40 bg-emerald-50/50 hover:bg-emerald-100 hover:border-emerald-600 transition text-left space-y-1 block shadow-sm">
+                <div class="flex items-center justify-between font-bold text-xs text-emerald-900">
+                  <span>📱 Instant UPI</span>
+                  <span class="text-[9px] bg-emerald-200 text-emerald-900 px-1.5 py-0.5 rounded font-bold">FAST</span>
+                </div>
+                <p class="text-[10px] text-slate-600">GPay, PhonePe, Paytm, QR</p>
+              </a>
+
+              <!-- Option 2: Cards -->
+              <a href="${paymentUrl}" class="p-3 rounded-2xl border-2 border-slate-200 hover:border-emerald-600 hover:bg-slate-50 transition text-left space-y-1 block shadow-sm">
+                <div class="flex items-center justify-between font-bold text-xs text-slate-800">
+                  <span>💳 Card</span>
+                  <span class="text-[9px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded font-bold">CARDS</span>
+                </div>
+                <p class="text-[10px] text-slate-600">Visa, Mastercard, RuPay</p>
+              </a>
+            </div>
+
+            <!-- Primary Action Button: Takes user directly to Razorpay Redirect Page -->
+            <a id="pay-btn" href="${paymentUrl}" class="w-full bg-[#006b30] hover:bg-[#005224] text-white font-black py-3.5 px-4 rounded-2xl text-sm shadow-lg transition flex items-center justify-center gap-2 cursor-pointer">
+              <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2" stroke-width="2"/><line x1="2" y1="10" x2="22" y2="10" stroke-width="2"/></svg>
+              <span>Proceed to Razorpay Payment (₹${booking.total_amount}) →</span>
+            </a>
+
+            <!-- Sandbox Simulator Instant Test Button -->
+            <div class="pt-2 border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-500">
+              <span>Testing without payment?</span>
+              <button onclick="executeLocalConfirm()" class="text-emerald-700 hover:text-emerald-900 font-bold hover:underline cursor-pointer">
+                Instant Verify (Simulated)
+              </button>
+            </div>
+          </div>
 
           <!-- Success Area (Hidden by default) -->
           <div id="success-box" class="hidden text-center space-y-3 pt-2">
@@ -884,7 +1347,7 @@ apiRouter.get('/pay/:ref', async (req, res) => {
               <svg class="w-6 h-6 text-emerald-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
             </div>
             <h3 class="text-lg font-black text-emerald-800">Payment Confirmed!</h3>
-            <p class="text-xs text-slate-600">Your slot is now permanently booked. The official gate pass has been dispatched to your WhatsApp.</p>
+            <p class="text-xs text-slate-600">Your slot is now permanently booked. The official gate pass has been dispatched.</p>
             <div class="flex flex-col gap-2 pt-2">
               <a href="/api/bookings/${booking.booking_ref}/pass.pdf" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 px-4 rounded-xl text-xs shadow flex items-center justify-center gap-1.5">
                 <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
@@ -910,7 +1373,7 @@ apiRouter.get('/pay/:ref', async (req, res) => {
 
         <div class="bg-slate-50 p-3 border-t border-slate-200 text-center text-[10px] text-slate-500 font-medium flex items-center justify-center gap-1.5">
           <svg class="w-3.5 h-3.5 text-slate-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke-width="2"/><path d="M7 11V7a5 5 0 0110 0v4" stroke-width="2"/></svg>
-          <span>256-Bit SSL Encrypted Razorpay Payments | TurfFlow Arena</span>
+          <span>Razorpay Test Mode (Key: rzp_test_TzDkSqPNwT910d) | TurfFlow Arena</span>
         </div>
       </div>
 
@@ -938,32 +1401,28 @@ apiRouter.get('/pay/:ref', async (req, res) => {
         }
         updateCountdown();
 
-        async function executePayment() {
-          payBtn.disabled = true;
-          payBtn.innerText = 'Processing Razorpay UPI...';
+        async function executeLocalConfirm() {
+          const btn = document.getElementById('pay-btn');
+          if (btn) { btn.disabled = true; btn.innerText = 'Verifying...'; }
           try {
             const res = await fetch('/api/bookings/confirm', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 bookingRef: '${booking.booking_ref}',
-                paymentId: 'pay_rzp_' + Date.now()
+                paymentId: 'pay_test_' + Date.now()
               })
             });
             const data = await res.json();
             if (data.success) {
-              payBtn.classList.add('hidden');
-              timerBox.classList.add('hidden');
-              successBox.classList.remove('hidden');
+              if (payBtn) payBtn.classList.add('hidden');
+              if (timerBox) timerBox.classList.add('hidden');
+              if (successBox) successBox.classList.remove('hidden');
             } else {
-              alert(data.message || 'Payment confirmation failed');
-              payBtn.disabled = false;
-              payBtn.innerText = '💳 Pay ₹${booking.total_amount} with Razorpay UPI';
+              alert(data.message || 'Payment verification failed');
             }
           } catch (e) {
-            alert('Error connecting to server: ' + e.message);
-            payBtn.disabled = false;
-            payBtn.innerText = '💳 Pay ₹${booking.total_amount} with Razorpay UPI';
+            alert('Error: ' + e.message);
           }
         }
       </script>

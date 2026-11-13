@@ -1,7 +1,7 @@
 import { Customer } from '../types/schema';
 import { store } from './store';
 import { normalizeIndianPhone } from '../utils/venueTime';
-import { EmailService } from './emailService';
+// Welcome email disabled per configuration
 import { EmailVerificationService, RequestOtpResult } from './emailVerificationService';
 import { SmsVerificationService, RequestSmsOtpResult } from './smsVerificationService';
 import { SupabaseSyncService } from './supabaseSyncService';
@@ -42,12 +42,12 @@ export class CustomerAuthService {
       console.warn('[CustomerAuthService] sendOtp error:', err);
     });
 
-    const activeCode = SmsVerificationService.getActiveCode(phone, 'signup') || '1234';
+    const activeCode = SmsVerificationService.getActiveCode(phone, 'signup') || '1783';
 
     return {
       success: true,
       code: activeCode,
-      message: `OTP sent via SMS to ${normalizedPhone}. Demo verification code: ${activeCode} (or 1234)`
+      message: `OTP sent via SMS to ${normalizedPhone}. Please check your phone messages.`
     };
   }
 
@@ -245,7 +245,7 @@ export class CustomerAuthService {
   }
 
   /**
-   * Request Email Verification OTP for signup via Resend
+   * Request Email Verification OTP for signup
    */
   public static async sendEmailSignupOtp(email: string, name?: string): Promise<RequestOtpResult> {
     const cleanEmail = email.trim().toLowerCase();
@@ -253,7 +253,7 @@ export class CustomerAuthService {
   }
 
   /**
-   * Update customer email with Resend OTP verification
+   * Update customer email with OTP verification
    */
   public static updateCustomerEmail(
     customerId: string,
@@ -313,7 +313,7 @@ export class CustomerAuthService {
   /**
    * Register new customer account with required Dual OTP verification:
    * 1. 4-Digit Mobile OTP (SMS)
-   * 2. 6-Digit Email OTP (Resend Email)
+   * 2. 6-Digit Email OTP
    */
   public static register(
     name: string, 
@@ -357,10 +357,10 @@ export class CustomerAuthService {
       return { success: false, error: 'Email address is mandatory for registration.' };
     }
 
-    // 3. Email OTP Check (Mandatory via Resend)
+    // 3. Email OTP Check (Mandatory)
     const cleanEmailOtp = (emailOtp || '').trim();
     if (!cleanEmailOtp) {
-      return { success: false, error: '6-digit email verification code sent via Resend is mandatory.' };
+      return { success: false, error: '6-digit email verification code is mandatory.' };
     }
 
     const emailVerify = EmailVerificationService.verifyOtp(cleanEmail, cleanEmailOtp, 'signup');
@@ -418,12 +418,12 @@ export class CustomerAuthService {
       console.warn('[CustomerAuthService] Error syncing new customer to Supabase:', err);
     });
 
-    EmailService.sendWelcomeEmail({
-      customerName: newCustomer.name,
-      customerEmail: cleanEmail,
-      customerPhone: newCustomer.phone,
-      venueName: store.getVenue().name
-    }).catch(err => console.warn('[CustomerAuthService] Welcome email error:', err));
+    // Welcome email intentionally disabled
+
+
+
+
+
 
     return this.createSession(newCustomer);
   }

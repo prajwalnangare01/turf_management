@@ -11,6 +11,8 @@ process.on('unhandledRejection', (reason) => {
 import './env.js';
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import pino from 'pino';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -29,7 +31,42 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-app.use(cors());
+export const logger = pino({
+  level: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'info' : 'debug'),
+  timestamp: pino.stdTimeFunctions.isoTime
+});
+
+// Production Security Headers via Helmet
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false
+}));
+
+// CORS lockdown: whitelist allowed origin URLs
+const clientOrigin = (process.env.CLIENT_URL || 'http://localhost:5173').replace(/\/$/, '');
+const allowedOrigins = [
+  clientOrigin,
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://localhost:5000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:5000'
+];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin) || origin.startsWith('http://localhost:')) {
+      return callback(null, true);
+    }
+    if (process.env.NODE_ENV === 'production') {
+      logger.warn({ blockedOrigin: origin }, 'Blocked request by CORS policy');
+      return callback(new Error(`CORS blocked for origin: ${origin}`));
+    }
+    return callback(null, true);
+  },
+  credentials: true
+}));
 
 // Webhook raw parsing for signature check
 app.use('/api/webhooks', webhookRouter);
@@ -114,6 +151,16 @@ app.get('*', (req, res, next) => {
     return res.sendFile(indexPath);
   }
   res.redirect('/simulator');
+});
+
+// Global error handling middleware with structured logging
+app.use((err, req, res, next) => {
+  logger.error({ err: err?.message || err, url: req.url, method: req.method }, 'Unhandled Express API Error');
+  res.status(err.status || 500).json({
+    success: false,
+    error: process.env.NODE_ENV === 'production' ? 'Internal server error occurred.' : (err?.message || 'Server error'),
+    code: err.code || 'INTERNAL_ERROR'
+  });
 });
 
 // Boot and initialize Supabase synchronization

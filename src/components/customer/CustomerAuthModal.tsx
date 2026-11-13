@@ -18,7 +18,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
   const [loginIdentity, setLoginIdentity] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
 
-  // Sign up form fields (Dual OTP Mandatory: Mobile OTP + Resend Email OTP)
+  // Sign up form fields (Dual OTP Mandatory: Mobile OTP + Email OTP)
   const [signupName, setSignupName] = useState('');
   const [signupPhone, setSignupPhone] = useState('');
   const [signupMobileOtp, setSignupMobileOtp] = useState('');
@@ -84,7 +84,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
         setMobileCooldown(30);
         setMobileOtpNotice(
           res.isSimulated
-            ? `📱 Simulation Code: ${res.code} (Enter this code to verify)`
+            ? `SMS OTP sent to +91 ${cleanDigits.slice(-10)}. Please check your messages.`
             : `SMS OTP sent to +91 ${cleanDigits.slice(-10)}. Please check your messages.`
         );
       } else {
@@ -121,15 +121,15 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
         setEmailCooldown(30);
         setEmailOtpNotice(
           res.isSandbox
-            ? `📧 Resend Testing Code: ${res.code} (Free Resend tier delivers to prajwalnangare41@gmail.com)`
+            ? `📧 Verification Code: ${res.code}`
             : `6-digit verification code sent to ${cleanEmail}. Check your inbox!`
         );
       } else {
-        setError(res.message || 'Failed to dispatch email verification code via Resend');
+        setError(res.message || 'Failed to dispatch email verification code');
       }
     } catch (err: any) {
       setIsSendingEmailOtp(false);
-      setError(err?.message || 'Error communicating with Resend email service');
+      setError(err?.message || 'Error communicating with email service');
     }
   };
 
@@ -153,11 +153,11 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
         const isEmail = id.includes('@');
         const isSim = (res as any).isSimulated || (res as any).isSandbox;
         setForgotOtpNotice(
-          isSim
+          isSim && isEmail
             ? `🔑 Verification Code: ${(res as any).code} (Enter this code to reset password)`
             : isEmail
               ? `Password reset code sent to ${id}. Please check your email inbox.`
-              : `Password reset OTP sent via SMS to +91 ${id.replace(/\D/g, '').slice(-10)}.`
+              : `Password reset OTP sent via SMS to +91 ${id.replace(/\D/g, '').slice(-10)}. Please check your messages.`
         );
       } else {
         setError(res.message || 'No account found with this phone number or email.');
@@ -280,13 +280,13 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
     setSignupName(`Player ${randomSuffix}`);
     setSignupPhone(`981234${randomSuffix}`);
-    setSignupMobileOtp('1234');
+    setSignupMobileOtp('1783');
     setMobileOtpSent(true);
-    setMobileOtpNotice(`Mobile OTP sent to +91 981234${randomSuffix}. Demo code: 1234`);
+    setMobileOtpNotice(`Mobile OTP sent to +91 981234${randomSuffix}. Please check your messages.`);
     setSignupEmail(`player${randomSuffix}@gmail.com`);
     setSignupEmailOtp('123456');
     setEmailOtpSent(true);
-    setEmailOtpNotice(`Email code sent to player${randomSuffix}@gmail.com via Resend. Demo code: 123456`);
+    setEmailOtpNotice(`Email code sent to player${randomSuffix}@gmail.com via Email. Demo code: 123456`);
     setSignupPassword('pass123');
     setError(null);
   };
@@ -452,7 +452,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
           </form>
         )}
 
-        {/* OPTION 2: SIGN UP (Both Mobile OTP and Resend Email OTP Mandatory) */}
+        {/* OPTION 2: SIGN UP (Both Mobile OTP and Email OTP Mandatory) */}
         {authMethod === 'signup' && (
           <form onSubmit={handleSignupSubmit} className="space-y-2 text-xs">
             {/* Full Name & Password Grid */}
@@ -553,11 +553,11 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
               )}
             </div>
 
-            {/* 2. Email Address & Email OTP via Resend in 1 tight card */}
+            {/* 2. Email Address & Email OTP in 1 tight card */}
             <div className="space-y-1 bg-surface-container-low p-2 rounded-xl border border-outline-variant/40">
               <div className="flex items-center justify-between text-[10.5px]">
                 <label className="font-headline font-bold text-on-surface-variant flex items-center gap-1">
-                  <Mail className="w-3 h-3 text-primary" /> Email Address (Resend) *
+                  <Mail className="w-3 h-3 text-primary" /> Email Address *
                 </label>
                 <span className="text-[9.5px] text-on-surface-variant font-medium">6-Digit Email Code</span>
               </div>

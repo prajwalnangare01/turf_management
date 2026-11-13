@@ -72,9 +72,9 @@ export class NotificationService {
 
     logs.unshift(primaryLog);
 
-    // 2. Dispatch Resend Email if recipient has email and email is enabled
-    const isEmailEnabled = venue.email_enabled !== false;
-    if (recipientEmail && isEmailEnabled && (customer || (booking as any).customer_email)) {
+    // 2. Dispatch Email if recipient has email and email is enabled
+    const isWhatsAppBooking = (booking.source as string) === 'whatsapp' || booking.source === 'offline_whatsapp'; const isEmailEnabled = venue.email_enabled !== false;
+    if (!isWhatsAppBooking && recipientEmail && isEmailEnabled && (customer || (booking as any).customer_email)) {
       const effectiveCustomer = customer || {
         id: booking.customer_id,
         name: booking.customer_name || 'Player',
@@ -110,7 +110,7 @@ export class NotificationService {
           type,
           status: 'delivered',
           recipient: recipientEmail,
-          message_preview: `[Resend] ${emailSubject}`,
+          message_preview: `[Email] ${emailSubject}`,
           retry_count: 0,
           sent_at: new Date().toISOString()
         };
@@ -118,7 +118,7 @@ export class NotificationService {
         logs.unshift(emailLog);
       }
 
-      // Async trigger Resend dispatch
+      // Async trigger Email dispatch
       if (type === 'confirmation') {
         EmailService.sendBookingConfirmation({
           booking,

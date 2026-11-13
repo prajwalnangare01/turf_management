@@ -1,6 +1,32 @@
-// Resend Email Service for TurfFlow Backend Server
+// Nodemailer SMTP Email Service for TurfFlow Backend Server
+import nodemailer from 'nodemailer';
 import { store } from '../data/store.js';
 import { WhatsAppFormatter } from '../utils/whatsappFormatter.js';
+
+let transporterInstance = null;
+
+function getTransporter() {
+  const user = process.env.SMTP_USER || process.env.EMAIL_USER || process.env.SMTP_EMAIL || 'rajupainter84688@gmail.com';
+  const rawPass = process.env.SMTP_PASS || process.env.EMAIL_PASS || process.env.SMTP_PASSWORD || 'gbnl yhwn aowz wtbt';
+  const pass = rawPass ? rawPass.replace(/\s+/g, '') : '';
+  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const port = parseInt(process.env.SMTP_PORT || '465', 10);
+  const secure = process.env.SMTP_SECURE !== 'false';
+
+  if (!pass || pass === 'your_smtp_app_password') {
+    return null;
+  }
+
+  if (!transporterInstance) {
+    transporterInstance = nodemailer.createTransport({
+      host,
+      port,
+      secure,
+      auth: { user, pass }
+    });
+  }
+  return transporterInstance;
+}
 
 export class EmailService {
   static DEFAULT_SENDER = 'TurfFlow Arena <rajupainter84688@gmail.com>';
@@ -29,21 +55,22 @@ export class EmailService {
   }
 
   /**
-   * Send email using Resend REST API
+   * Send email using Nodemailer SMTP
    */
   static async sendEmail({ to, subject, html, text, from, reply_to, attachments }) {
-    const apiKey = process.env.RESEND_API_KEY || process.env.VITE_RESEND_API_KEY;
-    const rawSender = from || process.env.RESEND_FROM_EMAIL || 'rajupainter84688@gmail.com';
-    const fromAddress = rawSender.includes('<') ? rawSender : `TurfFlow Arena <${rawSender}>`;
-    const replyTo = reply_to || process.env.RESEND_REPLY_TO_EMAIL || 'rajupainter84688@gmail.com';
+    const rawSender = from || process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER || 'rajupainter84688@gmail.com';
+    const senderName = process.env.SMTP_FROM_NAME || 'TurfFlow Arena';
+    const fromAddress = rawSender.includes('<') ? rawSender : `"${senderName}" <${rawSender}>`;
+    const replyTo = reply_to || process.env.SMTP_REPLY_TO || rawSender;
     const cleanTo = (to || '').trim();
 
     if (!cleanTo) {
       return { success: false, error: 'Recipient email is missing' };
     }
 
-    if (!apiKey || apiKey === 're_your_resend_api_key' || !apiKey.startsWith('re_')) {
-      console.log(`[Resend Backend Mock Email] From: ${fromAddress} | To: ${cleanTo} | Subject: "${subject}" | Attachments: ${attachments ? attachments.length : 0}`);
+    const transporter = getTransporter();
+    if (!transporter) {
+      console.log(`[SMTP Backend Mock Email] From: ${fromAddress} | To: ${cleanTo} | Subject: "${subject}" | Attachments: ${attachments ? attachments.length : 0}`);
       return {
         success: true,
         simulated: true,
@@ -52,64 +79,32 @@ export class EmailService {
     }
 
     try {
-      let response = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          from: fromAddress,
-          reply_to: replyTo,
-          to: Array.isArray(cleanTo) ? cleanTo : [cleanTo],
-          subject,
-          html,
-          text,
-          attachments: attachments || undefined
-        })
-      });
+      const mailOptions = {
+        from: fromAddress,
+        to: cleanTo,
+        replyTo,
+        subject,
+        text,
+        html
+      };
 
-      let resJson = await response.json();
-
-      // Auto-fallback if gmail/custom domain is not verified on Resend
-      if (!response.ok && (resJson?.message?.includes('not verified') || resJson?.message?.includes('domain'))) {
-        const fallbackFrom = `rajupainter84688@gmail.com <onboarding@resend.dev>`;
-        console.warn(`[Backend Resend Fallback] Retrying via "${fallbackFrom}" with reply_to: "${replyTo}"`);
-        response = await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            from: fallbackFrom,
-            reply_to: replyTo,
-            to: Array.isArray(cleanTo) ? cleanTo : [cleanTo],
-            subject,
-            html,
-            text,
-            attachments: attachments || undefined
-          })
-        });
-        resJson = await response.json();
-      }
-      if (!response.ok) {
-        console.warn(`[Resend Server Error] ${response.status}:`, resJson);
-        return {
-          success: false,
-          error: resJson?.message || 'Resend API rejected message',
-          details: resJson
-        };
+      if (attachments && Array.isArray(attachments)) {
+        mailOptions.attachments = attachments.map(att => ({
+          filename: att.filename,
+          content: typeof att.content === 'string' ? Buffer.from(att.content, 'base64') : att.content,
+          contentType: att.contentType
+        }));
       }
 
-      console.log(`✉️ [RESEND OUTBOUND to ${cleanTo}] ID: ${resJson.id} | Subject: "${subject}"`);
+      const info = await transporter.sendMail(mailOptions);
+      console.log(`✉️ [NODEMAILER OUTBOUND to ${cleanTo}] ID: ${info.messageId} | Subject: "${subject}"`);
       return {
         success: true,
-        id: resJson.id,
+        id: info.messageId,
         simulated: false
       };
     } catch (err) {
-      console.error('[Resend Fetch Error]:', err.message);
+      console.error('[Nodemailer Send Error]:', err.message);
       return {
         success: false,
         error: err.message
@@ -214,7 +209,7 @@ export class EmailService {
     </tr>
     <tr>
       <td style="background: #f8fafc; padding: 16px 24px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8;">
-        ${venue.name} &bull; Powered by Resend API
+        ${venue.name} &bull; Powered by Nodemailer Email Service
       </td>
     </tr>
   </table>
@@ -328,7 +323,7 @@ export class EmailService {
     </tr>
     <tr>
       <td style="background: #f8fafc; padding: 16px 24px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8;">
-        ${venue.name} &bull; Powered by Resend API
+        ${venue.name} &bull; Powered by Nodemailer Email Service
       </td>
     </tr>
   </table>

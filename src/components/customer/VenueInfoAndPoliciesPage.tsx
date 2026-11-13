@@ -694,7 +694,7 @@ export const VenueInfoAndPoliciesPage: React.FC<VenueInfoAndPoliciesPageProps> =
                 <ul className="list-disc list-inside space-y-1 pt-1 text-[10.5px] sm:text-[11px] font-medium text-on-surface">
                   <li><strong>Full Name:</strong> To identify the booking party on pitch rosters.</li>
                   <li><strong>10-Digit Mobile Phone:</strong> Used for secure SMS OTP authentication and automated WhatsApp Gate Pass delivery.</li>
-                  <li><strong>Email Address:</strong> Used for sending verified digital tax invoices, booking receipts, and account notices via Resend.</li>
+                  <li><strong>Email Address:</strong> Used for sending verified digital tax invoices, booking receipts, and account notices via digital email.</li>
                 </ul>
               </div>
 

@@ -83,4 +83,6 @@ whatsapp_session/
 bin/
 **/bin/
 *.exe
+backups/
+**/backups/
 

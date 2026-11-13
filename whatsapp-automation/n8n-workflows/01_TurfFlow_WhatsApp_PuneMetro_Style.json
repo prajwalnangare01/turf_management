@@ -1,0 +1,77 @@
+{
+  "id": "turfflow-agent-001",
+  "name": "TurfFlow WhatsApp AI Agent \u2014 Pune Metro Guided Flow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "turfflow-whatsapp",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-webhook-inbound",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        180,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pune Metro Guided State Machine for WhatsApp Turf Booking\nconst body = $input.first().json.body || $input.first().json;\n\nlet fromPhone = body.fromPhone || body.From || '+917385507049';\nif (!fromPhone.startsWith('+')) fromPhone = '+91' + fromPhone.slice(-10);\nconst senderName = body.senderName || 'Player';\nconst text = (body.messageText || body.Body || body.text || '').trim();\nconst lower = text.toLowerCase();\n\n// Ignore bot echoes, URLs or previews\nif (!text || lower.includes('maps.google') || lower.includes('http://') || lower.includes('https://') || lower.startsWith('\ud83d\udccd') || lower.startsWith('\ud83d\udc4b') || lower.startsWith('\ud83c\udfc6') || lower.startsWith('\u23f0') || lower.startsWith('\ud83d\udd12') || lower.startsWith('\u2705') || lower.startsWith('\u274c')) {\n  return { json: { reply: '', step: 'IGNORED' } };\n}\n\nconst BACKEND = 'http://localhost:5000/api';\n\n// 1. Load persistent session state from n8n static data\nconst staticData = $getWorkflowStaticData('global');\nstaticData.sessions = staticData.sessions || {};\nlet session = staticData.sessions[fromPhone] || { step: 'MAIN_MENU' };\n\nlet reply = '';\n\n// Reset / Main Menu triggers\nif (/^(hi|hello|hey|menu|start|0|reset)$/i.test(lower)) {\n  session = { step: 'MAIN_MENU' };\n  staticData.sessions[fromPhone] = session;\n  reply = `\ud83d\udc4b Namaskar! Welcome to TurfFlow Arena \ud83c\udfdf\ufe0f\\n\\nPlease choose an option:\\n1\ufe0f\u20e3 \ud83d\udcc5 Book a Court\\n2\ufe0f\u20e3 \u274c View / Cancel Booking\\n3\ufe0f\u20e3 \ud83d\udcb0 Enquiry & Pricing\\n4\ufe0f\u20e3 \ud83d\udccd Location & Map\\n\\nReply with 1, 2, 3, or 4`;\n  return { json: { reply, step: session.step } };\n}\n\n// 2. STATE: MAIN_MENU\nif (session.step === 'MAIN_MENU') {\n  if (lower === '1' || /^(book|booking|reserve|slots?)$/i.test(lower)) {\n    session.step = 'SELECT_DATE';\n    const today = new Date().toISOString().slice(0, 10);\n    const tom = new Date(Date.now() + 86400000).toISOString().slice(0, 10);\n    session.dates = { '1': today, '2': tom };\n    reply = `\ud83d\udcc5 *Step 1: Choose Date*\\n1\ufe0f\u20e3 Today (${today})\\n2\ufe0f\u20e3 Tomorrow (${tom})\\n\\nReply with 1 or 2 (or 0 for Menu)`;\n  } else if (lower === '2' || /^(cancel|refund)$/i.test(lower)) {\n    try {\n      const res = await this.helpers.httpRequest({\n        method: 'GET',\n        url: `${BACKEND}/bookings/lookup?phone=${encodeURIComponent(fromPhone)}`,\n        json: true\n      });\n      const active = (res.bookings || []).filter(b => b.status === 'confirmed' || b.status === 'pending_payment');\n      if (active.length === 0) {\n        reply = `\u2139\ufe0f You have no active reservations.\\n\\nReply 1 to book a court or 0 for Menu.`;\n        session.step = 'MAIN_MENU';\n      } else {\n        session.step = 'CANCEL_SELECT';\n        session.activeBookings = active;\n        reply = `\u274c *Select Booking to Cancel:*\\n` +\n          active.map((b, i) => `${i+1}\ufe0f\u20e3 ${b.booking_ref} (${b.court_name}, ${b.booking_date} @ ${b.start_time}, \u20b9${b.total_amount})`).join('\\n') +\n          `\\n\\nReply with number (e.g. 1) or 0 for Menu`;\n      }\n    } catch (e) {\n      reply = `\u26a0\ufe0f Could not fetch bookings. Please try again or reply 0.`;\n    }\n  } else if (lower === '3' || /^(price|pricing|rates?|cost|offers?|discounts?)$/i.test(lower)) {\n    reply = `\ud83d\udcb0 *Turf Rates & Offers (per hr):*\\n\u2022 Football (Turf A): \u20b91200 / \u20b91800 (Peak)\\n\u2022 Cricket (Turf B): \u20b91000 / \u20b91500 (Peak)\\n\u2022 Badminton (Court 1): \u20b9500 / \u20b9800 (Peak)\\n\\n\ud83d\udd25 Active Coupon: *WELCOME100* (\u20b9100 off)\\n\\nReply 1 to Book or 0 for Menu.`;\n  } else if (lower === '4' || /^(location|map|address|where)$/i.test(lower)) {\n    reply = `\ud83d\udccd *TurfFlow Arena Location:*\\nPlot 42, Sports Enclave, Pune 411045\\nOpp. Sports Authority Dugout\\n\ud83d\uddfa\ufe0f Map: https://maps.google.com/?q=18.5204,73.8567\\n\\nReply 1 to Book or 0 for Menu.`;\n  } else {\n    reply = `\u2139\ufe0f Please reply with *1* to Book, *2* to Cancel, *3* for Pricing, or *4* for Location (or 0 for Menu).`;\n  }\n  staticData.sessions[fromPhone] = session;\n  return { json: { reply, step: session.step } };\n}\n\n// 3. STATE: SELECT_DATE\nif (session.step === 'SELECT_DATE') {\n  let targetDate = session.dates ? session.dates[lower] : null;\n  if (!targetDate) {\n    if (lower.includes('today')) targetDate = new Date().toISOString().slice(0, 10);\n    else if (lower.includes('tomorrow')) targetDate = new Date(Date.now() + 86400000).toISOString().slice(0, 10);\n  }\n  if (!targetDate) {\n    reply = `\u26a0\ufe0f Please reply *1* for Today or *2* for Tomorrow (or 0 for Menu).`;\n  } else {\n    session.date = targetDate;\n    session.step = 'SELECT_SPORT';\n    reply = `\ud83c\udfc6 *Step 2: Choose Sport for ${targetDate}*\\n1\ufe0f\u20e3 \u26bd Football (Turf A)\\n2\ufe0f\u20e3 \ud83c\udfcf Box Cricket (Turf B)\\n3\ufe0f\u20e3 \ud83c\udff8 Badminton (Court 1)\\n4\ufe0f\u20e3 \ud83c\udfd3 Pickleball (Court 2)\\n\\nReply with 1, 2, 3, or 4 (or 0 for Menu)`;\n  }\n  staticData.sessions[fromPhone] = session;\n  return { json: { reply, step: session.step } };\n}\n\n// 4. STATE: SELECT_SPORT\nif (session.step === 'SELECT_SPORT') {\n  const sportMap = { '1': 'football', '2': 'cricket', '3': 'badminton', '4': 'pickleball' };\n  const sportNames = { '1': 'Football \u26bd', '2': 'Cricket \ud83c\udfcf', '3': 'Badminton \ud83c\udff8', '4': 'Pickleball \ud83c\udfd3' };\n  const sport = sportMap[lower] || (['football','cricket','badminton','pickleball'].find(s => lower.includes(s)));\n  if (!sport) {\n    reply = `\u26a0\ufe0f Please select a valid sport:\\n1\ufe0f\u20e3 Football\\n2\ufe0f\u20e3 Cricket\\n3\ufe0f\u20e3 Badminton\\n4\ufe0f\u20e3 Pickleball\\n(Reply 0 for Menu)`;\n  } else {\n    session.sport = sport;\n    session.sportName = sportNames[lower] || sport;\n    try {\n      const res = await this.helpers.httpRequest({\n        method: 'GET',\n        url: `${BACKEND}/slots?sport=${session.sport}&date=${session.date}&sessionId=${encodeURIComponent(fromPhone)}`,\n        json: true\n      });\n      const available = [];\n      (res.courts || []).forEach(court => {\n        const shortName = (court.court_name || court.name || '').split('\u2014')[0].trim();\n        (court.slots || []).filter(s => s.status === 'available').slice(0, 3).forEach(s => {\n          available.push({\n            courtId: court.court_id || court.id,\n            courtName: shortName,\n            startTime: s.start_time,\n            endTime: s.end_time,\n            price: s.price,\n            isPeak: !!s.is_peak\n          });\n        });\n      });\n      if (available.length === 0) {\n        reply = `\ud83d\ude14 No open slots found for ${session.sport} on ${session.date}.\\nReply 0 to choose another date or sport.`;\n        session.step = 'MAIN_MENU';\n      } else {\n        session.availableSlots = available.slice(0, 5);\n        session.step = 'SELECT_SLOT';\n        reply = `\u23f0 *Step 3: Available Slots for ${session.sportName} (${session.date})*\\n` +\n          session.availableSlots.map((s, i) => `${i+1}\ufe0f\u20e3 ${s.startTime} - ${s.endTime} (${s.courtName}) \u2014 \u20b9${s.price} ${s.isPeak ? '\ud83d\udd25' : '\ud83d\udfe2'}`).join('\\n') +\n          `\\n\\nReply with slot number (1-${session.availableSlots.length}) or 0 for Menu`;\n      }\n    } catch (e) {\n      reply = `\u26a0\ufe0f Error fetching open slots. Please reply 0 to restart.`;\n    }\n  }\n  staticData.sessions[fromPhone] = session;\n  return { json: { reply, step: session.step } };\n}\n\n// 5. STATE: SELECT_SLOT\nif (session.step === 'SELECT_SLOT') {\n  const idx = parseInt(lower, 10) - 1;\n  const slot = session.availableSlots && session.availableSlots[idx];\n  if (!slot) {\n    reply = `\u26a0\ufe0f Please enter a valid slot number (1-${session.availableSlots ? session.availableSlots.length : 1}) or 0 for Menu.`;\n  } else {\n    try {\n      const lockRes = await this.helpers.httpRequest({\n        method: 'POST',\n        url: `${BACKEND}/slots/lock`,\n        body: { courtId: slot.courtId, date: session.date, startTime: slot.startTime, lockedBy: fromPhone, ttlSeconds: 300 },\n        json: true\n      });\n      if (!lockRes.success) {\n        reply = `\u26a0\ufe0f This slot was just taken! Please choose another slot or reply 0.`;\n      } else {\n        const initRes = await this.helpers.httpRequest({\n          method: 'POST',\n          url: `${BACKEND}/bookings/initiate`,\n          body: {\n            courtId: slot.courtId,\n            sportId: session.sport,\n            date: session.date,\n            startTime: slot.startTime,\n            customerName: senderName,\n            customerPhone: fromPhone\n          },\n          json: true\n        });\n        session.bookingRef = initRes.booking?.booking_ref || 'TRF-HOLD';\n        session.step = 'AWAIT_PAYMENT';\n        reply = `\ud83d\udd12 *Slot Held for 5 Minutes!*\\n\u2022 Sport: ${session.sportName}\\n\u2022 Court: ${slot.courtName}\\n\u2022 Time: ${session.date} @ ${slot.startTime}\\n\u2022 Total: \u20b9${slot.price}\\n\\n\ud83d\udc49 Tap to pay & confirm:\\nhttp://localhost:3000/checkout?ref=${session.bookingRef}\\n\\nReply *CONFIRM* after paying or *CANCEL* to release.`;\n      }\n    } catch (e) {\n      reply = `\u26a0\ufe0f Failed to reserve slot. Please reply 0 to restart.`;\n    }\n  }\n  staticData.sessions[fromPhone] = session;\n  return { json: { reply, step: session.step } };\n}\n\n// 6. STATE: AWAIT_PAYMENT\nif (session.step === 'AWAIT_PAYMENT') {\n  if (lower === 'confirm' || lower === 'pay' || lower === 'paid') {\n    try {\n      const confRes = await this.helpers.httpRequest({\n        method: 'POST',\n        url: `${BACKEND}/bookings/confirm`,\n        body: { bookingRef: session.bookingRef, paymentId: 'pay_wa_' + Date.now() },\n        json: true\n      });\n      session.step = 'MAIN_MENU';\n      reply = `\u2705 *Booking Confirmed!* \ud83c\udf89\\n\u2022 Pass: *${session.bookingRef}*\\n\u2022 Status: Confirmed\\n\\nYour slot is permanently booked across website & venue dashboard!\\nReply *MENU* anytime.`;\n    } catch (e) {\n      reply = `\u26a0\ufe0f Could not verify payment. Reply CONFIRM to retry or 0 for Menu.`;\n    }\n  } else if (lower === 'cancel') {\n    session.step = 'MAIN_MENU';\n    reply = `\ud83d\udd13 Slot hold released.\\n\\nReply 1 to book another court or 0 for Menu.`;\n  } else {\n    reply = `\ud83d\udc49 Please complete payment at http://localhost:3000/checkout?ref=${session.bookingRef}\\n\\nReply *CONFIRM* when done or *CANCEL* to release.`;\n  }\n  staticData.sessions[fromPhone] = session;\n  return { json: { reply, step: session.step } };\n}\n\n// 7. STATE: CANCEL_SELECT\nif (session.step === 'CANCEL_SELECT') {\n  const idx = parseInt(lower, 10) - 1;\n  const booking = session.activeBookings && session.activeBookings[idx];\n  if (!booking) {\n    reply = `\u26a0\ufe0f Please select a valid number (1-${session.activeBookings ? session.activeBookings.length : 1}) or 0 for Menu.`;\n  } else {\n    session.cancelTarget = booking;\n    session.step = 'CANCEL_CONFIRM';\n    reply = `\u26a0\ufe0f *Confirm Cancellation:*\\n\u2022 Ref: *${booking.booking_ref}*\\n\u2022 Court: ${booking.court_name}\\n\u2022 Date: ${booking.booking_date} @ ${booking.start_time}\\n\u2022 Refund: \u20b9${booking.total_amount} (100% refund)\\n\\nReply *CONFIRM CANCEL* to cancel or *NO* to keep booking.`;\n  }\n  staticData.sessions[fromPhone] = session;\n  return { json: { reply, step: session.step } };\n}\n\n// 8. STATE: CANCEL_CONFIRM\nif (session.step === 'CANCEL_CONFIRM') {\n  if (lower === 'confirm cancel' || lower === 'confirm' || lower === 'yes') {\n    try {\n      const cRes = await this.helpers.httpRequest({\n        method: 'POST',\n        url: `${BACKEND}/bookings/cancel`,\n        body: { bookingRef: session.cancelTarget.booking_ref, phone: fromPhone, reason: 'Customer requested via WhatsApp' },\n        json: true\n      });\n      session.step = 'MAIN_MENU';\n      reply = `\u2705 *Booking Cancelled Successfully!*\\n\u2022 Ref: ${session.cancelTarget.booking_ref}\\n\u2022 Refund: \u20b9${cRes.refund_amount || session.cancelTarget.total_amount} initiated to your account.\\n\\nReply *MENU* to return to main menu.`;\n    } catch (e) {\n      reply = `\u26a0\ufe0f Failed to cancel booking. Reply CONFIRM CANCEL to retry or 0 for Menu.`;\n    }\n  } else {\n    session.step = 'MAIN_MENU';\n    reply = `\ud83d\udc4d Cancellation aborted. Your booking remains active!\\n\\nReply *MENU* for main menu.`;\n  }\n  staticData.sessions[fromPhone] = session;\n  return { json: { reply, step: session.step } };\n}\n\nreply = `\ud83d\udc4b Reply *MENU* to start.`;\nstaticData.sessions[fromPhone] = session;\nreturn { json: { reply, step: session.step } };"
+      },
+      "id": "node-pune-metro-engine",
+      "name": "Pune Metro Guided State Machine",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "node-respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 2,
+      "position": [
+        720,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Pune Metro Guided State Machine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pune Metro Guided State Machine": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

@@ -2280,6 +2280,26 @@ async function runResendTests() {
   assert(directEmailRes.success, 'EmailService.sendRefundConfirmation executed successfully');
   console.log('✅ PASSED: EmailService.sendRefundConfirmation dispatches valid email payload');
 
+  // --- TEST 37: Admin Cancellation & Refund Control — Double Refund Prevention ---
+  console.log('\n--- TEST 37: Admin Cancellation & Refund Control — Double Refund Prevention ---');
+  
+  // 37.1 Attempting to refund t36Booking2 a second time must strictly fail
+  const duplicateRefundResult = PostgresEngine.updateBookingStatus(t36Booking2.booking!.id, 'refunded', {
+    adminId: validAdmin.id,
+    cancelledBy: 'admin',
+    refundAmount: 1600,
+    refundReason: 'Duplicate refund attempt'
+  });
+  assert(duplicateRefundResult.success === false, 'Duplicate refund attempt on already-refunded booking rejected');
+  assert(duplicateRefundResult.message.includes('Refund already processed'), 'Clear error message indicating refund is already processed');
+  console.log('✅ PASSED: Duplicate refund attempt on already-refunded booking is strictly rejected');
+
+  // 37.2 Booking status remains refunded and refund_amount is preserved
+  const verifyBooking = store.getBookings().find(b => b.id === t36Booking2.booking!.id)!;
+  assert(verifyBooking.status === 'refunded', 'Booking status remains refunded');
+  assert(verifyBooking.refund_amount === 1600, 'Original refund amount ₹1600 is preserved without corruption');
+  console.log('✅ PASSED: Refunded state is immutable and protected from re-execution');
+
   console.log('\n🎉 ALL CORNER & EDGE CASE TESTS (INCLUDING AUTO-COMPLETE & OWNER REDUCED WORKFLOW) PASSED PERFECTLY!\n');
 }
 

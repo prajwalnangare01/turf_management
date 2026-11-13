@@ -65,7 +65,7 @@ export class EmailVerificationService {
   }
 
   /**
-   * Request OTP code and dispatch via Resend
+   * Request OTP code and dispatch via Nodemailer Email
    */
   public static async requestOtp(
     email: string,
@@ -140,17 +140,17 @@ export class EmailVerificationService {
       return {
         success: true,
         message: `6-digit verification code sent to ${cleanEmail}. Check your inbox!`,
-        code: undefined, // Live sent via Resend API
+        code: undefined, // Live sent via Nodemailer
         isSandbox: false
       };
     }
 
-    // If Resend API failed due to trial sandbox limitation (e.g. sending to an unverified email with onboarding@resend.dev)
+    // If Email API failed due to sandbox limitation
     if (dispatchRes.sandboxRestricted) {
-      console.warn('[EmailVerificationService] Resend Sandbox Restriction:', dispatchRes.error);
+      console.warn('[EmailVerificationService] Sandbox Restriction:', dispatchRes.error);
       return {
         success: true,
-        message: `Resend Sandbox Mode: Verification code generated. (Trial sender only delivers to account owner's email). Verification code: ${code}`,
+        message: `Simulation Mode: Verification code generated. Verification code: ${code}`,
         code,
         isSandbox: true
       };

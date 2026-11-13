@@ -65,9 +65,9 @@ export class ReminderScheduler {
 
           console.log(`⏰ [BACKEND 1-HR REMINDER] Booking ${booking.booking_ref} starting in ${diffMins} mins.`);
 
-          // 1. Dispatch Email via Resend
-          EmailService.sendBookingReminder(booking).catch(err => {
-            console.warn('[ReminderScheduler] Resend reminder error:', err.message);
+          // 1. Dispatch Email via Nodemailer
+          if (booking.source !== 'whatsapp' && booking.source !== 'offline_whatsapp') EmailService.sendBookingReminder(booking).catch(err => {
+            console.warn('[ReminderScheduler] Nodemailer reminder error:', err.message);
           });
 
           // 2. Dispatch Matchday Kickoff SMS Reminder

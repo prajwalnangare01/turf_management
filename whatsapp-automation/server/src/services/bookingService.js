@@ -153,6 +153,11 @@ export class BookingService {
       startTime
     });
 
+    newBooking.payment_link_id = payment.payment_link_id;
+    if (payment.payment_link_id) {
+      RazorpayService.registerLinkExpirationTimer(payment.payment_link_id, bookingRef, 300);
+    }
+
     return {
       success: true,
       booking: newBooking,
@@ -183,6 +188,11 @@ export class BookingService {
 
           // Release Concurrency Lock
           LockService.releaseLock(b.court_id, b.booking_date, b.start_time, b.customer_phone);
+
+          // Strictly cancel Razorpay Hosted Payment Link to block late payments
+          if (b.payment_link_id) {
+            RazorpayService.cancelPaymentLink(b.payment_link_id).catch(() => {});
+          }
 
           // Update Supabase booking
           SupabaseService.updateBooking(b.id, {
@@ -215,6 +225,16 @@ export class BookingService {
 
     // Check if the 5-minute payment window has expired
     if (booking.status === 'cancelled' || booking.status === 'expired') {
+      if (paymentId && paymentId.startsWith('pay_')) {
+        console.log(`🚨 [Late Payment on Expired Hold]: Issuing 100% instant refund for ${paymentId}`);
+        RazorpayService.refundPayment(paymentId, booking.total_amount, {
+          booking_ref: booking.booking_ref,
+          reason: 'Slot hold expired before payment capture'
+        }).catch(() => {});
+      }
+      if (booking.payment_link_id) {
+        RazorpayService.cancelPaymentLink(booking.payment_link_id).catch(() => {});
+      }
       return {
         success: false,
         message: 'This booking has expired because the 5-minute payment window closed. The slot was released back to available. Please book a fresh slot.'
@@ -229,10 +249,25 @@ export class BookingService {
       LockService.releaseLock(booking.court_id, booking.booking_date, booking.start_time, booking.customer_phone);
       SupabaseService.deleteSlotLock(booking.court_id, booking.booking_date, booking.start_time).catch(() => {});
       SupabaseService.updateBooking(booking.id, { status: 'cancelled', notes: booking.notes, updated_at: booking.updated_at }).catch(() => {});
+      if (paymentId && paymentId.startsWith('pay_')) {
+        console.log(`🚨 [Late Payment on Expired Hold]: Issuing 100% instant refund for ${paymentId}`);
+        RazorpayService.refundPayment(paymentId, booking.total_amount, {
+          booking_ref: booking.booking_ref,
+          reason: 'Slot hold expired before payment capture'
+        }).catch(() => {});
+      }
+      if (booking.payment_link_id) {
+        RazorpayService.cancelPaymentLink(booking.payment_link_id).catch(() => {});
+      }
       return {
         success: false,
         message: 'Your 5-minute payment window has expired and this slot has been released back to available. Please book a fresh slot.'
       };
+    }
+
+    // Clear active expiration timer since payment succeeded within the hold window
+    if (booking.payment_link_id) {
+      RazorpayService.clearLinkExpirationTimer(booking.payment_link_id);
     }
 
     booking.status = 'confirmed';
@@ -288,9 +323,9 @@ export class BookingService {
     // Trigger Outbound WhatsApp Confirmation
     NotificationService.sendBookingConfirmation(booking);
 
-    // Trigger Outbound Resend Email Confirmation & Gate Pass if customer has email
-    EmailService.sendBookingConfirmation(booking).catch(err => {
-      console.warn('Backend Resend confirmation email error:', err.message);
+    // Trigger Outbound Email Confirmation & Gate Pass if customer has email
+    if (booking.source !== 'whatsapp' && booking.source !== 'offline_whatsapp') EmailService.sendBookingConfirmation(booking).catch(err => {
+      console.warn('Backend email confirmation error:', err.message);
     });
 
     // Trigger Outbound SMS Confirmation with 4-digit Gate Pass
@@ -406,6 +441,11 @@ export class BookingService {
     // Release any lingering lock
     LockService.releaseLock(booking.court_id, booking.booking_date, booking.start_time, booking.customer_phone);
 
+    // Cancel active Razorpay payment link if present to block late payment
+    if (booking.payment_link_id) {
+      RazorpayService.cancelPaymentLink(booking.payment_link_id).catch(() => {});
+    }
+
     // Update customer metrics
     const customer = store.getCustomers().find(c => c.id === booking.customer_id);
     if (customer && refundAmount > 0) {
@@ -423,6 +463,18 @@ export class BookingService {
 
     if (customer && refundAmount > 0) {
       SupabaseService.upsertCustomer(customer).catch(err => console.warn('Supabase upsertCustomer refund error:', err.message));
+    }
+
+    // Trigger real Razorpay Refund if payment was completed via gateway
+    if (booking.gateway_payment_id && refundAmount > 0) {
+      RazorpayService.refundPayment(booking.gateway_payment_id, refundAmount, {
+        booking_ref: booking.booking_ref,
+        reason: reason || 'Customer requested cancellation'
+      }).then(res => {
+        if (res?.refund_id) {
+          booking.gateway_refund_id = res.refund_id;
+        }
+      }).catch(err => console.warn('Razorpay refund error:', err));
     }
 
     // Send WhatsApp cancellation notice

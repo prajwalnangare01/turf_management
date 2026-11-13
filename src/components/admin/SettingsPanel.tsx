@@ -114,7 +114,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin }) =>
   };
 
   // Resend Email Test State
-  const [testEmailRecipient, setTestEmailRecipient] = useState(currentAdmin.email || 'delivered@resend.dev');
+  const [testEmailRecipient, setTestEmailRecipient] = useState(currentAdmin.email || 'rajupainter84688@gmail.com');
   const [testEmailLoading, setTestEmailLoading] = useState(false);
   const [testEmailResult, setTestEmailResult] = useState<{ success: boolean; message: string; simulated?: boolean } | null>(null);
 
@@ -136,8 +136,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin }) =>
         setTestEmailResult({
           success: true,
           message: result.simulated
-            ? `Simulation successful! Email logged for ${testEmailRecipient} (Add RESEND_API_KEY in .env for live dispatch)`
-            : `Live email successfully delivered to ${testEmailRecipient} via Resend API (ID: ${result.id})!`,
+            ? `Simulation successful! Email logged for ${testEmailRecipient} (Configure SMTP_PASS in .env for live dispatch)`
+            : `Live email successfully delivered to ${testEmailRecipient} via Nodemailer (ID: ${result.id})!`,
           simulated: result.simulated
         });
       } else {
@@ -779,7 +779,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin }) =>
                   ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                   : 'bg-amber-100 text-amber-800 border border-amber-300'
               }`}>
-                {EmailService.isResendConfigured() ? '⚡ Resend API Active' : '🧪 Resend Simulation Mode'}
+                {EmailService.isResendConfigured() ? '⚡ Nodemailer SMTP Active' : '🧪 SMTP Simulation Mode'}
               </span>
             </div>
 
@@ -811,16 +811,16 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin }) =>
                   onChange={e => setVenue({ ...venue, email_enabled: e.target.checked })}
                   className="rounded accent-primary"
                 />
-                <span>Resend Email Dispatch</span>
+                <span>Nodemailer Email Dispatch</span>
               </label>
             </div>
 
-            {/* Resend Email Configuration & Live Test */}
+            {/* Nodemailer Email Configuration & Live Test */}
             <div className="bg-surface-container-low p-3.5 rounded-xl border border-outline-variant/30 space-y-3">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">
-                    Resend From / Sender Address
+                    SMTP From / Sender Address
                   </label>
                   <input
                     type="text"
@@ -836,14 +836,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin }) =>
 
                 <div>
                   <label className="block text-[11px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">
-                    Send Test Email via Resend
+                    Send Test Email via Nodemailer
                   </label>
                   <div className="flex gap-2">
                     <input
                       type="email"
                       value={testEmailRecipient}
                       onChange={e => setTestEmailRecipient(e.target.value)}
-                      placeholder="e.g. delivered@resend.dev or your email"
+                      placeholder="e.g. your-email@gmail.com"
                       className="form-input text-xs flex-1"
                     />
                     <button
@@ -857,7 +857,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin }) =>
                       ) : (
                         <Send className="w-3.5 h-3.5" />
                       )}
-                      <span>Test Resend</span>
+                      <span>Test SMTP</span>
                     </button>
                   </div>
                   {/* Resend Sender Email Conflict Notice (No Brackets) */}
@@ -873,7 +873,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin }) =>
                     </div>
                   ) : null}
                   <p className="text-[10px] text-on-surface-variant mt-1.5">
-                    Tip: Use a separate test inbox or <code className="bg-surface-container px-1 py-0.5 rounded text-primary font-bold">delivered@resend.dev</code> for sandbox verification.
+                    Tip: Enter any email address to test live delivery via Gmail SMTP.
                   </p>
                 </div>
               </div>

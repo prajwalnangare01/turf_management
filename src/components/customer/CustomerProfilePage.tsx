@@ -42,7 +42,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
   const [isUpdatingEmailInEdit, setIsUpdatingEmailInEdit] = useState(false);
   const [newEmailInput, setNewEmailInput] = useState('');
 
-  // Email verification modal states (Resend OTP)
+  // Email verification modal states (Email OTP)
   const [isVerifyingEmail, setIsVerifyingEmail] = useState(false);
   const [emailOtpSent, setEmailOtpSent] = useState(false);
   const [emailOtpCode, setEmailOtpCode] = useState('');
@@ -379,14 +379,14 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
         setEmailOtpSent(true);
         setEmailCooldown(30);
         setEmailOtpNotice(res.isSandbox 
-          ? `📧 Resend Sandbox Code: ${res.code} (Free Resend tier delivers to prajwalnangare41@gmail.com)` 
+          ? `📧 Verification Code: ${res.code}` 
           : `6-digit verification code sent to ${cleanNewEmail}. Check your inbox!`);
       } else {
-        setEmailOtpError(res.message || 'Could not send verification email via Resend.');
+        setEmailOtpError(res.message || 'Could not send verification email.');
       }
     } catch (err: any) {
       setIsSendingEmailOtp(false);
-      setEmailOtpError(err?.message || 'Error communicating with Resend email service.');
+      setEmailOtpError(err?.message || 'Error communicating with email service.');
     }
   };
 
@@ -429,7 +429,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
       setEmailOtpCode('');
       setEmailOtpNotice(null);
       setEmailOtpSent(false);
-      alert('Email address verified via Resend and profile updated successfully!');
+      alert('Email address verified and profile updated successfully!');
     } else {
       setEmailOtpError(result.error || 'Verification failed. Please check the code.');
     }
@@ -451,7 +451,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
     if (res.success) {
       setEmailCooldown(30);
       setEmailOtpNotice(res.isSandbox 
-        ? `New verification code dispatched (Resend Sandbox mode).` 
+        ? `New verification code dispatched (Simulation mode).` 
         : `New 6-digit code sent to ${cleanNewEmail}.`);
     } else {
       setEmailOtpError(res.message || 'Could not resend email verification code.');
@@ -482,14 +482,14 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
         setEmailOtpSent(true);
         setEmailCooldown(30);
         setEmailOtpNotice(res.isSandbox 
-          ? `📧 Resend Sandbox Code: ${res.code} (Free Resend tier delivers to prajwalnangare41@gmail.com)` 
+          ? `📧 Verification Code: ${res.code}` 
           : `6-digit verification code sent to ${cleanNewEmail}. Check your inbox!`);
       } else {
-        setEmailOtpError(res.message || 'Could not send verification email via Resend.');
+        setEmailOtpError(res.message || 'Could not send verification email.');
       }
     } catch (err: any) {
       setIsSendingEmailOtp(false);
-      setEmailOtpError(err?.message || 'Error communicating with Resend email service.');
+      setEmailOtpError(err?.message || 'Error communicating with email service.');
     }
   };
 
@@ -530,7 +530,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
       setEmailOtpCode('');
       setEmailOtpNotice(null);
       setEmailOtpSent(false);
-      alert('Email address verified via Resend and profile updated successfully!');
+      alert('Email address verified and profile updated successfully!');
     } else {
       setEmailOtpError(result.error || 'Verification failed. Please check the code.');
     }
@@ -548,7 +548,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
     if (res.success) {
       setEmailCooldown(30);
       setEmailOtpNotice(res.isSandbox 
-        ? `New verification code dispatched (Resend Sandbox mode).` 
+        ? `New verification code dispatched (Simulation mode).` 
         : `New 6-digit code sent to ${cleanNewEmail}.`);
     } else {
       setEmailOtpError(res.message || 'Could not resend email verification code.');
@@ -1819,7 +1819,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
         );
       })()}
 
-      {/* Resend Email OTP Verification Modal for Profile Update */}
+      {/* Email OTP Verification Modal for Profile Update */}
       {isVerifyingEmail && (
         <div className="modal-overlay p-3">
           <div className="bg-white border border-outline-variant rounded-2xl sm:rounded-3xl w-full max-w-sm p-4 sm:p-5 shadow-2xl animate-modalScaleIn text-on-surface space-y-3 overflow-y-auto max-h-[92vh]">
@@ -1830,7 +1830,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
                 </div>
                 <div>
                   <h3 className="font-headline font-bold text-sm sm:text-base text-primary">Update Account Email</h3>
-                  <p className="text-[10.5px] text-on-surface-variant font-medium">Verified securely via Resend OTP</p>
+                  <p className="text-[10.5px] text-on-surface-variant font-medium">Verified securely via Email OTP</p>
                 </div>
               </div>
               <button
@@ -1930,7 +1930,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
               /* Step 2: Enter 6-digit OTP */
               <div className="space-y-3 text-xs">
                 <p className="text-[11px] text-on-surface-variant leading-snug">
-                  Enter the 6-digit verification code sent to <strong>{emailInput}</strong> via Resend:
+                  Enter the 6-digit verification code sent to <strong>{emailInput}</strong>:
                 </p>
 
                 <div className="space-y-1 bg-surface-container-low p-2.5 rounded-xl border border-outline-variant/40">

@@ -3,6 +3,8 @@ import { store } from '../../services/store';
 import { Sport, Court, DynamicSlot, Customer } from '../../types/schema';
 import { SlotEngine } from '../../services/slotEngine';
 import { RedisLockService } from '../../services/redisLockService';
+import { PostgresEngine } from '../../services/postgresEngine';
+import { SupabaseSyncService } from '../../services/supabaseSyncService';
 import { CustomerAuthService } from '../../services/customerAuthService';
 import { CustomerAuthModal } from './CustomerAuthModal';
 import { CustomerProfilePage } from './CustomerProfilePage';
@@ -288,6 +290,54 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
     }, 150);
     return () => clearTimeout(timer);
   }, [selectedDate, selectedCourt?.id, selectedSport?.id]);
+
+  // Check URL parameters upon return from Razorpay hosted redirect
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const urlParams = new URLSearchParams(window.location.search);
+    const paymentStatus = urlParams.get('payment_status');
+    const bookingRef = urlParams.get('booking_ref');
+    const paymentId = urlParams.get('payment_id') || urlParams.get('razorpay_payment_id');
+
+    if (paymentStatus === 'success' && bookingRef) {
+      const cleanRef = bookingRef.toUpperCase();
+      const bookings = store.getBookings();
+      const booking = bookings.find(b => 
+        (b.booking_ref && b.booking_ref.toUpperCase() === cleanRef) || 
+        (b.group_ref && b.group_ref.toUpperCase() === cleanRef) ||
+        (b.id && b.id.toUpperCase() === cleanRef)
+      );
+
+      if (booking) {
+        if (booking.status !== 'confirmed') {
+          PostgresEngine.updateBookingStatus(booking.id, 'confirmed');
+          booking.gateway_payment_id = paymentId || `pay_rzp_${Date.now()}`;
+          SupabaseSyncService.syncBookingToSupabase(booking).catch(() => {});
+        }
+        // Also confirm sibling slots if part of multi-hour order
+        const groupRef = booking.group_ref || booking.booking_ref;
+        bookings.filter(b => b.group_ref === groupRef && b.id !== booking.id).forEach(sib => {
+          PostgresEngine.updateBookingStatus(sib.id, 'confirmed');
+          sib.gateway_payment_id = paymentId || `pay_rzp_${Date.now()}`;
+          SupabaseSyncService.syncBookingToSupabase(sib).catch(() => {});
+        });
+
+        // Release holds
+        RedisLockService.releaseLocksForBooking(booking.court_id, booking.booking_date, booking.start_time, booking.end_time);
+
+        // Discard pending session
+        sessionStorage.removeItem('turfflow_pending_checkout');
+
+        // Show confirmation modal
+        setConfirmedBookingRef(booking.booking_ref);
+        setShowCheckout(false);
+        setSelectedSlots([]);
+
+        // Clean URL parameters cleanly
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
+  }, []);
 
   // CC-S03: Recover from Mobile UPI external app intent switch on tab resume
   useEffect(() => {

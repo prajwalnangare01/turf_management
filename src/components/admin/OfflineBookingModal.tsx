@@ -219,7 +219,7 @@ export const OfflineBookingModal: React.FC<OfflineBookingModalProps> = ({
       result.booking
     );
 
-    // Dispatch confirmation email & gatepass via Resend if customer has email
+    // Dispatch confirmation email & gatepass via Nodemailer if customer has email
     if (result.booking) {
       NotificationService.enqueueNotification(result.booking, 'confirmation');
     }

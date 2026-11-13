@@ -23,7 +23,7 @@ export class PostgresEngine {
     confirmed: ['completed', 'cancelled', 'no_show', 'refunded'],
     completed: ['refunded'],
     cancelled: ['refunded'],
-    refunded: ['refunded'],
+    refunded: [], // Terminal state: once a refund is done, status transition is locked and disabled
     no_show: ['refunded']
   };
 
@@ -193,6 +193,14 @@ export class PostgresEngine {
       return { success: false, message: 'Booking not found' };
     }
 
+    // Once a refund is done, duplicate refunds are strictly disallowed
+    if (booking.status === 'refunded' || (newStatus === 'refunded' && booking.refund_amount !== undefined && booking.refund_amount > 0)) {
+      return {
+        success: false,
+        message: `Refund already processed: Booking ${booking.booking_ref} has already been refunded (₹${booking.refund_amount || 0}). Duplicate refunds are disabled.`
+      };
+    }
+
     const allowedNext = this.VALID_TRANSITIONS[booking.status];
     if (!allowedNext.includes(newStatus)) {
       return {
@@ -277,9 +285,7 @@ export class PostgresEngine {
 
     // Sync metrics for customer (using actual refund amount if present)
     if (newStatus === 'refunded') {
-      const effectiveRefundDelta = oldStatus === 'refunded'
-        ? Math.max(0, (booking.refund_amount || 0) - priorRefundAmount)
-        : (booking.refund_amount !== undefined ? booking.refund_amount : booking.total_amount);
+      const effectiveRefundDelta = booking.refund_amount !== undefined ? booking.refund_amount : booking.total_amount;
       this.syncCustomerStats(booking.customer_id, newStatus, effectiveRefundDelta);
     } else {
       this.syncCustomerStats(booking.customer_id, newStatus, booking.total_amount);
@@ -290,7 +296,7 @@ export class PostgresEngine {
       RedisLockService.releaseLocksForBooking(booking.court_id, booking.booking_date, booking.start_time, booking.end_time);
 
       // 1. Dispatch cancellation notification/email if transitioning from active state
-      if (oldStatus !== 'cancelled' && oldStatus !== 'refunded') {
+      if (oldStatus !== 'cancelled') {
         NotificationService.enqueueNotification(booking, 'cancellation');
       }
 

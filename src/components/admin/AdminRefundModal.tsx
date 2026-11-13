@@ -126,10 +126,16 @@ export const AdminRefundModal: React.FC<AdminRefundModalProps> = ({
   if (!isOpen || !booking) return null;
 
   const canExecuteRefund = currentAdmin.role === 'owner' || currentAdmin.role === 'manager';
+  const isAlreadyRefunded = booking.status === 'refunded' || Boolean(booking.refund_amount && booking.refund_amount > 0);
 
   // Step 1: Open popup confirmation modal on button click
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isAlreadyRefunded) {
+      setErrorMsg(`Refund already processed: A refund of ₹${booking.refund_amount || 0} has already been issued for this booking. Duplicate refunds are disabled.`);
+      return;
+    }
+
     if (!canExecuteRefund) {
       setErrorMsg('Permission Denied: Only Venue Owners and Managers can issue booking refunds.');
       return;
@@ -151,6 +157,13 @@ export const AdminRefundModal: React.FC<AdminRefundModalProps> = ({
 
   // Step 2: Execute refund only when admin confirms the popup confirmation
   const handleExecuteConfirmedRefund = () => {
+    if (isAlreadyRefunded) {
+      setIsSubmitting(false);
+      setShowConfirmModal(false);
+      setErrorMsg(`Refund already processed: A refund of ₹${booking.refund_amount || 0} has already been issued for this booking. Duplicate refunds are disabled.`);
+      return;
+    }
+
     setIsSubmitting(true);
     const finalReason = reason.trim();
     const targetStatus = refundAmount > 0 ? 'refunded' : 'cancelled';
@@ -173,6 +186,20 @@ export const AdminRefundModal: React.FC<AdminRefundModalProps> = ({
         reason: finalReason,
         adminRole: currentAdmin.role
       });
+
+      // If booking was paid via Razorpay gateway, trigger official Razorpay refund API via backend
+      if (booking.gateway_payment_id && refundAmount > 0) {
+        fetch('http://localhost:5000/api/bookings/admin-refund', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            bookingRef: booking.booking_ref,
+            refundAmount,
+            reason: finalReason,
+            adminId: currentAdmin.id
+          })
+        }).catch(err => console.warn('Admin Razorpay refund sync error:', err));
+      }
 
       setIsSubmitting(false);
       setShowConfirmModal(false);
@@ -226,6 +253,17 @@ export const AdminRefundModal: React.FC<AdminRefundModalProps> = ({
               <div>
                 <strong className="block font-bold">Admin Permission Required</strong>
                 <span className="text-[11px]">Staff accounts cannot process refunds. Please request an Owner or Manager to authorize this refund.</span>
+              </div>
+            </div>
+          )}
+
+          {/* Already Refunded Warning Banner */}
+          {isAlreadyRefunded && (
+            <div className="p-2.5 bg-amber-50 border border-amber-300 rounded-xl flex items-start gap-2 text-xs text-amber-900">
+              <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <strong className="block font-bold">Refund Option Locked & Disabled</strong>
+                <span className="text-[11px]">A refund of ₹{booking.refund_amount || 0} was already processed for this booking ({booking.refund_reason || 'Recorded in ledger'}). Multiple refunds on the same reservation are strictly disabled.</span>
               </div>
             </div>
           )}
@@ -499,11 +537,11 @@ export const AdminRefundModal: React.FC<AdminRefundModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={!canExecuteRefund || isSubmitting}
-              className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-headline font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs disabled:opacity-50 transition-colors"
+              disabled={!canExecuteRefund || isSubmitting || isAlreadyRefunded}
+              className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-headline font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <RotateCcw className="w-4 h-4" />
-              {isSubmitting ? 'Processing Refund...' : refundAmount > 0 ? `Authorize & Issue Refund of ₹${refundAmount}` : 'Confirm Zero Refund (Keep Cancelled)'}
+              {isAlreadyRefunded ? `Already Refunded (₹${booking.refund_amount || 0})` : isSubmitting ? 'Processing Refund...' : refundAmount > 0 ? `Authorize & Issue Refund of ₹${refundAmount}` : 'Confirm Zero Refund (Keep Cancelled)'}
             </button>
           </div>
         </form>

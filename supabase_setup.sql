@@ -360,6 +360,19 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 
 -- =============================================================================
+-- -----------------------------------------------------------------------------
+-- 16. WHATSAPP SESSIONS TABLE (PostgreSQL-backed Baileys Multi-Device Auth State)
+-- Allows WhatsApp agent to persist sessions across stateless cloud restarts ($0 persistent disk)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS whatsapp_sessions (
+  id VARCHAR(128) PRIMARY KEY,
+  data JSONB NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_whatsapp_sessions_updated_at 
+ON whatsapp_sessions(updated_at);
+
 -- SUPABASE REALTIME CONFIGURATION
 -- Broadcast table mutations over WebSocket to Website & WhatsApp Server
 -- =============================================================================

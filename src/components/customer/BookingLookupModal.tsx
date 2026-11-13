@@ -49,10 +49,12 @@ export const BookingLookupModal: React.FC<BookingLookupModalProps> = ({ currentC
   ) => {
     if (!cancelModalBooking) return { success: false, message: 'No reservation selected' };
     const targetBooking = cancelModalBooking;
-    const nextStatus = refundAmount > 0 ? 'refunded' : 'cancelled';
+    // Customer cancellations always set status to 'cancelled' with refundAmount: 0.
+    // Cancellations and refunds must be reviewed and selected by admin in the Admin Dashboard.
+    const nextStatus = 'cancelled';
 
     const result = PostgresEngine.updateBookingStatus(targetBooking.id, nextStatus, {
-      refundAmount,
+      refundAmount: 0,
       refundReason,
       cancelledBy: 'customer',
       noticeHours,

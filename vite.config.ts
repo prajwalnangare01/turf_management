@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import nodemailer from 'nodemailer';
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -9,8 +10,9 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       {
-        name: 'turfflow-resend-middleware',
+        name: 'turfflow-email-middleware',
         configureServer(server) {
+          // Nodemailer Email Dispatch Middleware (/api/email/send)
           server.middlewares.use('/api/email/send', async (req, res) => {
             if (req.method !== 'POST') {
               res.statusCode = 405;
@@ -27,90 +29,73 @@ export default defineConfig(({ mode }) => {
             req.on('end', async () => {
               try {
                 const data = JSON.parse(body || '{}');
-                const apiKey = env.RESEND_API_KEY || env.VITE_RESEND_API_KEY || process.env.RESEND_API_KEY;
-                const rawSender = data.from || env.RESEND_FROM_EMAIL || env.VITE_RESEND_FROM_EMAIL || 'rajupainter84688@gmail.com';
-                const fromEmail = rawSender.includes('<') ? rawSender : `TurfFlow Arena <${rawSender}>`;
-                const replyTo = data.reply_to || env.RESEND_REPLY_TO_EMAIL || 'rajupainter84688@gmail.com';
+                const user = env.SMTP_USER || env.VITE_SMTP_USER || process.env.SMTP_USER || 'rajupainter84688@gmail.com';
+                const rawPass = env.SMTP_PASS || process.env.SMTP_PASS || 'gbnl yhwn aowz wtbt';
+                const pass = rawPass ? rawPass.replace(/\s+/g, '') : '';
+                const host = env.SMTP_HOST || process.env.SMTP_HOST || 'smtp.gmail.com';
+                const port = parseInt(env.SMTP_PORT || process.env.SMTP_PORT || '465', 10);
+                const secure = (env.SMTP_SECURE || process.env.SMTP_SECURE) !== 'false';
 
-                // If no real API key is configured or is a placeholder, return graceful simulation
-                if (!apiKey || apiKey === 're_your_resend_api_key' || !apiKey.startsWith('re_')) {
-                  console.log(`[Resend Simulated Email] From: ${fromEmail} | To: ${data.to} | Subject: "${data.subject}"`);
+                const rawSender = data.from || env.SMTP_FROM_EMAIL || env.VITE_SMTP_FROM_EMAIL || user || 'rajupainter84688@gmail.com';
+                const senderName = env.SMTP_FROM_NAME || 'TurfFlow Arena';
+                const fromEmail = rawSender.includes('<') ? rawSender : `"${senderName}" <${rawSender}>`;
+                const replyTo = data.reply_to || env.SMTP_REPLY_TO || rawSender;
+                const cleanTo = Array.isArray(data.to) ? data.to.join(', ') : (data.to || '').trim();
+
+                // If no real password is configured or is placeholder, return graceful simulation
+                if (!pass || pass === 'your_smtp_app_password') {
+                  console.log(`[SMTP Simulated Email] From: ${fromEmail} | To: ${cleanTo} | Subject: "${data.subject}"`);
                   res.setHeader('Content-Type', 'application/json');
                   res.end(JSON.stringify({
                     success: true,
                     simulated: true,
                     id: `sim_dev_${Date.now()}`,
-                    message: 'Simulated email delivery (configure RESEND_API_KEY in .env for live Resend dispatch)'
+                    message: 'Simulated email delivery (configure SMTP_PASS in .env for live Nodemailer dispatch)'
                   }));
                   return;
                 }
 
-                // Node.js native fetch call to Resend REST API (avoids any browser CORS restriction)
-                let resendResponse = await fetch('https://api.resend.com/emails', {
-                  method: 'POST',
-                  headers: {
-                    'Authorization': `Bearer ${apiKey}`,
-                    'Content-Type': 'application/json'
-                  },
-                  body: JSON.stringify({
-                    from: fromEmail,
-                    reply_to: replyTo,
-                    to: Array.isArray(data.to) ? data.to : [data.to],
-                    subject: data.subject,
-                    html: data.html,
-                    text: data.text,
-                    attachments: data.attachments || undefined
-                  })
+                const transporter = nodemailer.createTransport({
+                  host,
+                  port,
+                  secure,
+                  auth: { user, pass }
                 });
 
-                let resJson = await resendResponse.json();
+                const mailOptions: any = {
+                  from: fromEmail,
+                  to: cleanTo,
+                  replyTo,
+                  subject: data.subject,
+                  html: data.html,
+                  text: data.text
+                };
 
-                // If Resend rejects due to unverified custom/gmail domain, gracefully retry using onboarding sender with sender as display name and reply-to
-                if (!resendResponse.ok && (resJson?.message?.includes('not verified') || resJson?.message?.includes('domain'))) {
-                  const fallbackFrom = `rajupainter84688@gmail.com <onboarding@resend.dev>`;
-                  console.warn(`[Resend Sender Fallback] "${fromEmail}" unverified on Resend. Retrying via "${fallbackFrom}" with reply_to: "${replyTo}".`);
-                  resendResponse = await fetch('https://api.resend.com/emails', {
-                    method: 'POST',
-                    headers: {
-                      'Authorization': `Bearer ${apiKey}`,
-                      'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                      from: fallbackFrom,
-                      reply_to: replyTo,
-                      to: Array.isArray(data.to) ? data.to : [data.to],
-                      subject: data.subject,
-                      html: data.html,
-                      text: data.text,
-                      attachments: data.attachments || undefined
-                    })
-                  });
-                  resJson = await resendResponse.json();
-                }
-
-                if (!resendResponse.ok) {
-                  res.statusCode = resendResponse.status;
-                  res.setHeader('Content-Type', 'application/json');
-                  res.end(JSON.stringify({
-                    success: false,
-                    error: resJson?.message || 'Resend API error',
-                    details: resJson
+                if (data.attachments && Array.isArray(data.attachments)) {
+                  mailOptions.attachments = data.attachments.map((att: any) => ({
+                    filename: att.filename,
+                    content: typeof att.content === 'string' ? Buffer.from(att.content, 'base64') : att.content,
+                    contentType: att.contentType
                   }));
-                  return;
                 }
+
+                const info = await transporter.sendMail(mailOptions);
+                console.log(`✉️ [Nodemailer Dev Email Sent] To: ${cleanTo} | Subject: "${data.subject}" | ID: ${info.messageId}`);
 
                 res.setHeader('Content-Type', 'application/json');
                 res.end(JSON.stringify({
                   success: true,
                   simulated: false,
-                  data: resJson
+                  id: info.messageId,
+                  data: { id: info.messageId }
                 }));
               } catch (err: any) {
+                console.error('[Nodemailer Dev Error]:', err.message);
                 res.statusCode = 500;
                 res.setHeader('Content-Type', 'application/json');
                 res.end(JSON.stringify({
                   success: false,
-                  error: err.message || 'Internal Server Error'
+                  error: err.message || 'SMTP Email Delivery Failed'
                 }));
               }
             });
@@ -144,14 +129,30 @@ export default defineConfig(({ mode }) => {
 
                 if (fast2smsKey && !fast2smsKey.includes('your_')) {
                   if (data.route === 'otp' && data.otpCode) {
-                    // Dedicated cheap Fast2SMS OTP Route
+                    // Try dedicated Fast2SMS OTP Route
                     const payload = { route: 'otp', variables_values: data.otpCode, numbers: cleanDigits };
-                    const f2sRes = await fetch('https://www.fast2sms.com/dev/bulkV2', {
+                    let f2sRes = await fetch('https://www.fast2sms.com/dev/bulkV2', {
                       method: 'POST',
                       headers: { 'authorization': fast2smsKey, 'Content-Type': 'application/json' },
                       body: JSON.stringify(payload)
                     });
-                    const f2sData = await f2sRes.json();
+                    let f2sData = await f2sRes.json();
+
+                    // If OTP route requires DLT/website verification (status 996), fallback to Quick SMS route ('q')
+                    if (f2sData.status_code === 996) {
+                      const qPayload = {
+                        route: 'q',
+                        message: `Your TurfFlow verification code is ${data.otpCode}. Valid for 10 minutes.`,
+                        numbers: cleanDigits
+                      };
+                      f2sRes = await fetch('https://www.fast2sms.com/dev/bulkV2', {
+                        method: 'POST',
+                        headers: { 'authorization': fast2smsKey, 'Content-Type': 'application/json' },
+                        body: JSON.stringify(qPayload)
+                      });
+                      f2sData = await f2sRes.json();
+                    }
+
                     if (f2sData.return === true) {
                       res.setHeader('Content-Type', 'application/json');
                       res.end(JSON.stringify({
@@ -193,18 +194,35 @@ export default defineConfig(({ mode }) => {
                     }));
                     return;
                   } else {
-                    // Quick SMS ('q') is strictly disabled to avoid excessive carrier billing.
-                    // Booking confirmations and reminders are handled via Email & WhatsApp.
-                    console.log(`[Fast2SMS Notice] Quick SMS route ('q') disabled to prevent high costs. Msg for +91${cleanDigits} delivered via WhatsApp/Email.`);
-                    res.setHeader('Content-Type', 'application/json');
-                    res.end(JSON.stringify({
-                      success: true,
-                      simulated: true,
-                      id: `sim_dev_sms_${Date.now()}`,
-                      provider: 'fast2sms_skipped_quick',
-                      message: 'Quick SMS route is disabled to avoid high charges. Sent via WhatsApp & Email.'
-                    }));
-                    return;
+                    // Quick SMS ('q') Route (does not require DLT Entity)
+                    const payload = { route: 'q', message: cleanMessage, numbers: cleanDigits };
+                    const f2sRes = await fetch('https://www.fast2sms.com/dev/bulkV2', {
+                      method: 'POST',
+                      headers: { 'authorization': fast2smsKey, 'Content-Type': 'application/json' },
+                      body: JSON.stringify(payload)
+                    });
+                    const f2sData = await f2sRes.json();
+                    if (f2sData.return === true) {
+                      res.setHeader('Content-Type', 'application/json');
+                      res.end(JSON.stringify({
+                        success: true,
+                        simulated: false,
+                        id: f2sData.request_id || `sms_${Date.now()}`,
+                        provider: 'fast2sms'
+                      }));
+                      return;
+                    } else {
+                      console.warn(`[Fast2SMS Quick SMS Error]`, f2sData);
+                      res.setHeader('Content-Type', 'application/json');
+                      res.end(JSON.stringify({
+                        success: true,
+                        simulated: true,
+                        id: `sim_dev_sms_${Date.now()}`,
+                        provider: 'fast2sms',
+                        error: f2sData.message
+                      }));
+                      return;
+                    }
                   }
                 }
 

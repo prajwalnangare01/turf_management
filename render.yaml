@@ -1,0 +1,66 @@
+# =============================================================================
+# Render Blueprint Specification for TurfFlow Platform
+# Hosts: React Frontend + REST API + WhatsApp AI Agent + Realtime Webhooks
+# =============================================================================
+
+services:
+  - type: web
+    name: turfflow-platform
+    env: node
+    plan: starter # Starter ($7/mo) recommended for always-on WhatsApp WebSocket & persistent disk
+    region: singapore # Close to India (low latency for Razorpay & WhatsApp)
+    buildCommand: npm install && npm run build && cd whatsapp-automation/server && npm install
+    startCommand: node whatsapp-automation/server/src/server.js
+    # With Supabase WhatsApp session persistence, persistent disk is optional ($0 disk cost).
+    # If running with a Render Disk, mountPath can be /var/data; on free/stateless tier, defaults to /tmp/whatsapp_session.
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: WHATSAPP_SESSION_PATH
+        value: /tmp/whatsapp_session # Backed up automatically to Supabase PostgreSQL
+      - key: BASE_URL
+        sync: false # e.g. https://turfflow-platform.onrender.com
+      - key: CLIENT_URL
+        sync: false # e.g. https://turfflow-platform.onrender.com
+      - key: WHATSAPP_PHONE_NUMBER
+        sync: false # e.g. 919876543210 (without + sign)
+      - key: JWT_SECRET
+        generateValue: true # Render will automatically generate a cryptographically secure 32-char key
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false # Upstash or Render Redis
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: 465
+      - key: SMTP_SECURE
+        value: true
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM_EMAIL
+        sync: false
+      - key: SMTP_FROM_NAME
+        value: TurfFlow Arena
+      - key: SMS_PROVIDER
+        value: fast2sms
+      - key: SMS_API_KEY
+        sync: false
+      - key: FAST2SMS_API_KEY
+        sync: false

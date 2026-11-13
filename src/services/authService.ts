@@ -24,7 +24,48 @@ export class AuthService {
   };
 
   /**
-   * Attempt login with email/username and password
+   * Get Authorization headers containing backend-issued Bearer JWT
+   */
+  public static getAuthHeaders(): Record<string, string> {
+    const session = this.getSession();
+    if (session && session.token) {
+      return { 'Authorization': `Bearer ${session.token}` };
+    }
+    return {};
+  }
+
+  /**
+   * Attempt login with backend API (server-side bcrypt & signed JWT token)
+   */
+  public static async loginAsync(identity: string, password: string): Promise<{ success: boolean; session?: AdminSession; error?: string }> {
+    try {
+      const res = await fetch('/api/auth/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identity, password })
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.token) {
+        const session: AdminSession = {
+          token: data.token,
+          adminUser: data.admin,
+          authenticatedAt: new Date().toISOString(),
+          expiresAt: Date.now() + 24 * 60 * 60 * 1000
+        };
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+        }
+        return { success: true, session };
+      }
+      return { success: false, error: data.error || 'Admin authentication failed.' };
+    } catch {
+      // Offline fallback for unit tests or offline dev
+      return this.login(identity, password);
+    }
+  }
+
+  /**
+   * Synchronous login helper (preserves backward compatibility and unit tests)
    */
   public static login(identity: string, password: string): { success: boolean; session?: AdminSession; error?: string } {
     const trimmedIdentity = identity.trim().toLowerCase();
@@ -44,7 +85,6 @@ export class AuthService {
     }
 
     if (!admin) {
-      // Check if identity contains role hint or matches name
       admin = adminUsers.find(a => a.name.toLowerCase().includes(trimmedIdentity) || a.role.toLowerCase() === trimmedIdentity);
     }
 
@@ -58,6 +98,23 @@ export class AuthService {
 
     if (!admin.is_active) {
       return { success: false, error: 'This admin account is currently deactivated.' };
+    }
+
+    // Try fetching real JWT asynchronously in background if browser environment
+    if (typeof fetch !== 'undefined') {
+      fetch('/api/auth/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identity, password })
+      }).then(r => r.json()).then(data => {
+        if (data.token && typeof localStorage !== 'undefined') {
+          const current = this.getSession();
+          if (current) {
+            current.token = data.token;
+            localStorage.setItem(SESSION_KEY, JSON.stringify(current));
+          }
+        }
+      }).catch(() => {});
     }
 
     // Create session token
