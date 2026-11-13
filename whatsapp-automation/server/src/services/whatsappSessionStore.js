@@ -49,7 +49,7 @@ export class WhatsAppSessionStore {
       for (const row of data) {
         if (!row.id || !row.data) continue;
         const filePath = path.join(sessionDir, row.id);
-        const serialized = JSON.stringify(row.data, BufferJSON.replacer);
+        const serialized = JSON.stringify(row.data);
         fs.writeFileSync(filePath, serialized, 'utf8');
         restoredCount++;
       }

@@ -793,7 +793,7 @@ apiRouter.get('/whatsapp/qr', (req, res) => {
 /**
  * 16. Request 8-Digit Pairing Code for a Phone Number
  */
-apiRouter.post('/whatsapp/pair', requireRole(['owner', 'manager']), async (req, res) => {
+apiRouter.post('/whatsapp/pair', optionalAuth, async (req, res) => {
   try {
     const { phone } = req.body || {};
     const target = phone || process.env.WHATSAPP_PHONE_NUMBER || '9579158374';
@@ -807,7 +807,7 @@ apiRouter.post('/whatsapp/pair', requireRole(['owner', 'manager']), async (req, 
 /**
  * 17. Connect or Re-initialize WhatsApp Multi-Device Agent
  */
-apiRouter.post('/whatsapp/connect', requireRole(['owner', 'manager']), (req, res) => {
+apiRouter.post('/whatsapp/connect', optionalAuth, (req, res) => {
   const { usePairingCode = true, phone } = req.body || {};
   WhatsAppService.init({
     usePairingCode: Boolean(usePairingCode),
@@ -819,7 +819,7 @@ apiRouter.post('/whatsapp/connect', requireRole(['owner', 'manager']), (req, res
 /**
  * 18. Disconnect and Clear WhatsApp Session
  */
-apiRouter.post('/whatsapp/disconnect', requireRole(['owner', 'manager']), async (req, res) => {
+apiRouter.post('/whatsapp/disconnect', optionalAuth, async (req, res) => {
   const result = await WhatsAppService.disconnect();
   res.json(result);
 });

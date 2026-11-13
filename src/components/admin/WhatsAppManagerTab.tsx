@@ -6,6 +6,7 @@ import {
   Sun, Moon
 } from 'lucide-react';
 import { store } from '../../services/store';
+import { AuthService } from '../../services/authService';
 import { AdminUser, Booking } from '../../types/schema';
 import { formatTime12hPlain, formatDateDDMMYYYY } from '../../utils/formatters';
 
@@ -134,7 +135,10 @@ export const WhatsAppManagerTab: React.FC<Props> = ({ currentAdmin }) => {
     try {
       const res = await fetch('/api/whatsapp/pair', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...AuthService.getAuthHeaders()
+        },
         body: JSON.stringify({ phone: targetPhoneNumber })
       });
       const data = await res.json();
@@ -174,7 +178,10 @@ export const WhatsAppManagerTab: React.FC<Props> = ({ currentAdmin }) => {
     try {
       const res = await fetch('/api/agent/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...AuthService.getAuthHeaders()
+        },
         body: JSON.stringify({
           fromPhone: simulatedPhone,
           senderName: 'Test Player',
@@ -222,7 +229,10 @@ export const WhatsAppManagerTab: React.FC<Props> = ({ currentAdmin }) => {
     try {
       const res = await fetch('/api/bookings/confirm', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...AuthService.getAuthHeaders()
+        },
         body: JSON.stringify({ bookingRef, paymentId: `pay_admin_${Date.now()}` })
       });
       const data = await res.json();
