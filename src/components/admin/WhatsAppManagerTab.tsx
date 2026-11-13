@@ -74,7 +74,7 @@ export const WhatsAppManagerTab: React.FC<Props> = ({ currentAdmin }) => {
   const verifyToken = 'turfflow_secret_token_123';
   const targetPhoneNumber = '9579158374';
   const rawActivePhone = (waClientStatus.linkedPhone || waClientStatus.targetPhone || targetPhoneNumber).replace(/\D/g, '');
-  const activeTenDigitPhone = rawActivePhone.startsWith('91') && rawActivePhone.length === 12 ? rawActivePhone.slice(2) : rawActivePhone;
+  const activeTenDigitPhone = rawActivePhone.length >= 10 ? rawActivePhone.slice(-10) : rawActivePhone;
 
   const refreshData = async () => {
     // 1. Filter bookings originated via WhatsApp

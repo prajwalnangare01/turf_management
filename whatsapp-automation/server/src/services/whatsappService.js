@@ -215,6 +215,7 @@ export class WhatsAppService {
 
           const rawId = sock.user?.id || '';
           this.linkedPhone = rawId.split(':')[0] || formattedPhone;
+          this.targetPhone = this.linkedPhone;
 
           console.log(`\n======================================================`);
           console.log(`🎉 PROPER WHATSAPP AGENT CONNECTED!`);
