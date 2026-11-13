@@ -28,6 +28,7 @@ export const WhatsAppManagerTab: React.FC<Props> = ({ currentAdmin }) => {
   const [chatInput, setChatInput] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [isPairingLoading, setIsPairingLoading] = useState(false);
+  const [phoneInput, setPhoneInput] = useState('9579158374');
   
   const [chatHistory, setChatHistory] = useState<Array<{ sender: 'agent' | 'user'; text: string; time: string }>>([
     {
@@ -139,7 +140,7 @@ export const WhatsAppManagerTab: React.FC<Props> = ({ currentAdmin }) => {
           'Content-Type': 'application/json',
           ...AuthService.getAuthHeaders()
         },
-        body: JSON.stringify({ phone: targetPhoneNumber })
+        body: JSON.stringify({ phone: (phoneInput || targetPhoneNumber).replace(/\D/g, '') })
       });
       const data = await res.json();
       if (data.pairingCode) {
@@ -398,12 +399,30 @@ export const WhatsAppManagerTab: React.FC<Props> = ({ currentAdmin }) => {
                   <span className="text-[10px] text-emerald-400 font-mono font-bold uppercase tracking-wider">
                     Alternative: Link With Phone Number
                   </span>
-                  <span className="text-[10px] text-slate-400 font-mono">+91 {targetPhoneNumber}</span>
+                  <span className="text-[10px] text-slate-400 font-mono">+91 {phoneInput || targetPhoneNumber}</span>
                 </div>
 
                 <p className="text-xs text-slate-300 mb-3">
                   If you prefer not to scan the QR code, tap <strong>&ldquo;Link with phone number instead&rdquo;</strong> at the bottom of the WhatsApp scanner screen and enter this code:
                 </p>
+
+                <div className="flex items-center gap-2 mb-3 bg-slate-800/90 p-2 rounded-lg border border-slate-700">
+                  <span className="text-xs text-slate-400 font-mono font-bold">+91</span>
+                  <input
+                    type="text"
+                    value={phoneInput}
+                    onChange={e => setPhoneInput(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                    placeholder="Enter 10-digit number"
+                    className="bg-slate-900 border border-slate-700 text-white rounded px-2.5 py-1 text-xs font-mono flex-1 focus:outline-emerald-500"
+                  />
+                  <button
+                    onClick={() => handleRequestPairingCode(phoneInput)}
+                    disabled={isPairingLoading || phoneInput.length < 10}
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-2.5 py-1 rounded font-semibold transition disabled:opacity-50 shrink-0"
+                  >
+                    {isPairingLoading ? 'Generating...' : 'Get Code'}
+                  </button>
+                </div>
 
                 <div className="bg-slate-800/80 rounded-lg p-3 text-center border border-slate-700 my-2">
                   <div className="text-2xl sm:text-3xl font-mono font-extrabold tracking-widest text-emerald-400 select-all">
