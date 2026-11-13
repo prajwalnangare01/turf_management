@@ -27,31 +27,55 @@ export class WhatsAppSessionStore {
         fs.mkdirSync(sessionDir, { recursive: true });
       }
 
-      const { data, error } = await supabase
-        .from('whatsapp_sessions')
-        .select('id, data');
-
-      if (error) {
-        // Table might not exist yet if user hasn't run the migration
-        if (error.code === '42P01' || error.message?.includes('does not exist')) {
-          console.warn('ℹ️ [WhatsApp Session]: "whatsapp_sessions" table not found in Supabase. Running with local session storage. (Run supabase_setup.sql to enable cloud session persistence)');
-        } else {
-          console.warn('⚠️ [WhatsApp Session]: Could not query "whatsapp_sessions":', error.message);
-        }
-        return { hydrated: false, count: 0, error: error.message };
-      }
-
-      if (!Array.isArray(data) || data.length === 0) {
-        return { hydrated: false, count: 0, reason: 'empty_session' };
-      }
-
+      // 1. Fetch creds.json first explicitly to guarantee master auth is always hydrated
       let restoredCount = 0;
-      for (const row of data) {
-        if (!row.id || !row.data) continue;
-        const filePath = path.join(sessionDir, row.id);
-        const serialized = JSON.stringify(row.data);
-        fs.writeFileSync(filePath, serialized, 'utf8');
-        restoredCount++;
+      try {
+        const { data: credsRow } = await supabase
+          .from('whatsapp_sessions')
+          .select('id, data')
+          .eq('id', 'creds.json')
+          .maybeSingle();
+
+        if (credsRow && credsRow.data) {
+          fs.writeFileSync(path.join(sessionDir, 'creds.json'), JSON.stringify(credsRow.data), 'utf8');
+          restoredCount++;
+        }
+      } catch (credsErr) {
+        console.warn('⚠️ [WhatsApp Session]: Could not fetch creds.json:', credsErr.message);
+      }
+
+      // 2. Fetch all other session keys with paged range query
+      let from = 0;
+      const pageSize = 1000;
+      while (true) {
+        const { data: rows, error } = await supabase
+          .from('whatsapp_sessions')
+          .select('id, data')
+          .neq('id', 'creds.json')
+          .range(from, from + pageSize - 1);
+
+        if (error) {
+          if (error.code === '42P01' || error.message?.includes('does not exist')) {
+            console.warn('ℹ️ [WhatsApp Session]: "whatsapp_sessions" table not found in Supabase.');
+          }
+          break;
+        }
+
+        if (!rows || rows.length === 0) break;
+
+        for (const row of rows) {
+          if (!row.id || !row.data) continue;
+          const filePath = path.join(sessionDir, row.id);
+          fs.writeFileSync(filePath, JSON.stringify(row.data), 'utf8');
+          restoredCount++;
+        }
+
+        if (rows.length < pageSize) break;
+        from += pageSize;
+      }
+
+      if (restoredCount === 0) {
+        return { hydrated: false, count: 0, reason: 'empty_session' };
       }
 
       console.log(`📦 [WhatsApp Session]: Hydrated ${restoredCount} session keys from Supabase PostgreSQL into "${sessionDir}".`);

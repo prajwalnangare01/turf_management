@@ -226,7 +226,7 @@ export class WhatsAppService {
 
       // Handle Incoming Messages
       sock.ev.on('messages.upsert', async ({ messages, type }) => {
-        if (type !== 'notify') return;
+
 
         for (const msg of messages) {
           try {
@@ -239,7 +239,7 @@ export class WhatsAppService {
               remoteJid.includes('@g.us') ||
               remoteJid === 'status@broadcast' ||
               remoteJid.includes('@newsletter') ||
-              remoteJid.includes('@lid')
+              false
             ) {
               // Ignore group chats, broadcast channels, newsletters, and status updates
               continue;
@@ -255,7 +255,7 @@ export class WhatsAppService {
 
             if (!text) continue;
 
-            const senderPhoneRaw = remoteJid.replace('@s.whatsapp.net', '');
+            let senderPhoneRaw = (msg.key?.participant || msg.key?.remoteJidAlt || remoteJid).split('@')[0];
             const senderPhone = senderPhoneRaw.startsWith('+') ? senderPhoneRaw : `+${senderPhoneRaw}`;
             const senderName = msg.pushName || 'Player';
 
