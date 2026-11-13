@@ -73,6 +73,8 @@ export const WhatsAppManagerTab: React.FC<Props> = ({ currentAdmin }) => {
   const webhookUrl = `${window.location.origin}/api/webhooks/whatsapp`;
   const verifyToken = 'turfflow_secret_token_123';
   const targetPhoneNumber = '9579158374';
+  const rawActivePhone = (waClientStatus.linkedPhone || waClientStatus.targetPhone || targetPhoneNumber).replace(/\D/g, '');
+  const activeTenDigitPhone = rawActivePhone.startsWith('91') && rawActivePhone.length === 12 ? rawActivePhone.slice(2) : rawActivePhone;
 
   const refreshData = async () => {
     // 1. Filter bookings originated via WhatsApp
@@ -274,7 +276,7 @@ export const WhatsAppManagerTab: React.FC<Props> = ({ currentAdmin }) => {
             </span>
           </div>
           <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
-            Directly connected to WhatsApp number <strong>+91 {targetPhoneNumber}</strong>. When a customer sends a message to this number on WhatsApp, the AI concierge answers queries, checks live slots in Supabase, and books pitches automatically.
+            Directly connected to WhatsApp number <strong>+91 {activeTenDigitPhone}</strong>. When a customer sends a message to this number on WhatsApp, the AI concierge answers queries, checks live slots in Supabase, and books pitches automatically.
           </p>
         </div>
 
@@ -302,7 +304,7 @@ export const WhatsAppManagerTab: React.FC<Props> = ({ currentAdmin }) => {
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-headline font-bold text-base text-slate-900">
-                  WhatsApp Device Link: +91 {targetPhoneNumber}
+                  WhatsApp Device Link: +91 {activeTenDigitPhone}
                 </h3>
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
                   waClientStatus.status === 'connected'
@@ -313,7 +315,7 @@ export const WhatsAppManagerTab: React.FC<Props> = ({ currentAdmin }) => {
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                Link your real WhatsApp account on phone <strong>+91 {targetPhoneNumber}</strong> to allow this server to send & receive messages.
+                Link your real WhatsApp account on phone <strong>+91 {activeTenDigitPhone}</strong> to allow this server to send & receive messages.
               </p>
             </div>
           </div>
@@ -346,7 +348,7 @@ export const WhatsAppManagerTab: React.FC<Props> = ({ currentAdmin }) => {
               <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
               <div>
                 <p className="font-headline font-bold text-emerald-950 text-xs">
-                  Agent is actively running on +91 {waClientStatus.linkedPhone || targetPhoneNumber}!
+                  Agent is actively running on +91 {activeTenDigitPhone}!
                 </p>
                 <p className="text-[11px] text-emerald-800 mt-0.5">
                   Any customer who texts this number on WhatsApp will receive instantaneous, AI-powered slot bookings and confirmations.
@@ -354,7 +356,7 @@ export const WhatsAppManagerTab: React.FC<Props> = ({ currentAdmin }) => {
               </div>
             </div>
             <a
-              href={`https://wa.me/91${targetPhoneNumber}?text=${encodeURIComponent('Hi TurfFlow Arena!')}`}
+              href={`https://wa.me/91${activeTenDigitPhone}?text=${encodeURIComponent('Hi TurfFlow Arena!')}`}
               target="_blank"
               rel="noopener noreferrer"
               className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition shadow-xs shrink-0"
