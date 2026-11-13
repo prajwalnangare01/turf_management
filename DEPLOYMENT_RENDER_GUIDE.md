@@ -179,3 +179,18 @@ Once Render finishes building and starts your service, test these endpoints:
 
 4. **Live WhatsApp AI Test**:
    Send `"Hi"` or `"Show football slots for tomorrow"` from any personal phone to your venue's WhatsApp number. The agent will reply instantly with available slots and interactive booking buttons.
+
+---
+
+## 🤖 7. UptimeRobot Setup (Keep Render Awake 24/7)
+
+Render free instances spin down after 15 minutes of inactivity, which causes a 30-50 second cold start delay. Pinging the health API via UptimeRobot keeps the service active 24/7:
+
+1. In your **UptimeRobot Dashboard**, select or edit your monitor (or click **Add New Monitor**).
+2. Configure the following fields:
+   * **Monitor Type**: `HTTP(s)`
+   * **Friendly Name**: `turfflow.onrender.com` (or your preferred name)
+   * **URL (or IP)**: `https://turfflow.onrender.com/api/health` *(use `/api/health` instead of `/`)*
+   * **Monitoring Interval**: `5 minutes` (Free plan allows every 5 mins; prevents Render from idling after 15 mins)
+   * **Monitor Timeout**: `30 seconds`
+3. Click **Save changes**.
