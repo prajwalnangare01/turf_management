@@ -7,9 +7,9 @@ services:
   - type: web
     name: turfflow-platform
     env: node
-    plan: free # Free tier with $0 persistent disk cost (uses Supabase PostgreSQL persistence)
+    plan: starter # Starter ($7/mo) recommended for always-on WhatsApp WebSocket & persistent disk
     region: singapore # Close to India (low latency for Razorpay & WhatsApp)
-    buildCommand: npm install && npm run build && cd whatsapp-automation/server && npm install
+    buildCommand: npm install --legacy-peer-deps && npm run build && cd whatsapp-automation/server && npm install --legacy-peer-deps
     startCommand: node whatsapp-automation/server/src/server.js
     # With Supabase WhatsApp session persistence, persistent disk is optional ($0 disk cost).
     # If running with a Render Disk, mountPath can be /var/data; on free/stateless tier, defaults to /tmp/whatsapp_session.

@@ -8,7 +8,7 @@
     "dev:site": "vite",
     "dev:server": "node whatsapp-automation/server/src/server.js",
     "build": "tsc && vite build",
-    "build:render": "npm install && npm run build && cd whatsapp-automation/server && npm install",
+    "build:render": "npm install --legacy-peer-deps && npm run build && cd whatsapp-automation/server && npm install --legacy-peer-deps",
     "start": "node whatsapp-automation/server/src/server.js",
     "preview": "vite preview",
     "test": "npx tsx src/tests/edgeCases.test.ts",
