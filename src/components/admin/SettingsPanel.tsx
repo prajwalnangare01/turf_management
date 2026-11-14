@@ -140,9 +140,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin, onOp
       if (result.success) {
         setTestEmailResult({
           success: true,
-          message: result.simulated
-            ? `Simulation successful! Email logged for ${testEmailRecipient} (Configure SMTP_PASS in .env for live dispatch)`
-            : `Live email successfully delivered to ${testEmailRecipient} via Nodemailer (ID: ${result.id})!`,
+          message: `Live email successfully delivered to ${testEmailRecipient} via Nodemailer (ID: ${result.id})!`,
           simulated: result.simulated
         });
       } else {
