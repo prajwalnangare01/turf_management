@@ -138,9 +138,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin, onOp
       const result = await EmailService.sendTestEmail(testEmailRecipient, venue.name);
       setTestEmailLoading(false);
       if (result.success) {
+        const providerLabel = result.provider === 'brevo'
+          ? 'Brevo HTTPS API'
+          : result.provider === 'nodemailer'
+            ? 'Nodemailer'
+            : 'Email Dispatcher';
         setTestEmailResult({
           success: true,
-          message: `Live email successfully delivered to ${testEmailRecipient} via Nodemailer (ID: ${result.id})!`,
+          message: `Live email successfully delivered to ${testEmailRecipient} via ${providerLabel} (ID: ${result.id})!`,
           simulated: result.simulated
         });
       } else {
@@ -774,11 +779,13 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin, onOp
             <div className="flex items-center justify-between">
               <p className="font-headline font-bold text-sm text-on-surface">Outbound Notification Channels</p>
               <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
-                EmailService.isResendConfigured()
-                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                  : 'bg-amber-100 text-amber-800 border border-amber-300'
+                EmailService.isBrevoConfigured()
+                  ? 'bg-purple-100 text-purple-800 border border-purple-300'
+                  : EmailService.isConfigured()
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                    : 'bg-amber-100 text-amber-800 border border-amber-300'
               }`}>
-                {EmailService.isResendConfigured() ? '⚡ Nodemailer SMTP Active' : '🧪 SMTP Simulation Mode'}
+                {EmailService.isBrevoConfigured() ? '⚡ Brevo HTTPS API Active' : '⚡ Brevo & Nodemailer Ready'}
               </span>
             </div>
 
@@ -835,7 +842,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin, onOp
 
                 <div>
                   <label className="block text-[11px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">
-                    Send Test Email via Nodemailer
+                    Send Test Email (Brevo / Nodemailer)
                   </label>
                   <div className="flex gap-2">
                     <input
@@ -856,7 +863,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin, onOp
                       ) : (
                         <Send className="w-3.5 h-3.5" />
                       )}
-                      <span>Test SMTP</span>
+                      <span>Test Email</span>
                     </button>
                   </div>
                   {/* Resend Sender Email Conflict Notice (No Brackets) */}

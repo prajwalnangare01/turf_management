@@ -6,6 +6,7 @@ export interface EmailDispatchResult {
   success: boolean;
   id?: string;
   simulated: boolean;
+  provider?: 'brevo' | 'nodemailer' | 'simulation';
   error?: string;
   sandboxRestricted?: boolean;
   recipient: string;
@@ -39,6 +40,14 @@ export class EmailService {
   public static isConfigured(): boolean {
     const user = (import.meta as any).env?.SMTP_USER || 'rajupainter84688@gmail.com';
     return !!user && user !== 'your_email@gmail.com';
+  }
+
+  /**
+   * Check if Brevo HTTPS API is configured
+   */
+  public static isBrevoConfigured(): boolean {
+    const key = (import.meta as any).env?.VITE_BREVO_API_KEY || (import.meta as any).env?.BREVO_API_KEY;
+    return !!key && key !== 'your_brevo_api_key';
   }
 
   /**
@@ -108,6 +117,7 @@ export class EmailService {
           success: true,
           id: json.data?.id || json.id || `mail_${Date.now()}`,
           simulated: !!json.simulated,
+          provider: json.provider || (json.simulated ? 'simulation' : 'nodemailer'),
           recipient: cleanTo,
           subject: payload.subject,
           preview: plainPreview

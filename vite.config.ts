@@ -37,10 +37,49 @@ export default defineConfig(({ mode }) => {
                 const secure = (env.SMTP_SECURE || process.env.SMTP_SECURE) !== 'false';
 
                 const rawSender = data.from || env.SMTP_FROM_EMAIL || env.VITE_SMTP_FROM_EMAIL || user || 'rajupainter84688@gmail.com';
-                const senderName = env.SMTP_FROM_NAME || 'TurfFlow Arena';
+                const senderName = env.BREVO_FROM_NAME || env.SMTP_FROM_NAME || 'TurfFlow Arena';
                 const fromEmail = rawSender.includes('<') ? rawSender : `"${senderName}" <${rawSender}>`;
                 const replyTo = data.reply_to || env.SMTP_REPLY_TO || rawSender;
                 const cleanTo = Array.isArray(data.to) ? data.to.join(', ') : (data.to || '').trim();
+
+                // 1. Try Brevo HTTPS REST API if configured
+                const brevoKey = env.BREVO_API_KEY || env.VITE_BREVO_API_KEY || process.env.BREVO_API_KEY;
+                if (brevoKey && brevoKey.trim() !== '' && brevoKey !== 'your_brevo_api_key') {
+                  try {
+                    const cleanSender = rawSender.includes('<') ? (rawSender.match(/<([^>]+)>/)?.[1] || rawSender).trim() : rawSender.trim();
+                    const brevoPayload: any = {
+                      sender: { name: senderName, email: cleanSender },
+                      to: [{ email: cleanTo }],
+                      subject: data.subject,
+                      htmlContent: data.html || `<p>${data.text || ''}</p>`,
+                      textContent: data.text
+                    };
+                    if (replyTo) {
+                      brevoPayload.replyTo = { email: replyTo.includes('<') ? (replyTo.match(/<([^>]+)>/)?.[1] || replyTo).trim() : replyTo.trim(), name: senderName };
+                    }
+                    if (data.attachments && Array.isArray(data.attachments)) {
+                      brevoPayload.attachment = data.attachments.map((att: any) => ({
+                        name: att.filename,
+                        content: typeof att.content === 'string' ? att.content : Buffer.from(att.content).toString('base64')
+                      }));
+                    }
+                    const bRes = await fetch('https://api.brevo.com/v3/smtp/email', {
+                      method: 'POST',
+                      headers: { 'accept': 'application/json', 'content-type': 'application/json', 'api-key': brevoKey.trim() },
+                      body: JSON.stringify(brevoPayload)
+                    });
+                    const bData: any = await bRes.json().catch(() => ({}));
+                    if (bRes.ok) {
+                      const msgId = bData.messageId || bData.id || `brevo_${Date.now()}`;
+                      console.log(`✉️ [Brevo Dev Email Sent] To: ${cleanTo} | ID: ${msgId}`);
+                      res.setHeader('Content-Type', 'application/json');
+                      res.end(JSON.stringify({ success: true, simulated: false, id: msgId, provider: 'brevo' }));
+                      return;
+                    }
+                  } catch (bErr: any) {
+                    console.warn('[Brevo Dev Warning - Falling back to Nodemailer]:', bErr.message);
+                  }
+                }
 
                 // If no real password is configured or is placeholder, return graceful simulation
                 if (!pass || pass === 'your_smtp_app_password') {
