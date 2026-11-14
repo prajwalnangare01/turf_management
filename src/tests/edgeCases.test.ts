@@ -2300,6 +2300,33 @@ async function runResendTests() {
   assert(verifyBooking.refund_amount === 1600, 'Original refund amount ₹1600 is preserved without corruption');
   console.log('✅ PASSED: Refunded state is immutable and protected from re-execution');
 
+  // --- TEST 38: Admin Database Clear & Purge Contract ---
+  console.log('\n--- TEST 38: Admin Database Clear & Purge Contract ---');
+
+  // 38.1 Insert test records
+  const sampleCustomer = store.getCustomers()[0];
+  sampleCustomer.total_bookings = 5;
+  sampleCustomer.total_spent = 6000;
+  store.setSlotLocks([{ court_id: 'crt-001', date: '2026-12-05', start_time: '18:00', end_time: '19:00', expires_at: Date.now() + 60000, locked_by: 'test' }]);
+  assert(store.getBookings().length > 0, 'Bookings exist before operational purge');
+
+  // 38.2 Execute clearOperationalData
+  store.clearOperationalData();
+  assert(store.getBookings().length === 0, 'Operational clear wiped all bookings');
+  assert(store.getPayments().length === 0, 'Operational clear wiped all payments');
+  assert(store.getSlotLocks().length === 0, 'Operational clear wiped all slot locks');
+  assert(store.getBlockedSlots().length === 0, 'Operational clear wiped all blocked slots');
+  assert(store.getCourts().length > 0, 'Operational clear preserved pitch & court setups');
+  assert(store.getSports().length > 0, 'Operational clear preserved sports configurations');
+  assert(store.getCustomers().every(c => c.total_bookings === 0 && c.total_spent === 0), 'Customer spend counters reset to 0');
+  console.log('✅ PASSED: store.clearOperationalData() cleanly purged operational data while preserving configurations');
+
+  // 38.3 Execute clearAllData (factory reset)
+  store.clearAllData(true);
+  assert(store.getBookings().length === 0, 'Factory reset has 0 bookings');
+  assert(store.getAdminUsers().length > 0, 'Factory reset preserved admin accounts');
+  console.log('✅ PASSED: store.clearAllData() cleanly performed factory reset');
+
   console.log('\n🎉 ALL CORNER & EDGE CASE TESTS (INCLUDING AUTO-COMPLETE & OWNER REDUCED WORKFLOW) PASSED PERFECTLY!\n');
 }
 

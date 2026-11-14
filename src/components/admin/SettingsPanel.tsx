@@ -7,12 +7,17 @@ import { Sliders, Save, RefreshCw, MessageSquare, DollarSign, Clock, PlusCircle,
 import { getSupabaseConfig, setSupabaseConfig, clearSupabaseConfig, testSupabaseConnection, isSupabaseConfigured } from '../../services/supabaseClient';
 import { SupabaseSyncService } from '../../services/supabaseSyncService';
 import { EmailService } from '../../services/emailService';
+import { ClearDatabaseModal } from './ClearDatabaseModal';
+import { Toast } from '../common/Toast';
 
 interface SettingsPanelProps {
   currentAdmin: AdminUser;
+  onOpenClearDbModal?: () => void;
 }
 
-export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin }) => {
+export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin, onOpenClearDbModal }) => {
+  const [showInternalClearModal, setShowInternalClearModal] = useState(false);
+  const [clearSuccessToast, setClearSuccessToast] = useState<string | null>(null);
   const [venue, setVenue] = useState(store.getVenue());
   const [policies, setPolicies] = useState<CancellationPolicy[]>(() => {
     return [...store.getCancellationPolicies()].sort((a, b) => b.hours_before_start - a.hours_before_start);
@@ -279,14 +284,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin }) =>
   };
 
   const handleResetDatabase = () => {
-    if (currentAdmin.role !== 'owner') {
-      alert('Permission denied: Only the Venue Owner can wipe the database.');
-      return;
-    }
-    if (confirm('Completely clear entire database? This will erase all bookings, payments, locks, and custom records.')) {
-      store.clearAllData();
-      alert('Database cleared successfully!');
-      window.location.reload();
+    if (onOpenClearDbModal) {
+      onOpenClearDbModal();
+    } else {
+      setShowInternalClearModal(true);
     }
   };
 
@@ -1060,6 +1061,62 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin }) =>
             </div>
           </div>
 
+          {/* 7. Danger Zone: Database Management & Purge */}
+          <div className="card p-6 border-red-200/90 bg-red-50/25 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-red-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-red-100 border border-red-200 flex items-center justify-center text-red-600 shrink-0">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-headline font-bold text-base text-slate-900 flex items-center gap-2">
+                    Database Management & Wipe
+                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-300">
+                      DANGER ZONE
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Purge operational bookings, payment receipts, active locks, and reset customer counters.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleResetDatabase}
+                className="bg-red-600 hover:bg-red-700 text-white text-xs font-headline font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-sm transition-all active:scale-98 shrink-0 self-start sm:self-auto cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Clear Database</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <div className="bg-white p-3 rounded-xl border border-red-100 shadow-2xs">
+                <span className="text-[11px] text-slate-500 font-semibold block">Total Bookings</span>
+                <span className="text-lg font-bold text-slate-900 font-mono">{store.getBookings().length}</span>
+              </div>
+              <div className="bg-white p-3 rounded-xl border border-red-100 shadow-2xs">
+                <span className="text-[11px] text-slate-500 font-semibold block">Total Payments</span>
+                <span className="text-lg font-bold text-slate-900 font-mono">{store.getPayments().length}</span>
+              </div>
+              <div className="bg-white p-3 rounded-xl border border-red-100 shadow-2xs">
+                <span className="text-[11px] text-slate-500 font-semibold block">Live Slot Locks</span>
+                <span className="text-lg font-bold text-slate-900 font-mono">{store.getSlotLocks().length}</span>
+              </div>
+              <div className="bg-white p-3 rounded-xl border border-red-100 shadow-2xs">
+                <span className="text-[11px] text-slate-500 font-semibold block">Target Storage</span>
+                <span className="text-xs font-bold text-emerald-700 block truncate">
+                  {isSupabaseConfigured() ? 'Supabase PostgreSQL' : 'Local Browser Cache'}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              Clicking <b>Clear Database</b> opens a secure confirmation modal with options to either wipe operational transaction data (keeping your pitches & sports setups intact) or execute a full factory reset.
+            </p>
+          </div>
+
           <div className="pt-3 flex gap-3">
             <button type="submit" className="btn-primary text-xs px-6 py-2.5 font-headline font-bold flex items-center gap-1.5 shadow-sm">
               <Save className="w-4 h-4" /> Save Configuration
@@ -1068,13 +1125,26 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin }) =>
             <button
               type="button"
               onClick={handleResetDatabase}
-              className="btn-secondary text-xs px-4 py-2.5 font-bold text-red-700 hover:bg-red-50 flex items-center gap-1.5 ml-auto"
+              className="btn-secondary text-xs px-4 py-2.5 font-bold text-red-700 hover:bg-red-50 border-red-200 flex items-center gap-1.5 ml-auto cursor-pointer"
             >
-              <RefreshCw className="w-4 h-4 text-red-600" /> Reset Database to Seed
+              <Trash2 className="w-4 h-4 text-red-600" /> Clear Database
             </button>
           </div>
         </form>
       </div>
+
+      <ClearDatabaseModal
+        isOpen={showInternalClearModal}
+        currentAdmin={currentAdmin}
+        onClose={() => setShowInternalClearModal(false)}
+        onSuccess={(msg) => setClearSuccessToast(msg)}
+      />
+
+      <Toast
+        isOpen={Boolean(clearSuccessToast)}
+        message={clearSuccessToast || ''}
+        onClose={() => setClearSuccessToast(null)}
+      />
 
     </div>
   );

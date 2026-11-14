@@ -570,13 +570,29 @@ class AppStore {
     this.saveToStorage();
   }
 
-  // Completely clear database
-  public clearAllData() {
+  // Clear operational transactions only (bookings, payments, locks, blocked slots, customer stats)
+  public clearOperationalData() {
+    this.bookings = [];
+    this.payments = [];
+    this.slotLocks = [];
+    this.blockedSlots = [];
+    this.notificationLogs = [];
+    this.customers = this.customers.map(c => ({
+      ...c,
+      total_bookings: 0,
+      total_spent: 0
+    }));
+    this.saveToStorage();
+    this.notify();
+  }
+
+  // Completely clear database / factory reset
+  public clearAllData(preserveSession = true) {
     this.venue = DEFAULT_VENUE;
     this.sports = DEFAULT_SPORTS;
     this.courts = DEFAULT_COURTS;
     this.pricingRules = DEFAULT_PRICING_RULES;
-    this.customers = DEFAULT_CUSTOMERS;
+    this.customers = DEFAULT_CUSTOMERS.map(c => ({ ...c, total_bookings: 0, total_spent: 0 }));
     this.adminUsers = DEFAULT_ADMIN_USERS;
     this.bookings = [];
     this.payments = [];
@@ -589,10 +605,15 @@ class AppStore {
     this.auditLogs = [];
     this.saveToStorage();
     if (typeof localStorage !== 'undefined') {
-      localStorage.removeItem('turfflow_admin_session');
-      localStorage.removeItem('turfflow_customer_session');
-      localStorage.removeItem('TURFFLOW_STORE_V1');
+      localStorage.removeItem('TURFFLOW_DELETED_SPORTS');
+      localStorage.removeItem('TURFFLOW_DELETED_COURTS');
+      if (!preserveSession) {
+        localStorage.removeItem('turfflow_admin_session');
+        localStorage.removeItem('turfflow_customer_session');
+        localStorage.removeItem('TURFFLOW_STORE_V1');
+      }
     }
+    this.notify();
   }
 }
 

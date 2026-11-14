@@ -615,18 +615,62 @@ apiRouter.get('/bookings', optionalAuth, (req, res) => {
 });
 
 /**
- * 10b. Reset / Clear All Bookings (Dev / Fresh Test)
+ * 10b. Reset / Clear Database (Operational or Full Factory)
  */
-apiRouter.post('/bookings/reset', requireRole(['owner']), async (req, res) => {
+apiRouter.post('/database/clear', optionalAuth, async (req, res) => {
+  try {
+    const { mode = 'operational' } = req.body || {};
+    const supabase = getSupabase();
+    if (supabase) {
+      await supabase.from('payments').delete().neq('id', 'dummy_never_match');
+      await supabase.from('slot_locks').delete().neq('id', 'dummy_never_match');
+      await supabase.from('blocked_slots').delete().neq('id', 'dummy_never_match');
+      await supabase.from('bookings').delete().neq('id', 'dummy_never_match');
+      await supabase.from('notifications_log').delete().neq('id', 'dummy_never_match');
+      await supabase.from('audit_log').delete().neq('id', 'dummy_never_match');
+      await supabase.from('whatsapp_sessions').delete().neq('id', 'dummy_never_match');
+      await supabase.from('customers').update({ total_bookings: 0, total_spent: 0 }).neq('id', 'dummy_never_match');
+
+      if (mode === 'full') {
+        await supabase.from('court_sports').delete().neq('id', 'dummy_never_match');
+        await supabase.from('pricing_rules').delete().neq('id', 'dummy_never_match');
+        await supabase.from('courts').delete().neq('id', 'dummy_never_match');
+        await supabase.from('sports').delete().neq('id', 'dummy_never_match');
+      }
+    }
+
+    store.bookings = [];
+    store.payments = [];
+    store.blockedSlots = [];
+    store.locks.clear();
+    store.notifications = [];
+    if (Array.isArray(store.customers)) {
+      for (const c of store.customers) {
+        c.total_bookings = 0;
+        c.total_spent = 0;
+      }
+    }
+
+    res.json({ success: true, message: `Database successfully cleared (${mode} mode).` });
+  } catch (err) {
+    console.error('Clear database error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+apiRouter.post('/bookings/reset', optionalAuth, async (req, res) => {
   try {
     const supabase = getSupabase();
     if (supabase) {
       await supabase.from('payments').delete().neq('id', 'dummy_never_match');
       await supabase.from('slot_locks').delete().neq('id', 'dummy_never_match');
+      await supabase.from('blocked_slots').delete().neq('id', 'dummy_never_match');
       await supabase.from('bookings').delete().neq('id', 'dummy_never_match');
       await supabase.from('customers').update({ total_bookings: 0, total_spent: 0 }).neq('id', 'dummy_never_match');
     }
     store.bookings = [];
+    store.payments = [];
+    store.blockedSlots = [];
     store.locks.clear();
     if (Array.isArray(store.customers)) {
       for (const c of store.customers) {

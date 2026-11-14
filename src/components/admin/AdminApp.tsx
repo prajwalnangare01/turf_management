@@ -14,11 +14,13 @@ import { SettingsPanel } from './SettingsPanel';
 import { WhatsAppManagerTab } from './WhatsAppManagerTab';
 import { OfflineBookingModal } from './OfflineBookingModal';
 import { ConfirmModal } from '../common/ConfirmModal';
+import { ClearDatabaseModal } from './ClearDatabaseModal';
+import { Toast } from '../common/Toast';
 import { getVenueDateString } from '../../utils/venueTime';
 import { 
   Calendar, ListFilter, Settings, Users, BarChart3, History, 
   Sliders, PlusCircle, UserCheck, ArrowLeft, Lock, ShieldCheck, Zap, LogOut, ShieldAlert,
-  MessageSquare
+  MessageSquare, Trash2
 } from 'lucide-react';
 
 interface AdminAppProps {
@@ -60,6 +62,8 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onSwitchToCustomer }) => {
     } catch {}
   };
   const [showOfflineModal, setShowOfflineModal] = useState(false);
+  const [showClearDbModal, setShowClearDbModal] = useState(false);
+  const [adminToastMsg, setAdminToastMsg] = useState<string | null>(null);
   const [pendingSwitchAdmin, setPendingSwitchAdmin] = useState<AdminUser | null>(null);
 
   useEffect(() => {
@@ -202,6 +206,20 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onSwitchToCustomer }) => {
                 ))}
               </select>
             </div>
+
+            {/* Clear Database Danger Action (Owner & Manager) */}
+            {(currentAdmin.role === 'owner' || currentAdmin.role === 'manager') && (
+              <button
+                type="button"
+                onClick={() => setShowClearDbModal(true)}
+                title="Clear database records / Purge test data"
+                className="btn-secondary text-[11px] sm:text-xs px-2.5 sm:px-3 py-1.5 sm:py-2 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-300 flex items-center gap-1 font-headline font-bold shrink-0 whitespace-nowrap cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-red-600" />
+                <span className="hidden sm:inline">Clear DB</span>
+                <span className="sm:hidden">Clear</span>
+              </button>
+            )}
 
             {/* + Walk-in Booking CTA Button (Always Prominent & Visible) */}
             <button
@@ -358,7 +376,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onSwitchToCustomer }) => {
               {activeTab === 'crm' && <CustomerCRM currentAdmin={currentAdmin} />}
               {activeTab === 'reports' && <ReportsAnalytics currentAdmin={currentAdmin} />}
               {activeTab === 'audit' && <AuditLogViewer />}
-              {activeTab === 'settings' && <SettingsPanel currentAdmin={currentAdmin} />}
+              {activeTab === 'settings' && <SettingsPanel currentAdmin={currentAdmin} onOpenClearDbModal={() => setShowClearDbModal(true)} />}
             </>
           )}
         </div>
@@ -397,6 +415,21 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onSwitchToCustomer }) => {
           handleLogout();
         }}
         onCancel={() => setShowLogoutConfirm(false)}
+      />
+
+      {/* Clear Database Modal */}
+      <ClearDatabaseModal
+        isOpen={showClearDbModal}
+        currentAdmin={currentAdmin}
+        onClose={() => setShowClearDbModal(false)}
+        onSuccess={(msg) => setAdminToastMsg(msg)}
+      />
+
+      {/* Admin Action Feedback Toast */}
+      <Toast
+        isOpen={Boolean(adminToastMsg)}
+        message={adminToastMsg || ''}
+        onClose={() => setAdminToastMsg(null)}
       />
     </div>
   );

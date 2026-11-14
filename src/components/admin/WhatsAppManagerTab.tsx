@@ -120,16 +120,17 @@ export const WhatsAppManagerTab: React.FC<Props> = ({ currentAdmin }) => {
     setTimeout(() => setCopiedPairingCode(false), 2000);
   };
 
-  const handleRequestPairingCode = async () => {
+  const handleRequestPairingCode = async (explicitPhone?: string | React.MouseEvent) => {
     setIsPairingLoading(true);
     try {
+      const targetPhone = (typeof explicitPhone === 'string' ? explicitPhone : null) || phoneInput || targetPhoneNumber;
       const res = await fetch('/api/whatsapp/pair', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...AuthService.getAuthHeaders()
         },
-        body: JSON.stringify({ phone: (phoneInput || targetPhoneNumber).replace(/\D/g, '') })
+        body: JSON.stringify({ phone: targetPhone.replace(/\D/g, '') })
       });
       const data = await res.json();
       if (data.pairingCode) {

@@ -1130,4 +1130,44 @@ export class SupabaseSyncService {
       return false;
     }
   }
+
+  /**
+   * Clear database tables in Supabase PostgreSQL
+   */
+  public static async clearSupabaseDatabase(mode: 'operational' | 'full' = 'operational'): Promise<{ success: boolean; message: string }> {
+    const supabase = getSupabase();
+    if (!supabase) {
+      return { success: true, message: 'Supabase is not configured (local storage mode).' };
+    }
+
+    try {
+      // 1. Delete payments (references bookings)
+      await supabase.from('payments').delete().neq('id', 'dummy_never_match');
+      // 2. Delete slot locks
+      await supabase.from('slot_locks').delete().neq('id', 'dummy_never_match');
+      // 3. Delete blocked slots
+      await supabase.from('blocked_slots').delete().neq('id', 'dummy_never_match');
+      // 4. Delete bookings
+      await supabase.from('bookings').delete().neq('id', 'dummy_never_match');
+      // 5. Delete notification logs
+      await supabase.from('notifications_log').delete().neq('id', 'dummy_never_match');
+      // 6. Delete audit logs
+      await supabase.from('audit_log').delete().neq('id', 'dummy_never_match');
+      // 7. Reset customer statistics
+      await supabase.from('customers').update({ total_bookings: 0, total_spent: 0 }).neq('id', 'dummy_never_match');
+
+      if (mode === 'full') {
+        await supabase.from('court_sports').delete().neq('id', 'dummy_never_match');
+        await supabase.from('pricing_rules').delete().neq('id', 'dummy_never_match');
+        await supabase.from('courts').delete().neq('id', 'dummy_never_match');
+        await supabase.from('sports').delete().neq('id', 'dummy_never_match');
+      }
+
+      console.log(`✅ [Supabase Sync] Supabase database cleared (${mode} mode).`);
+      return { success: true, message: `Supabase database wiped cleanly (${mode} mode).` };
+    } catch (err: any) {
+      console.warn('⚠️ [Supabase Sync] Exception clearing Supabase database:', err.message);
+      return { success: false, message: err.message || 'Error clearing Supabase tables' };
+    }
+  }
 }

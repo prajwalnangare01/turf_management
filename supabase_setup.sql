@@ -511,6 +511,9 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'payments' AND policyname = 'Public Update Payments') THEN
     CREATE POLICY "Public Update Payments" ON payments FOR UPDATE USING (true) WITH CHECK (true);
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'payments' AND policyname = 'Public Delete Payments') THEN
+    CREATE POLICY "Public Delete Payments" ON payments FOR DELETE USING (true);
+  END IF;
 
   -- Blocked Slots
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'blocked_slots' AND policyname = 'Public Read Blocked Slots') THEN
