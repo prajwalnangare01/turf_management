@@ -64,3 +64,9 @@ services:
         sync: false
       - key: FAST2SMS_API_KEY
         sync: false
+      - key: BREVO_API_KEY
+        sync: false
+      - key: BREVO_FROM_EMAIL
+        value: rajupainter84688@gmail.com
+      - key: BREVO_FROM_NAME
+        value: TurfFlow Arena
