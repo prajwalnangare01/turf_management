@@ -17,7 +17,7 @@ export class RedisLockService {
   }
 
   // Purge expired locks from simulated Redis store
-  private static cleanExpiredLocks(): SlotLock[] {
+  public static cleanExpiredLocks(): SlotLock[] {
     const now = Date.now();
     const maxValidExpiresAt = now + HOLD_TTL_MS + MAX_CLOCK_SKEW_TOLERANCE_MS;
     const locks = store.getSlotLocks();
@@ -77,13 +77,33 @@ export class RedisLockService {
       };
     }
 
-    // Create new lock (5-minute hold)
+    // MULTI-SLOT HOLD SYNCHRONIZATION:
+    // If this session already has one or more active locks (e.g. user selected Slot A earlier, and now selects Slot B),
+    // Slot B synchronizes to the EXACT same hold expiration time as Slot A so all slots tick down together.
+    const userExistingLocks = validLocks.filter(l => l.locked_by === sessionId);
+    let lockExpiresAt: number;
+    if (userExistingLocks.length > 0) {
+      const earliestExpiry = Math.min(...userExistingLocks.map(l => Number(l.expires_at)));
+      if (earliestExpiry > Date.now()) {
+        lockExpiresAt = earliestExpiry;
+        // Keep all existing locks for this session strictly in sync
+        userExistingLocks.forEach(l => {
+          l.expires_at = earliestExpiry;
+        });
+      } else {
+        lockExpiresAt = Date.now() + (LOCK_TTL_SECONDS * 1000);
+      }
+    } else {
+      lockExpiresAt = Date.now() + (LOCK_TTL_SECONDS * 1000);
+    }
+
+    // Create new lock (synchronized with session hold if applicable)
     const newLock: SlotLock = {
       court_id: courtId,
       date,
       start_time: startTime,
       locked_by: sessionId,
-      expires_at: Date.now() + (LOCK_TTL_SECONDS * 1000)
+      expires_at: lockExpiresAt
     };
 
     validLocks.push(newLock);
@@ -93,10 +113,11 @@ export class RedisLockService {
     SupabaseSyncService.syncSlotLockToSupabase(newLock);
     if (typeof window !== 'undefined') {
       try {
+        const remainingTtlSeconds = Math.max(1, Math.ceil((lockExpiresAt - Date.now()) / 1000));
         fetch('/api/slots/lock', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ courtId, date, startTime, lockedBy: sessionId, ttlSeconds: LOCK_TTL_SECONDS })
+          body: JSON.stringify({ courtId, date, startTime, lockedBy: sessionId, ttlSeconds: remainingTtlSeconds })
         }).catch(() => {});
       } catch (e) {}
     }

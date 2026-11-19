@@ -40,12 +40,17 @@ export const SlotGrid: React.FC<SlotGridProps> = ({
   return (
     <div className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5 ${className}`}>
       {slots.map((slot) => {
-        const isSelected = selectedSlots.some(s => s.start_time === slot.start_time);
+        const matchingSelected = selectedSlots.find(s => s.start_time === slot.start_time);
+        const isSelected = Boolean(matchingSelected);
+        const sessionHoldExpiresAt = selectedSlots.find(s => s.lock_expires_at)?.lock_expires_at;
+        const effectiveSlot = isSelected
+          ? { ...slot, lock_expires_at: matchingSelected?.lock_expires_at || sessionHoldExpiresAt || slot.lock_expires_at }
+          : slot;
 
         return (
           <BookingSlotCard
             key={slot.start_time}
-            slot={slot}
+            slot={effectiveSlot}
             isSelected={isSelected}
             onToggle={onToggleSlot}
           />

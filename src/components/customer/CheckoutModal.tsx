@@ -114,13 +114,16 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [paymentError, setPaymentError] = useState('');
 
-  // Extend locks to 5 minutes once on modal mount
+  // Ensure locks exist without resetting/extending the 5-minute countdown
   const hasAcquiredLocksRef = useRef(false);
   useEffect(() => {
     if (!hasAcquiredLocksRef.current) {
       hasAcquiredLocksRef.current = true;
       selectedSlots.forEach(s => {
-        RedisLockService.acquireLock(court.id, dateStr, s.start_time, sessionId);
+        const existingLock = RedisLockService.getLock(court.id, dateStr, s.start_time);
+        if (!existingLock) {
+          RedisLockService.acquireLock(court.id, dateStr, s.start_time, sessionId);
+        }
       });
     }
   }, [court.id, dateStr, sessionId, selectedSlots]);
@@ -448,14 +451,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
             <button
               type="button"
-              onClick={() => {
-                selectedSlots.forEach(s => {
-                  RedisLockService.releaseLock(court.id, dateStr, s.start_time, sessionId);
-                });
-                onClose();
-              }}
+              onClick={onClose}
               className="text-on-surface-variant hover:text-on-surface p-1 rounded-full hover:bg-surface-container-high transition cursor-pointer"
-              title="Close"
+              title="Back to pitch selection (hold preserved)"
             >
               <X className="w-4 h-4" />
             </button>
@@ -571,10 +569,17 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 )}
               </div>
 
-              <div className="pt-1">
+              <div className="pt-1 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="btn-secondary text-xs py-2.5 px-3.5 font-bold cursor-pointer shrink-0"
+                >
+                  ← Back to Pitch
+                </button>
                 <button
                   type="submit"
-                  className="btn-cta w-full py-2.5 text-xs font-headline font-bold uppercase tracking-wider shadow-md"
+                  className="btn-cta flex-1 py-2.5 text-xs font-headline font-bold uppercase tracking-wider shadow-md cursor-pointer"
                 >
                   Continue →
                 </button>
@@ -690,6 +695,16 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     className="text-error hover:text-error/80 font-bold flex items-center gap-1 hover:underline cursor-pointer"
                   >
                     <AlertCircle className="w-3 h-3 text-error" /> Simulate Failure
+                  </button>
+                </div>
+
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="btn-secondary w-full py-2 text-xs font-bold cursor-pointer"
+                  >
+                    ← Back to Pitch (Keep Hold Active)
                   </button>
                 </div>
               </div>

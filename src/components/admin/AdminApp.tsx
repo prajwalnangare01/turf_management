@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { store } from '../../services/store';
 import { AdminUser, AdminRole } from '../../types/schema';
 import { AuthService } from '../../services/authService';
+import { RedisLockService } from '../../services/redisLockService';
 import { AdminLoginPage } from './AdminLoginPage';
 import { SwitchAdminModal } from './SwitchAdminModal';
 import { ScheduleCalendarView } from './ScheduleCalendarView';
@@ -95,6 +96,15 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onSwitchToCustomer }) => {
     return store.subscribe(() => {
       setStoreVersion(v => v + 1);
     });
+  }, []);
+
+  // 1-second live ticker for live slot locks metric & auto-purging expired holds
+  useEffect(() => {
+    const timer = setInterval(() => {
+      RedisLockService.cleanExpiredLocks();
+      setStoreVersion(v => v + 1);
+    }, 1000);
+    return () => clearInterval(timer);
   }, []);
 
   // If not authenticated, render Login Page Guard

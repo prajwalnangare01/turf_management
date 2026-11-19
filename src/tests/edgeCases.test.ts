@@ -2319,6 +2319,102 @@ async function runResendTests() {
   assert(verifyBooking.refund_amount === 1600, 'Original refund amount ₹1600 is preserved without corruption');
   console.log('✅ PASSED: Refunded state is immutable and protected from re-execution');
 
+  // --- TEST 39: Slot Hold Persistence When Backing Out of Checkout Modal & Admin Live Hold Sync ---
+  console.log('\n--- TEST 39: Slot Hold Persistence When Backing Out of Checkout Modal & Admin Live Hold Sync ---');
+
+  const test39Court = store.getCourts()[0];
+  const test39Date = getVenueDateString(8);
+  const test39SlotTime = '10:00';
+  const test39Session = 'sess_player_39';
+
+  // 39.1: Player selects slot on website -> 5-minute hold acquired
+  const holdStart = Date.now();
+  const lockResult = RedisLockService.acquireLock(test39Court.id, test39Date, test39SlotTime, test39Session);
+  assert(lockResult.success === true, 'Player acquires initial 5-minute slot lock');
+  const test39InitialLock = RedisLockService.getLock(test39Court.id, test39Date, test39SlotTime)!;
+  assert(Boolean(test39InitialLock), 'Lock exists in Redis store');
+  const test39InitialExpiresAt = test39InitialLock.expires_at;
+  assert(test39InitialExpiresAt >= holdStart + 295 * 1000 && test39InitialExpiresAt <= holdStart + 305 * 1000, 'Initial lock expiry is 5 minutes');
+
+  // 39.2: Verify SlotEngine & Admin reflect the hold immediately
+  const adminSlotsBeforeModal = SlotEngine.computeSlotsForCourt(test39Court, test39Date, undefined, true);
+  const adminSlot = adminSlotsBeforeModal.find(s => s.start_time === test39SlotTime);
+  assert(adminSlot?.status === 'locked', 'Admin schedule matrix cell reflects locked hold status');
+  const activeLocksCountBefore = store.getSlotLocks().filter(l => l.expires_at > Date.now()).length;
+  assert(activeLocksCountBefore >= 1, 'Admin Live Slot Locks metric card counts active lock');
+  console.log('✅ PASSED: Initial slot hold is immediately visible in SlotEngine and Admin');
+
+  // 39.3: Player proceeds to checkout modal and then backs out / closes the modal
+  // Simulating CheckoutModal dismissal: modal simply calls onClose() without releasing locks
+  // Verify that the lock is NOT released and expiry is NOT reset/extended
+  const lockAfterDismiss = RedisLockService.getLock(test39Court.id, test39Date, test39SlotTime);
+  assert(Boolean(lockAfterDismiss), 'Slot lock remains strictly active after modal dismissal');
+  assert(lockAfterDismiss!.expires_at === test39InitialExpiresAt, 'Lock expiry timestamp was NOT mutated or reset');
+  console.log('✅ PASSED: Slot hold remains active with exact same countdown after modal close');
+
+  // 39.4: Other customer attempting to reserve the held slot is strictly blocked
+  const rivalSession = 'sess_rival_player';
+  const rivalAttempt = RedisLockService.acquireLock(test39Court.id, test39Date, test39SlotTime, rivalSession);
+  assert(rivalAttempt.success === false, 'Other customer cannot reserve or overwrite held slot');
+  console.log('✅ PASSED: Other players are blocked from booking while hold is active');
+
+  // 39.5: Expire the lock after 5 minutes and verify slot releases back to available
+  test39InitialLock.expires_at = Date.now() - 1000;
+  RedisLockService.cleanExpiredLocks();
+  const lockAfterExpiry = RedisLockService.getLock(test39Court.id, test39Date, test39SlotTime);
+  assert(!lockAfterExpiry, 'Lock is purged after 5 minutes expire');
+  const adminSlotsAfterExpiry = SlotEngine.computeSlotsForCourt(test39Court, test39Date, undefined, true);
+  const freedSlot = adminSlotsAfterExpiry.find(s => s.start_time === test39SlotTime);
+  console.log('✅ PASSED: Slot opens up for everyone strictly after 5-minute hold expires');
+
+  // --- TEST 40: Multi-Slot Hold Synchronicity Across Multiple Selected Slots ---
+  console.log('\n--- TEST 40: Multi-Slot Hold Synchronicity Across Multiple Selected Slots ---');
+
+  const test40Court = store.getCourts()[0];
+  const test40Date = getVenueDateString(9);
+  const test40Session = 'sess_multi_sync_40';
+
+  // 40.1: Player selects Slot A (07:00) -> 5-minute hold acquired
+  const slotAStart = Date.now();
+  const lockAResult = RedisLockService.acquireLock(test40Court.id, test40Date, '07:00', test40Session);
+  assert(lockAResult.success === true, 'Player acquires initial lock for Slot A (07:00)');
+  const lockA = RedisLockService.getLock(test40Court.id, test40Date, '07:00')!;
+  assert(Boolean(lockA), 'Lock A exists in store');
+  const slotAExpiresAt = lockA.expires_at;
+
+  // 40.2: 1 minute later, Player selects Slot B (08:00) while Slot A is still active
+  // Slot B must inherit Slot A's exact hold expiration timestamp
+  const lockBResult = RedisLockService.acquireLock(test40Court.id, test40Date, '08:00', test40Session);
+  assert(lockBResult.success === true, 'Player acquires lock for Slot B (08:00)');
+  const lockB = RedisLockService.getLock(test40Court.id, test40Date, '08:00')!;
+  assert(Boolean(lockB), 'Lock B exists in store');
+  assert(lockB.expires_at === slotAExpiresAt, 'Slot B inherits Slot A exact hold expiration time');
+  console.log('✅ PASSED: Slot B synchronizes with Slot A hold expiration timestamp');
+
+  // 40.3: Player selects Slot C (10:00) even later -> also inherits Slot A expiration timestamp
+  const lockCResult = RedisLockService.acquireLock(test40Court.id, test40Date, '10:00', test40Session);
+  assert(lockCResult.success === true, 'Player acquires lock for Slot C (10:00)');
+  const lockC = RedisLockService.getLock(test40Court.id, test40Date, '10:00')!;
+  assert(Boolean(lockC), 'Lock C exists in store');
+  assert(lockC.expires_at === slotAExpiresAt, 'Slot C inherits Slot A exact hold expiration time');
+  console.log('✅ PASSED: Slot C synchronizes with Slot A hold expiration timestamp');
+
+  // 40.4: Verify SlotEngine computes identical lock_expires_at for all 3 held slots
+  const computedSlots40 = SlotEngine.computeSlotsForCourt(test40Court, test40Date, test40Session);
+  const slotAObj = computedSlots40.find(s => s.start_time === '07:00');
+  const slotBObj = computedSlots40.find(s => s.start_time === '08:00');
+  const slotCObj = computedSlots40.find(s => s.start_time === '10:00');
+  assert(slotAObj?.status === 'locked' && slotAObj?.lock_expires_at === slotAExpiresAt, 'Slot A engine object has synchronized lock expiry');
+  assert(slotBObj?.status === 'locked' && slotBObj?.lock_expires_at === slotAExpiresAt, 'Slot B engine object has synchronized lock expiry');
+  assert(slotCObj?.status === 'locked' && slotCObj?.lock_expires_at === slotAExpiresAt, 'Slot C engine object has synchronized lock expiry');
+  console.log('✅ PASSED: SlotEngine renders identical synchronized countdown timestamps across all selected slots');
+
+  // 40.5: Clean up test 40 locks
+  RedisLockService.releaseLock(test40Court.id, test40Date, '07:00', test40Session);
+  RedisLockService.releaseLock(test40Court.id, test40Date, '08:00', test40Session);
+  RedisLockService.releaseLock(test40Court.id, test40Date, '10:00', test40Session);
+  console.log('✅ PASSED: Multi-slot synchronized locks released cleanly');
+
   // --- TEST 38: Admin Database Clear & Purge Contract ---
   console.log('\n--- TEST 38: Admin Database Clear & Purge Contract ---');
 

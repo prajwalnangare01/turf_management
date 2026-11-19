@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sun, Moon, Tag, Clock, Check, Lock, Zap } from 'lucide-react';
 import { DynamicSlot } from '../../types/schema';
 
@@ -80,6 +80,22 @@ export const BookingSlotCard: React.FC<BookingSlotCardProps> = ({
   const isInteractive = isAvailable || isHeldByCurrent || isHeld;
   const isDisabled = isBooked || isBlocked || isPast;
 
+  // 1-second live ticker for real-time hold countdowns on slot cards
+  const [nowMs, setNowMs] = useState(Date.now());
+  useEffect(() => {
+    if (!slot.lock_expires_at && !isSelected) return;
+    const timer = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [slot.lock_expires_at, isSelected]);
+
+  const rawExpiresAt = slot.lock_expires_at;
+  const remainingSec = rawExpiresAt
+    ? Math.max(0, Math.ceil((rawExpiresAt - nowMs) / 1000))
+    : null;
+  const timerStr = remainingSec !== null
+    ? `${String(Math.floor(remainingSec / 60)).padStart(2, '0')}:${String(remainingSec % 60).padStart(2, '0')}`
+    : (isSelected ? '05:00' : null);
+
   // Dynamic interactive container state classes matching design specifications:
   // - Default Available: bg-white border-gray-200 hover:border-emerald-400 hover:shadow-md cursor-pointer
   // - Selected: bg-emerald-50/50 border-emerald-500 ring-2 ring-emerald-500/20 shadow-sm cursor-pointer
@@ -140,13 +156,21 @@ export const BookingSlotCard: React.FC<BookingSlotCardProps> = ({
         {/* Top-Right Badges: Stacked cleanly */}
         <div className="flex flex-col items-end gap-1 shrink-0 ml-auto">
           {isSelected ? (
-            <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-xs shrink-0">
-              <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5 stroke-[2.5]" />
+            <div className="flex items-center gap-1.5 shrink-0">
+              {timerStr && (
+                <span className="bg-amber-100 text-amber-950 border border-amber-300 font-mono font-bold text-[9.5px] sm:text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs whitespace-nowrap animate-pulse">
+                  <Zap className="w-2.5 h-2.5 text-amber-600 fill-amber-500" />
+                  <span>HOLD {timerStr}</span>
+                </span>
+              )}
+              <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-xs shrink-0">
+                <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5 stroke-[2.5]" />
+              </div>
             </div>
           ) : isHeld ? (
             <span className="bg-amber-100 text-amber-950 border border-amber-300 font-extrabold text-[9.5px] sm:text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0 shadow-2xs whitespace-nowrap animate-pulse">
               <Zap className="w-2.5 h-2.5 text-amber-600 fill-amber-500" />
-              <span>ON HOLD</span>
+              <span>ON HOLD {timerStr ? `(${timerStr})` : ''}</span>
             </span>
           ) : (
             <>
@@ -176,11 +200,6 @@ export const BookingSlotCard: React.FC<BookingSlotCardProps> = ({
         <div className="text-xs text-gray-500 flex items-center gap-1 font-medium mt-1">
           <Clock className="w-3 h-3 text-gray-400 shrink-0" />
           <span>{duration} mins</span>
-          {isHeld && (
-            <span className="text-[10px] text-amber-800 font-bold ml-1 bg-amber-100/80 px-1.5 py-0.5 rounded border border-amber-200/60">
-              Pending Checkout
-            </span>
-          )}
         </div>
       </div>
 
@@ -205,13 +224,7 @@ export const BookingSlotCard: React.FC<BookingSlotCardProps> = ({
           )}
         </div>
 
-        {/* Distinct Status Indicators */}
-        {isHeld && (
-          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-900 bg-amber-100 border border-amber-300/80 px-2 py-0.5 rounded-full shrink-0 leading-none shadow-2xs">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-ping shrink-0" />
-            <span>In Checkout</span>
-          </span>
-        )}
+        {/* Distinct Status Indicators for unavailable slots */}
         {isBooked && (
           <span className="text-xs text-gray-400 font-medium shrink-0 leading-none">
             Booked

@@ -429,7 +429,18 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
     } else {
       const lockRes = RedisLockService.acquireLock(selectedCourt.id, selectedDate, slot.start_time, effectiveSessionId);
       if (lockRes.success) {
-        setSelectedSlots([...selectedSlots, slot].sort((a, b) => a.start_time.localeCompare(b.start_time)));
+        const slotWithLock: DynamicSlot = {
+          ...slot,
+          status: 'locked',
+          lock_expires_at: lockRes.lock?.expires_at,
+          locked_by: effectiveSessionId
+        };
+        const targetExpiresAt = lockRes.lock?.expires_at;
+        const updatedSelectedSlots = [...selectedSlots, slotWithLock].map(s => ({
+          ...s,
+          lock_expires_at: targetExpiresAt || s.lock_expires_at
+        })).sort((a, b) => a.start_time.localeCompare(b.start_time));
+        setSelectedSlots(updatedSelectedSlots);
         refreshSlots();
       } else {
         setSelectedHoldSlot({ court: selectedCourt, date: selectedDate, time: slot.start_time });
@@ -1080,6 +1091,7 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
       {/* Fixed-Bottom Summary Checkout Bar */}
       {selectedSlots.length > 0 && selectedCourt && (() => {
         const firstLock = RedisLockService.getLock(selectedCourt.id, selectedDate, selectedSlots[0]?.start_time);
+        const resolvedExpiresAt = firstLock?.expires_at || selectedSlots[0]?.lock_expires_at || (Date.now() + 300 * 1000);
         return (
           <HoldSummaryBar
             heldCount={selectedSlots.length}
@@ -1088,7 +1100,7 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
             date={selectedDate}
             totalPrice={totalPrice}
             courtName={selectedCourt.name}
-            expiresAt={firstLock?.expires_at}
+            expiresAt={resolvedExpiresAt}
             onProceed={handleProceedCheckout}
             onExpire={handleHoldExpired}
           />
