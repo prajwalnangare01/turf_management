@@ -23,9 +23,13 @@ export class SupabaseService {
       // 1. Fetch Venue
       const { data: venues, error: vErr } = await supabase.from('venues').select('*').limit(1);
       if (!vErr && venues?.length > 0) {
+        const remote = venues[0];
+        const loc = remote.location_url || remote.google_maps_link || store.venue?.location_url || store.venue?.google_maps_link;
         store.venue = {
           ...store.venue,
-          ...venues[0]
+          ...remote,
+          location_url: loc,
+          google_maps_link: loc
         };
       }
 
@@ -239,6 +243,16 @@ export class SupabaseService {
             } else if (payload.eventType === 'DELETE' && payload.old) {
               const key = `${payload.old.court_id}:${payload.old.date}:${payload.old.start_time}`;
               store.locks.delete(key);
+            }
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'venues' },
+          (payload) => {
+            console.log(`⚡ [Realtime DB Change] Venue ${payload.eventType}:`, payload.new?.name || payload.old?.id);
+            if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+              store.setVenue(payload.new);
             }
           }
         )

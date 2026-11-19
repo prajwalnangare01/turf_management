@@ -7,6 +7,7 @@ import { Sliders, Save, RefreshCw, MessageSquare, DollarSign, Clock, PlusCircle,
 import { getSupabaseConfig, setSupabaseConfig, clearSupabaseConfig, testSupabaseConnection, isSupabaseConfigured } from '../../services/supabaseClient';
 import { SupabaseSyncService } from '../../services/supabaseSyncService';
 import { EmailService } from '../../services/emailService';
+import { AuthService } from '../../services/authService';
 import { ClearDatabaseModal } from './ClearDatabaseModal';
 import { Toast } from '../common/Toast';
 
@@ -18,6 +19,7 @@ interface SettingsPanelProps {
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin, onOpenClearDbModal }) => {
   const [showInternalClearModal, setShowInternalClearModal] = useState(false);
   const [clearSuccessToast, setClearSuccessToast] = useState<string | null>(null);
+  const [venueToastMsg, setVenueToastMsg] = useState<string | null>(null);
   const [venue, setVenue] = useState(store.getVenue());
   const [policies, setPolicies] = useState<CancellationPolicy[]>(() => {
     return [...store.getCancellationPolicies()].sort((a, b) => b.hours_before_start - a.hours_before_start);
@@ -184,7 +186,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin, onOp
     try {
       fetch('/api/venue', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...AuthService.getAuthHeaders()
+        },
         body: JSON.stringify({ venue: updatedVenue })
       }).catch(() => {});
     } catch {}
@@ -193,7 +198,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin, onOp
     SupabaseSyncService.syncVenueToSupabase(updatedVenue).catch(() => {});
 
     setVenueSuccessMsg('Venue settings, address, and Google Maps location QR link updated successfully!');
-    setTimeout(() => setVenueSuccessMsg(null), 5000);
+    setVenueToastMsg('Venue settings, address, and Google Maps location link updated successfully!');
+    setTimeout(() => {
+      setVenueSuccessMsg(null);
+      setVenueToastMsg(null);
+    }, 5000);
   };
 
   const handleSaveCancellationTerms = (e: React.FormEvent) => {
@@ -1149,6 +1158,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin, onOp
         isOpen={Boolean(clearSuccessToast)}
         message={clearSuccessToast || ''}
         onClose={() => setClearSuccessToast(null)}
+      />
+
+      <Toast
+        isOpen={Boolean(venueToastMsg)}
+        message={venueToastMsg || ''}
+        onClose={() => setVenueToastMsg(null)}
       />
 
     </div>

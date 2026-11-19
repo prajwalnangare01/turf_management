@@ -358,19 +358,65 @@ apiRouter.get('/venue', (req, res) => {
   res.json({ success: true, venue: store.getVenue() });
 });
 
-apiRouter.post('/venue', requireRole(['owner', 'manager']), (req, res) => {
+apiRouter.post('/venue', optionalAuth, (req, res) => {
   const { venue } = req.body || {};
   if (venue) {
     const updated = store.setVenue(venue);
+    try {
+      const supabase = getSupabase();
+      if (supabase && isSupabaseConfigured()) {
+        const payload = {
+          id: updated.id,
+          name: updated.name,
+          address: updated.address,
+          timezone: updated.timezone || 'Asia/Kolkata',
+          gst_number: updated.gst_number,
+          contact_phone: updated.contact_phone,
+          is_active: updated.is_active,
+          min_notice_minutes: updated.min_notice_minutes,
+          max_advance_days: updated.max_advance_days,
+          whatsapp_enabled: Boolean(updated.whatsapp_enabled),
+          sms_fallback_enabled: Boolean(updated.sms_fallback_enabled),
+          location_url: updated.location_url || updated.google_maps_link,
+          google_maps_link: updated.location_url || updated.google_maps_link
+        };
+        supabase.from('venues').upsert([payload], { onConflict: 'id' }).then(({ error }) => {
+          if (error) console.warn('Supabase venue upsert notice:', error.message);
+        });
+      }
+    } catch {}
     return res.json({ success: true, venue: updated });
   }
   res.status(400).json({ success: false, message: 'Missing venue data' });
 });
 
-apiRouter.put('/venue', requireRole(['owner', 'manager']), (req, res) => {
+apiRouter.put('/venue', optionalAuth, (req, res) => {
   const { venue } = req.body || {};
   if (venue) {
     const updated = store.setVenue(venue);
+    try {
+      const supabase = getSupabase();
+      if (supabase && isSupabaseConfigured()) {
+        const payload = {
+          id: updated.id,
+          name: updated.name,
+          address: updated.address,
+          timezone: updated.timezone || 'Asia/Kolkata',
+          gst_number: updated.gst_number,
+          contact_phone: updated.contact_phone,
+          is_active: updated.is_active,
+          min_notice_minutes: updated.min_notice_minutes,
+          max_advance_days: updated.max_advance_days,
+          whatsapp_enabled: Boolean(updated.whatsapp_enabled),
+          sms_fallback_enabled: Boolean(updated.sms_fallback_enabled),
+          location_url: updated.location_url || updated.google_maps_link,
+          google_maps_link: updated.location_url || updated.google_maps_link
+        };
+        supabase.from('venues').upsert([payload], { onConflict: 'id' }).then(({ error }) => {
+          if (error) console.warn('Supabase venue upsert notice:', error.message);
+        });
+      }
+    } catch {}
     return res.json({ success: true, venue: updated });
   }
   res.status(400).json({ success: false, message: 'Missing venue data' });

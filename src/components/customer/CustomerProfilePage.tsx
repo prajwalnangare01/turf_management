@@ -146,7 +146,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
   const [passModalBooking, setPassModalBooking] = useState<Booking | null>(null);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [passLocationQrDataUrl, setPassLocationQrDataUrl] = useState<string>('');
-  const venue = store.getVenue();
+  const [venue, setVenue] = useState(() => store.getVenue());
   const venueLocationUrl = venue.location_url || venue.google_maps_link || `https://maps.google.com/?q=${encodeURIComponent(venue.name + ', ' + venue.address)}`;
 
   useEffect(() => {
@@ -183,6 +183,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
   // Subscribe to real-time store changes (e.g. cancellation, new booking, updates)
   useEffect(() => {
     const refresh = () => {
+      setVenue({ ...store.getVenue() });
       const allB = store.getBookings();
       setBookingsList(sortBookingsDesc(allB.filter(b => customerIds.has(b.customer_id))));
     };
@@ -609,6 +610,9 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
     const court = courts.find(c => c.id === booking.court_id);
     const cleanPhone = formatPhoneNumber(currentCustomer.phone);
     const hasMultipleSlots = allSlots.length > 1;
+    const resolvedVenueName = booking.venue_name || venue.name;
+    const resolvedVenueAddress = booking.venue_address || venue.address;
+    const resolvedVenueLocationUrl = booking.venue_location_url || venue.location_url || venue.google_maps_link || venueLocationUrl;
 
     const htmlContent = `
       <!DOCTYPE html>
@@ -656,7 +660,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
 
         <div class="ticket-card">
           <div class="ticket-header">
-            <h1>${venue.name}</h1>
+            <h1>${resolvedVenueName}</h1>
             <p>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
               OFFICIAL VENUE ENTRY PASS & RECEIPT
@@ -796,14 +800,14 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
               <div style="flex: 1; line-height: 1.6;">
                 <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
-                  <strong>Venue Location:</strong> ${venue.address}
+                  <strong>Venue Location:</strong> ${resolvedVenueAddress}
                 </div>
                 <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
                   <strong>GSTIN:</strong> ${venue.gst_number || '27AABCT1234F1Z0'} &bull; <strong>Contact:</strong> ${venue.contact_phone}
                 </div>
                 <div style="margin-top: 6px;">
-                  <a href="${venueLocationUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; gap: 5px; color: #006b30; font-weight: 800; text-decoration: none; background: #e8f5e9; padding: 4px 10px; border-radius: 6px; border: 1px solid #a5d6a7; font-size: 11px;">
+                  <a href="${resolvedVenueLocationUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; gap: 5px; color: #006b30; font-weight: 800; text-decoration: none; background: #e8f5e9; padding: 4px 10px; border-radius: 6px; border: 1px solid #a5d6a7; font-size: 11px;">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
                     Open Directions in Google Maps &rarr;
                   </a>
@@ -813,7 +817,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
           </div>
 
           <div class="ticket-footer">
-            Thank you for booking with ${venue.name}. Please arrive 10 minutes prior to your slot time.
+            Thank you for booking with ${resolvedVenueName}. Please arrive 10 minutes prior to your slot time.
           </div>
         </div>
 
@@ -861,6 +865,9 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
       const singleSlotDisplay = `${formatTime12hPlain(booking.start_time)} – ${formatTime12hPlain(booking.end_time)}`;
       const otpCode = getBookingGatePassOtp(booking);
       const court = courts.find(c => c.id === booking.court_id);
+      const resolvedVenueName = booking.venue_name || venue.name;
+      const resolvedVenueAddress = booking.venue_address || venue.address;
+      const resolvedVenueLocationUrl = booking.venue_location_url || venue.location_url || venue.google_maps_link || venueLocationUrl;
 
       const fullPayload = {
         ...booking,
@@ -876,7 +883,17 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
         total_amount: booking.total_amount,
         total_order_amount: grandTotal,
         all_slots: [{ start_time: booking.start_time, end_time: booking.end_time, price: booking.total_amount }],
-        formatted_slots: singleSlotDisplay
+        formatted_slots: singleSlotDisplay,
+        venue_name: resolvedVenueName,
+        venue_address: resolvedVenueAddress,
+        venue_location_url: resolvedVenueLocationUrl,
+        venue: {
+          ...venue,
+          name: resolvedVenueName,
+          address: resolvedVenueAddress,
+          location_url: resolvedVenueLocationUrl,
+          google_maps_link: resolvedVenueLocationUrl
+        }
       };
 
       // 1. Try POST /api/bookings/generate-pass-pdf with specific slot payload
@@ -1789,13 +1806,13 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
                   <div className="flex-1 min-w-0 space-y-1">
                     <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                       <MapPin className="w-3 h-3 text-[#006b30] shrink-0" />
-                      <span>{venue.name}</span>
+                      <span>{passModalBooking.venue_name || venue.name}</span>
                     </div>
                     <p className="text-[11px] font-semibold text-slate-800 leading-snug line-clamp-2">
-                      {venue.address}
+                      {passModalBooking.venue_address || venue.address}
                     </p>
                     <a
-                      href={venueLocationUrl}
+                      href={passModalBooking.venue_location_url || venueLocationUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 text-[10.5px] font-bold text-[#006b30] hover:underline bg-[#006b30]/10 px-2 py-0.5 rounded-md border border-[#006b30]/20"

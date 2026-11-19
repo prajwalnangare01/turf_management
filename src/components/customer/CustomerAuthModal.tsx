@@ -3,7 +3,7 @@ import { CustomerAuthService } from '../../services/customerAuthService';
 import { EmailVerificationService } from '../../services/emailVerificationService';
 import { SmsVerificationService } from '../../services/smsVerificationService';
 import { Customer } from '../../types/schema';
-import { User, Phone, Mail, ShieldCheck, KeyRound, Lock, X, Check, Sparkles, AlertCircle, ArrowRight, ArrowLeft } from 'lucide-react';
+import { User, Phone, Mail, ShieldCheck, KeyRound, Lock, X, Check, Sparkles, AlertCircle, ArrowRight, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { isValidIndianPhone, isValidEmail, cleanEmail, cleanPhoneDigits, formatPhoneNumber } from '../../utils/formatters';
 
 interface CustomerAuthModalProps {
@@ -18,6 +18,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
   // Login form fields (Password only)
   const [loginIdentity, setLoginIdentity] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
 
   // Sign up form fields (Dual OTP Mandatory: Mobile OTP + Email OTP)
   const [signupName, setSignupName] = useState('');
@@ -36,12 +37,15 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
   const [emailCooldown, setEmailCooldown] = useState(0);
 
   const [signupPassword, setSignupPassword] = useState('');
+  const [showSignupPassword, setShowSignupPassword] = useState(false);
 
   // Forgot Password fields (SMS or Email OTP Reset)
   const [forgotIdentity, setForgotIdentity] = useState('');
   const [forgotOtp, setForgotOtp] = useState('');
   const [forgotNewPassword, setForgotNewPassword] = useState('');
   const [forgotConfirmPassword, setForgotConfirmPassword] = useState('');
+  const [showForgotNewPassword, setShowForgotNewPassword] = useState(false);
+  const [showForgotConfirmPassword, setShowForgotConfirmPassword] = useState(false);
   const [forgotOtpSent, setForgotOtpSent] = useState(false);
   const [forgotOtpNotice, setForgotOtpNotice] = useState<string | null>(null);
   const [isSendingForgotOtp, setIsSendingForgotOtp] = useState(false);
@@ -456,14 +460,25 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
                   Forgot?
                 </button>
               </div>
-              <input
-                type="password"
-                required
-                value={loginPassword}
-                onChange={e => setLoginPassword(e.target.value)}
-                placeholder="Enter your password"
-                className="w-full px-3 py-1.5 rounded-xl border border-outline-variant focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 bg-surface-container-lowest font-medium text-xs"
-              />
+              <div className="relative">
+                <input
+                  type={showLoginPassword ? "text" : "password"}
+                  required
+                  value={loginPassword}
+                  onChange={e => setLoginPassword(e.target.value)}
+                  placeholder="Enter your password"
+                  className="w-full pl-3 pr-9 py-1.5 rounded-xl border border-outline-variant focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 bg-surface-container-lowest font-medium text-xs"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowLoginPassword(!showLoginPassword)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-outline hover:text-on-surface transition-colors p-0.5 focus:outline-none cursor-pointer"
+                  title={showLoginPassword ? "Hide password" : "Show password"}
+                  aria-label={showLoginPassword ? "Hide password" : "Show password"}
+                >
+                  {showLoginPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
+              </div>
             </div>
 
             <button
@@ -515,15 +530,26 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
                 <label className="font-headline font-bold text-[10.5px] text-on-surface-variant flex items-center gap-1">
                   <Lock className="w-3 h-3 text-primary" /> Password *
                 </label>
-                <input
-                  type="password"
-                  required
-                  minLength={8}
-                  value={signupPassword}
-                  onChange={e => setSignupPassword(e.target.value)}
-                  placeholder="Min 8 chars"
-                  className="w-full px-2.5 py-1.5 rounded-xl border border-outline-variant focus:outline-none focus:border-primary bg-surface-container-lowest font-medium text-xs"
-                />
+                <div className="relative">
+                  <input
+                    type={showSignupPassword ? "text" : "password"}
+                    required
+                    minLength={8}
+                    value={signupPassword}
+                    onChange={e => setSignupPassword(e.target.value)}
+                    placeholder="Min 8 chars"
+                    className="w-full pl-2.5 pr-8 py-1.5 rounded-xl border border-outline-variant focus:outline-none focus:border-primary bg-surface-container-lowest font-medium text-xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowSignupPassword(!showSignupPassword)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-outline hover:text-on-surface transition-colors p-0.5 focus:outline-none cursor-pointer"
+                    title={showSignupPassword ? "Hide password" : "Show password"}
+                    aria-label={showSignupPassword ? "Hide password" : "Show password"}
+                  >
+                    {showSignupPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -770,29 +796,51 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
                 <label className="font-headline font-bold text-[10px] text-on-surface-variant">
                   New Pass *
                 </label>
-                <input
-                  type="password"
-                  required
-                  minLength={8}
-                  value={forgotNewPassword}
-                  onChange={e => setForgotNewPassword(e.target.value)}
-                  placeholder="Min 8"
-                  className="w-full px-2 py-1.5 rounded-xl border border-outline-variant focus:outline-none focus:border-primary bg-surface-container-lowest font-medium text-xs"
-                />
+                <div className="relative">
+                  <input
+                    type={showForgotNewPassword ? "text" : "password"}
+                    required
+                    minLength={8}
+                    value={forgotNewPassword}
+                    onChange={e => setForgotNewPassword(e.target.value)}
+                    placeholder="Min 8"
+                    className="w-full pl-2 pr-6 py-1.5 rounded-xl border border-outline-variant focus:outline-none focus:border-primary bg-surface-container-lowest font-medium text-xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotNewPassword(!showForgotNewPassword)}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 text-outline hover:text-on-surface transition-colors p-0.5 focus:outline-none cursor-pointer"
+                    title={showForgotNewPassword ? "Hide password" : "Show password"}
+                    aria-label={showForgotNewPassword ? "Hide password" : "Show password"}
+                  >
+                    {showForgotNewPassword ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-0.5">
                 <label className="font-headline font-bold text-[10px] text-on-surface-variant">
                   Confirm *
                 </label>
-                <input
-                  type="password"
-                  required
-                  value={forgotConfirmPassword}
-                  onChange={e => setForgotConfirmPassword(e.target.value)}
-                  placeholder="Re-enter"
-                  className="w-full px-2 py-1.5 rounded-xl border border-outline-variant focus:outline-none focus:border-primary bg-surface-container-lowest font-medium text-xs"
-                />
+                <div className="relative">
+                  <input
+                    type={showForgotConfirmPassword ? "text" : "password"}
+                    required
+                    value={forgotConfirmPassword}
+                    onChange={e => setForgotConfirmPassword(e.target.value)}
+                    placeholder="Re-enter"
+                    className="w-full pl-2 pr-6 py-1.5 rounded-xl border border-outline-variant focus:outline-none focus:border-primary bg-surface-container-lowest font-medium text-xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotConfirmPassword(!showForgotConfirmPassword)}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 text-outline hover:text-on-surface transition-colors p-0.5 focus:outline-none cursor-pointer"
+                    title={showForgotConfirmPassword ? "Hide password" : "Show password"}
+                    aria-label={showForgotConfirmPassword ? "Hide password" : "Show password"}
+                  >
+                    {showForgotConfirmPassword ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                  </button>
+                </div>
               </div>
             </div>
 

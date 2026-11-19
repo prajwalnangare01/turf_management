@@ -24,8 +24,16 @@ export const VenueInfoAndPoliciesPage: React.FC<VenueInfoAndPoliciesPageProps> =
   const [copiedEmail, setCopiedEmail] = useState(false);
   const [locationQrUrl, setLocationQrUrl] = useState<string>('');
 
-  const venue = store.getVenue();
+  const [venue, setVenue] = useState(() => store.getVenue());
   const cancellationSettings = store.getCancellationSettings();
+
+  useEffect(() => {
+    const handleStoreChange = () => {
+      setVenue({ ...store.getVenue() });
+    };
+    const unsubscribe = store.subscribe(handleStoreChange);
+    return () => unsubscribe();
+  }, []);
 
   // Scroll to top when active tab changes
   useEffect(() => {

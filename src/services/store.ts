@@ -569,7 +569,16 @@ class AppStore {
     this.dataArchiveSettings = { ...this.dataArchiveSettings, ...settings };
     this.saveToStorage();
   }
-  public setVenue(venue: Venue) { this.venue = venue; this.saveToStorage(); }
+  public setVenue(venue: Venue) {
+    const locUrl = venue.location_url || venue.google_maps_link || this.venue?.location_url || this.venue?.google_maps_link || '';
+    this.venue = {
+      ...this.venue,
+      ...venue,
+      location_url: locUrl,
+      google_maps_link: locUrl
+    };
+    this.saveToStorage();
+  }
   public setSports(sports: Sport[]) { this.sports = sports; this.saveToStorage(); }
   private lastSyncedCourtsHash = '';
 

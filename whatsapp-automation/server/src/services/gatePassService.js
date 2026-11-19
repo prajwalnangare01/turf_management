@@ -48,7 +48,9 @@ export class GatePassService {
    * Generate official PDF Gate Pass & Payment Receipt as a Buffer
    */
   static async generatePassPdfBuffer(booking) {
-    const venue = store.getVenue();
+    const venue = booking.venue || store.getVenue();
+    const venueName = booking.venue_name || venue.name;
+    const venueAddress = booking.venue_address || venue.address;
     const court = store.getCourts().find(c => c.id === booking.court_id);
     const sports = store.getSports();
     const sport = sports.find(s => s.id === booking.sport_id);
@@ -64,7 +66,11 @@ export class GatePassService {
     const sportName = (sport?.name || booking.sport_name || 'Football').replace(/[^\x00-\x7F]/g, '');
 
     // Resolve accurate venue location link
-    const venueLocationUrl = venue.location_url || venue.google_maps_link || `https://maps.google.com/?q=${encodeURIComponent(venue.name + ', ' + venue.address)}`;
+    const venueLocationUrl = (booking.venue && (booking.venue.location_url || booking.venue.google_maps_link)) ||
+      booking.venue_location_url ||
+      venue.location_url ||
+      venue.google_maps_link ||
+      `https://maps.google.com/?q=${encodeURIComponent(venueName + ', ' + venueAddress)}`;
 
     // Generate Location QR code for directions / navigation
     const locationQrBuffer = await QRCode.toBuffer(venueLocationUrl, { margin: 1, width: 140 });
@@ -90,7 +96,7 @@ export class GatePassService {
         doc.fillColor('#FFFFFF')
           .fontSize(22)
           .font('Helvetica-Bold')
-          .text(venue.name.toUpperCase(), 50, 55, { align: 'center', width: 495 });
+          .text(venueName.toUpperCase(), 50, 55, { align: 'center', width: 495 });
         doc.fontSize(10)
           .font('Helvetica-Bold')
           .text('OFFICIAL VENUE ENTRY PASS & PAYMENT RECEIPT', 50, 85, { align: 'center', width: 495 });
@@ -145,7 +151,7 @@ export class GatePassService {
           doc.fillColor('#FFFFFF')
             .fontSize(22)
             .font('Helvetica-Bold')
-            .text(venue.name.toUpperCase(), 50, 55, { align: 'center', width: 495 });
+            .text(venueName.toUpperCase(), 50, 55, { align: 'center', width: 495 });
           doc.fontSize(10)
             .font('Helvetica-Bold')
             .text(
@@ -226,7 +232,7 @@ export class GatePassService {
           doc.fillColor(slateColor)
             .fontSize(9)
             .font('Helvetica')
-            .text(venue.address, 185, y + 32, { width: 340 });
+            .text(venueAddress, 185, y + 32, { width: 340 });
 
           doc.fillColor(darkColor)
             .fontSize(8.5)
@@ -280,7 +286,9 @@ export class GatePassService {
    * Return printable HTML string matching the website's Ticket Pass modal
    */
   static async generatePassHtml(booking) {
-    const venue = store.getVenue();
+    const venue = booking.venue || store.getVenue();
+    const venueName = booking.venue_name || venue.name;
+    const venueAddress = booking.venue_address || venue.address;
     const court = store.getCourts().find(c => c.id === booking.court_id);
     const customer = store.getCustomers().find(c => c.id === booking.customer_id) || {
       name: booking.customer_name || 'Customer',
@@ -291,7 +299,11 @@ export class GatePassService {
     const otpCode = WhatsAppFormatter.getBookingGatePassOtp(booking);
 
     // Resolve accurate venue location link & generate Location QR code
-    const venueLocationUrl = venue.location_url || venue.google_maps_link || `https://maps.google.com/?q=${encodeURIComponent(venue.name + ', ' + venue.address)}`;
+    const venueLocationUrl = (booking.venue && (booking.venue.location_url || booking.venue.google_maps_link)) ||
+      booking.venue_location_url ||
+      venue.location_url ||
+      venue.google_maps_link ||
+      `https://maps.google.com/?q=${encodeURIComponent(venueName + ', ' + venueAddress)}`;
     let locationQrDataUrl = '';
     try {
       locationQrDataUrl = await QRCode.toDataURL(venueLocationUrl, { margin: 1, width: 140 });
@@ -364,7 +376,7 @@ export class GatePassService {
     return `
     <div class="ticket-card" style="${idx > 0 ? 'margin-top: 32px; page-break-before: always;' : ''}">
       <div class="ticket-header">
-        <h1>${venue.name}</h1>
+        <h1>${venueName}</h1>
         <p>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
           OFFICIAL ENTRY PASS ${slotsToRender.length > 1 ? `&bull; PASS ${idx + 1} OF ${slotsToRender.length}` : '& PAYMENT RECEIPT'}
@@ -474,7 +486,7 @@ export class GatePassService {
         <div style="flex: 1; line-height: 1.6;">
           <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
-            <strong>Venue Location:</strong> ${venue.address}
+            <strong>Venue Location:</strong> ${venueAddress}
           </div>
           <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
@@ -491,7 +503,7 @@ export class GatePassService {
     </div>
 
     <div class="ticket-footer">
-      Thank you for booking with ${venue.name}. Please arrive 10 minutes prior to your slot time.
+      Thank you for booking with ${venueName}. Please arrive 10 minutes prior to your slot time.
     </div>
   </div>
   `;

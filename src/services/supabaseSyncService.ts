@@ -58,9 +58,13 @@ export class SupabaseSyncService {
       // 1. Fetch Venue
       const { data: venues, error: vErr } = await supabase.from('venues').select('*').limit(1);
       if (!vErr && venues && venues.length > 0) {
+        const remote = venues[0];
+        const loc = remote.location_url || remote.google_maps_link || store.getVenue().location_url || store.getVenue().google_maps_link;
         store.setVenue({
           ...store.getVenue(),
-          ...venues[0]
+          ...remote,
+          location_url: loc,
+          google_maps_link: loc
         });
       }
 
@@ -392,6 +396,23 @@ export class SupabaseSyncService {
           { event: '*', schema: 'public', table: 'slot_locks' },
           (payload: any) => {
             this.handleRealtimeSlotLockChange(payload);
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'venues' },
+          (payload: any) => {
+            console.log(`⚡ [Realtime Sync Event] Venue ${payload.eventType}:`, payload.new?.name || payload.old?.id);
+            if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+              const remote = payload.new;
+              const loc = remote.location_url || remote.google_maps_link || store.getVenue().location_url;
+              store.setVenue({
+                ...store.getVenue(),
+                ...remote,
+                location_url: loc,
+                google_maps_link: loc
+              });
+            }
           }
         )
         .subscribe((status) => {
@@ -1136,7 +1157,9 @@ export class SupabaseSyncService {
         whatsapp_enabled: Boolean(venue.whatsapp_enabled),
         sms_fallback_enabled: Boolean(venue.sms_fallback_enabled),
         email_enabled: Boolean(venue.email_enabled),
-        email_sender: venue.email_sender || null
+        email_sender: venue.email_sender || null,
+        location_url: venue.location_url || venue.google_maps_link || null,
+        google_maps_link: venue.location_url || venue.google_maps_link || null
       };
 
       const { error } = await supabase.from('venues').upsert([payload], { onConflict: 'id' });

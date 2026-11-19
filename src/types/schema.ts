@@ -142,6 +142,9 @@ export interface Booking {
   total_order_amount?: number;
   all_slots?: Array<{ start_time: string; end_time: string; price?: number }>;
   formatted_slots?: string;
+  venue_name?: string;
+  venue_address?: string;
+  venue_location_url?: string;
   created_at: string;
   updated_at: string;
 }

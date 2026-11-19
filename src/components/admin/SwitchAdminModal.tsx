@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AdminUser } from '../../types/schema';
 import { AuthService } from '../../services/authService';
-import { ShieldAlert, Lock, X, Check, KeyRound } from 'lucide-react';
+import { ShieldAlert, Lock, X, Check, KeyRound, Eye, EyeOff } from 'lucide-react';
 
 interface SwitchAdminModalProps {
   targetAdmin: AdminUser;
@@ -17,6 +17,7 @@ export const SwitchAdminModal: React.FC<SwitchAdminModalProps> = ({
   onClose
 }) => {
   const [password, setPassword] = useState('admin123');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -81,14 +82,25 @@ export const SwitchAdminModal: React.FC<SwitchAdminModalProps> = ({
             <label className="text-[11px] font-headline font-bold text-on-surface-variant flex items-center gap-1">
               <KeyRound className="w-3 h-3 text-primary" /> Password
             </label>
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              placeholder="Enter password (default: admin123 / manager123)"
-              className="w-full px-3 py-1.5 rounded-xl border border-outline-variant text-xs focus:outline-none focus:border-primary bg-surface-container-lowest font-medium"
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                required
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="Enter password (default: admin123 / manager123)"
+                className="w-full pl-3 pr-9 py-1.5 rounded-xl border border-outline-variant text-xs focus:outline-none focus:border-primary bg-surface-container-lowest font-medium"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-outline hover:text-on-surface transition-colors p-0.5 focus:outline-none cursor-pointer"
+                title={showPassword ? "Hide password" : "Show password"}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-2 pt-1 border-t border-outline-variant/30">

@@ -144,10 +144,14 @@ export class PostgresEngine {
 
     const now = new Date().toISOString();
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+    const currentVenue = store.getVenue();
     const newBooking: Booking = {
       ...booking,
       id: `bk-${Date.now()}-${randomSuffix}`,
       booking_ref: booking.booking_ref || `TRF-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${randomSuffix}`,
+      venue_name: (booking as any).venue_name || currentVenue.name,
+      venue_address: (booking as any).venue_address || currentVenue.address,
+      venue_location_url: (booking as any).venue_location_url || currentVenue.location_url || currentVenue.google_maps_link,
       created_at: now,
       updated_at: now
     };

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AuthService } from '../../services/authService';
 import { AdminUser } from '../../types/schema';
-import { ShieldCheck, Lock, Mail, KeyRound, ArrowLeft, AlertCircle, Sparkles } from 'lucide-react';
+import { ShieldCheck, Lock, Mail, KeyRound, ArrowLeft, AlertCircle, Sparkles, Eye, EyeOff } from 'lucide-react';
 
 interface AdminLoginPageProps {
   onLoginSuccess: (admin: AdminUser) => void;
@@ -14,6 +14,7 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
 }) => {
   const [identity, setIdentity] = useState('rajupainter84688@gmail.com');
   const [password, setPassword] = useState('admin123');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -106,14 +107,25 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
               <label className="text-xs font-headline font-bold text-on-surface-variant flex items-center gap-1.5">
                 <KeyRound className="w-3.5 h-3.5 text-primary" /> Security Password
               </label>
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="Enter password"
-                className="w-full px-4 py-3 rounded-2xl border border-outline-variant text-xs focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 bg-surface-container-lowest font-medium transition"
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  required
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="Enter password"
+                  className="w-full pl-4 pr-11 py-3 rounded-2xl border border-outline-variant text-xs focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 bg-surface-container-lowest font-medium transition"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-outline hover:text-on-surface transition-colors focus:outline-none cursor-pointer p-1"
+                  title={showPassword ? "Hide password" : "Show password"}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
 
             {/* Login Button */}

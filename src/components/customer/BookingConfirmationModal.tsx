@@ -71,7 +71,9 @@ export const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> =
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [locationQrDataUrl, setLocationQrDataUrl] = useState<string>('');
 
-  const venueLocationUrl = venue.location_url || venue.google_maps_link || `https://maps.google.com/?q=${encodeURIComponent(venue.name + ', ' + venue.address)}`;
+  const venueLocationUrl = booking.venue_location_url || venue.location_url || venue.google_maps_link || `https://maps.google.com/?q=${encodeURIComponent((booking.venue_name || venue.name) + ', ' + (booking.venue_address || venue.address))}`;
+  const venueName = booking.venue_name || venue.name;
+  const venueAddress = booking.venue_address || venue.address;
 
   useEffect(() => {
     QRCode.toDataURL(venueLocationUrl, { margin: 1, width: 160 })
@@ -94,7 +96,14 @@ export const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> =
         total_amount: grandTotalPaid,
         total_order_amount: grandTotalPaid,
         all_slots: allSlots,
-        formatted_slots: formattedSlotsStr
+        formatted_slots: formattedSlotsStr,
+        venue: {
+          ...venue,
+          name: venueName,
+          address: venueAddress,
+          location_url: venueLocationUrl,
+          google_maps_link: venueLocationUrl
+        }
       };
 
       // 1. Try POST to generate-pass-pdf with complete client payload
@@ -179,7 +188,7 @@ export const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> =
           return `
           <div class="ticket-card" style="${idx > 0 ? 'margin-top: 32px; page-break-before: always;' : ''}">
             <div class="ticket-header">
-              <h1>${venue.name}</h1>
+              <h1>${venueName}</h1>
               <p>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
                 OFFICIAL ENTRY PASS ${allSlots.length > 1 ? `&bull; PASS ${idx + 1} OF ${allSlots.length}` : '& RECEIPT'}
@@ -311,7 +320,7 @@ export const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> =
                 <div style="flex: 1; line-height: 1.6;">
                   <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
-                    <strong>Venue Location:</strong> ${venue.address}
+                    <strong>Venue Location:</strong> ${venueAddress}
                   </div>
                   <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
@@ -328,7 +337,7 @@ export const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> =
             </div>
 
             <div class="ticket-footer">
-              Thank you for booking with ${venue.name}. Please arrive 10 minutes prior to your slot time.
+              Thank you for booking with ${venueName}. Please arrive 10 minutes prior to your slot time.
             </div>
           </div>
           `;
@@ -487,7 +496,7 @@ export const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> =
               title="Open directions in Google Maps"
             >
               <MapPin className="w-3.5 h-3.5 text-primary shrink-0" />
-              <span className="truncate">{venue.name} • {venue.address}</span>
+              <span className="truncate">{venueName} • {venueAddress}</span>
               <ExternalLink className="w-2.5 h-2.5 shrink-0 opacity-70" />
             </a>
             <span className="text-emerald-700 font-semibold flex items-center gap-1 shrink-0">

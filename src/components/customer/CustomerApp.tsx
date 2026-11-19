@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { store } from '../../services/store';
-import { Sport, Court, DynamicSlot, Customer } from '../../types/schema';
+import { Sport, Court, DynamicSlot, Customer, Venue } from '../../types/schema';
 import { SlotEngine } from '../../services/slotEngine';
 import { RedisLockService } from '../../services/redisLockService';
 import { PostgresEngine } from '../../services/postgresEngine';
@@ -30,13 +30,14 @@ interface CustomerAppProps {
 
 export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => {
   const [, setStoreVersion] = useState(0);
-  const venue = store.getVenue();
+  const [venue, setVenue] = useState<Venue>(() => store.getVenue());
   const [allSports, setAllSports] = useState<Sport[]>(() => store.getSports());
   const [allCourts, setAllCourts] = useState<Court[]>(() => store.getCourts());
 
   // Listen to store updates for live dynamic sports & pitches synchronization
   useEffect(() => {
     const handleStoreChange = () => {
+      setVenue({ ...store.getVenue() });
       setAllSports([...store.getSports()]);
       setAllCourts([...store.getCourts()]);
     };
