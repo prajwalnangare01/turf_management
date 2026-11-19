@@ -105,7 +105,7 @@ export const ActiveCustomerHoldModal: React.FC<ActiveCustomerHoldModalProps> = (
           <div className="flex justify-between items-center pt-1 border-t border-outline-variant/30">
             <span className="text-on-surface-variant text-[10.5px]">Hold Type:</span>
             <span className="bg-sky-100 text-sky-900 font-bold px-1.5 py-0.2 rounded text-[9.5px]">
-              Temporary Redis Lock
+              Temporary Slot Hold
             </span>
           </div>
         </div>
@@ -123,3 +123,4 @@ export const ActiveCustomerHoldModal: React.FC<ActiveCustomerHoldModalProps> = (
     </div>
   );
 };
+

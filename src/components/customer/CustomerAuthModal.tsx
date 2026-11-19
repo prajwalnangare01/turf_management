@@ -4,6 +4,7 @@ import { EmailVerificationService } from '../../services/emailVerificationServic
 import { SmsVerificationService } from '../../services/smsVerificationService';
 import { Customer } from '../../types/schema';
 import { User, Phone, Mail, ShieldCheck, KeyRound, Lock, X, Check, Sparkles, AlertCircle, ArrowRight, ArrowLeft } from 'lucide-react';
+import { isValidIndianPhone, isValidEmail, cleanEmail, cleanPhoneDigits, formatPhoneNumber } from '../../utils/formatters';
 
 interface CustomerAuthModalProps {
   onSuccess: (customer: Customer) => void;
@@ -62,9 +63,9 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
   const handleSendSignupMobileOtp = async () => {
     setError(null);
     setMobileOtpNotice(null);
-    const cleanDigits = signupPhone.replace(/\D/g, '');
-    if (cleanDigits.length < 10) {
-      setError('Please enter a valid 10-digit mobile phone number first.');
+    const cleanDigits = cleanPhoneDigits(signupPhone);
+    if (!isValidIndianPhone(cleanDigits)) {
+      setError('Please enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.');
       return;
     }
 
@@ -83,9 +84,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
         setMobileOtpSent(true);
         setMobileCooldown(30);
         setMobileOtpNotice(
-          res.isSimulated
-            ? `SMS OTP sent to +91 ${cleanDigits.slice(-10)}. Please check your messages.`
-            : `SMS OTP sent to +91 ${cleanDigits.slice(-10)}. Please check your messages.`
+          `SMS OTP sent to +91 ${cleanDigits.slice(-10)}. Please check your messages.`
         );
       } else {
         setError(res.message || 'Failed to dispatch mobile OTP via SMS');
@@ -99,13 +98,13 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
   const handleSendSignupEmailOtp = async () => {
     setError(null);
     setEmailOtpNotice(null);
-    const cleanEmail = signupEmail.trim().toLowerCase();
-    if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
-      setError('Please enter a valid email address first.');
+    const cleanMail = cleanEmail(signupEmail);
+    if (!isValidEmail(cleanMail)) {
+      setError('Please enter a valid standard email address (e.g. name@example.com).');
       return;
     }
 
-    const check = CustomerAuthService.checkIdentityExists(undefined, cleanEmail);
+    const check = CustomerAuthService.checkIdentityExists(undefined, cleanMail);
     if (check.emailExists) {
       setError('An account with this email address already exists. Each user must have a unique email address. Please select the Log In tab.');
       return;
@@ -113,7 +112,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
 
     setIsSendingEmailOtp(true);
     try {
-      const res = await EmailVerificationService.requestOtp(cleanEmail, 'signup', signupName || 'Player');
+      const res = await EmailVerificationService.requestOtp(cleanMail, 'signup', signupName || 'Player');
       setIsSendingEmailOtp(false);
 
       if (res.success) {
@@ -122,7 +121,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
         setEmailOtpNotice(
           res.isSandbox
             ? `📧 Verification Code: ${res.code}`
-            : `6-digit verification code sent to ${cleanEmail}. Check your inbox!`
+            : `6-digit verification code sent to ${cleanMail}. Check your inbox!`
         );
       } else {
         setError(res.message || 'Failed to dispatch email verification code');
@@ -140,6 +139,18 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
     if (!id) {
       setError('Please enter your registered mobile number or email address.');
       return;
+    }
+    if (id.includes('@')) {
+      if (!isValidEmail(cleanEmail(id))) {
+        setError('Please enter a valid email address.');
+        return;
+      }
+    } else {
+      const cleanDigits = cleanPhoneDigits(id);
+      if (!isValidIndianPhone(cleanDigits)) {
+        setError('Please enter a valid 10-digit Indian mobile number.');
+        return;
+      }
     }
 
     setIsSendingForgotOtp(true);
@@ -172,13 +183,19 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
     e.preventDefault();
     setError(null);
 
+    const cleanId = forgotIdentity.trim();
+    if (!cleanId) {
+      setError('Please enter your registered mobile number or email address.');
+      return;
+    }
+
     if (!forgotOtp.trim()) {
       setError('Please enter the verification code sent to your mobile or email.');
       return;
     }
 
-    if (!forgotNewPassword || forgotNewPassword.length < 4) {
-      setError('New password must be at least 4 characters long.');
+    if (!forgotNewPassword || forgotNewPassword.length < 8) {
+      setError('New password must be at least 8 characters long.');
       return;
     }
 
@@ -190,7 +207,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
     setIsLoading(true);
 
     setTimeout(() => {
-      const res = CustomerAuthService.resetPasswordWithOtp(forgotIdentity, forgotOtp, forgotNewPassword);
+      const res = CustomerAuthService.resetPasswordWithOtp(cleanId, forgotOtp, forgotNewPassword);
       setIsLoading(false);
 
       if (res.success && res.session) {
@@ -204,10 +221,16 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    const cleanId = loginIdentity.trim();
+    if (!cleanId) {
+      setError('Please enter your registered mobile number or email address.');
+      return;
+    }
+
     setIsLoading(true);
 
     setTimeout(() => {
-      const res = CustomerAuthService.loginWithPassword(loginIdentity, loginPassword);
+      const res = CustomerAuthService.loginWithPassword(cleanId, loginPassword);
       setIsLoading(false);
 
       if (res.success && res.session) {
@@ -222,8 +245,25 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
     e.preventDefault();
     setError(null);
 
+    const cleanDigits = cleanPhoneDigits(signupPhone);
+    if (!isValidIndianPhone(cleanDigits)) {
+      setError('Please enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.');
+      return;
+    }
+
+    const cleanMail = cleanEmail(signupEmail);
+    if (!isValidEmail(cleanMail)) {
+      setError('Please enter a valid email address (e.g. name@example.com).');
+      return;
+    }
+
+    if (!signupPassword || signupPassword.length < 8) {
+      setError('Password must be at least 8 characters long.');
+      return;
+    }
+
     // Strict 1-to-1 uniqueness check: 1 user with 1 unique phone and 1 unique email
-    const check = CustomerAuthService.checkIdentityExists(signupPhone, signupEmail);
+    const check = CustomerAuthService.checkIdentityExists(cleanDigits, cleanMail);
     if (check.phoneExists && check.emailExists) {
       setError('An account with this mobile number and email already exists. Each user must have a unique number and email. Please select "Log In" to access your account.');
       return;
@@ -254,10 +294,10 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
     setTimeout(() => {
       const res = CustomerAuthService.register(
         signupName, 
-        signupPhone, 
+        cleanDigits, 
         effectiveMobileOtp, 
         signupPassword, 
-        signupEmail,
+        cleanMail,
         effectiveEmailOtp
       );
       setIsLoading(false);
@@ -446,7 +486,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
                 onClick={() => { setAuthMethod('signup'); setError(null); }}
                 className="text-[11px] text-primary hover:underline font-headline font-bold inline-flex items-center gap-1 cursor-pointer"
               >
-                Don't have an account? Sign Up with Dual OTP <ArrowRight className="w-3 h-3" />
+                Don't have an account? Sign Up <ArrowRight className="w-3 h-3" />
               </button>
             </div>
           </form>
@@ -478,9 +518,10 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
                 <input
                   type="password"
                   required
+                  minLength={8}
                   value={signupPassword}
                   onChange={e => setSignupPassword(e.target.value)}
-                  placeholder="Min 4 chars"
+                  placeholder="Min 8 chars"
                   className="w-full px-2.5 py-1.5 rounded-xl border border-outline-variant focus:outline-none focus:border-primary bg-surface-container-lowest font-medium text-xs"
                 />
               </div>
@@ -498,10 +539,16 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
                 <input
                   type="tel"
                   required
+                  maxLength={10}
                   value={signupPhone}
-                  onChange={e => setSignupPhone(e.target.value)}
+                  onChange={e => {
+                    const digits = e.target.value.replace(/\D/g, '');
+                    setSignupPhone(digits.length > 10 ? digits.slice(-10) : digits);
+                    setError(null);
+                  }}
                   placeholder="10-digit mobile"
-                  className="flex-1 min-w-0 px-2.5 py-1 rounded-lg border border-outline-variant focus:outline-none focus:border-primary bg-white font-medium text-xs"
+                  pattern="[6-9][0-9]{9}"
+                  className="flex-1 min-w-0 px-2.5 py-1 rounded-lg border border-outline-variant focus:outline-none focus:border-primary bg-white font-medium text-xs font-mono"
                 />
                 <button
                   type="button"
@@ -566,9 +613,12 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
                   type="email"
                   required
                   value={signupEmail}
-                  onChange={e => setSignupEmail(e.target.value)}
+                  onChange={e => {
+                    setSignupEmail(cleanEmail(e.target.value));
+                    setError(null);
+                  }}
                   placeholder="name@example.com"
-                  className="flex-1 min-w-0 px-2.5 py-1 rounded-lg border border-outline-variant focus:outline-none focus:border-primary bg-white font-medium text-xs"
+                  className="flex-1 min-w-0 px-2.5 py-1 rounded-lg border border-outline-variant focus:outline-none focus:border-primary bg-white font-medium text-xs lowercase"
                 />
                 <button
                   type="button"
@@ -635,7 +685,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
                 <>⚠️ Registered (Log In Instead)</>
               ) : (
                 <>
-                  <Check className="w-3.5 h-3.5" /> Verify Both OTPs & Register
+                  <Check className="w-3.5 h-3.5" /> Register
                 </>
               )}
             </button>
@@ -723,9 +773,10 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onSuccess,
                 <input
                   type="password"
                   required
+                  minLength={8}
                   value={forgotNewPassword}
                   onChange={e => setForgotNewPassword(e.target.value)}
-                  placeholder="Min 4"
+                  placeholder="Min 8"
                   className="w-full px-2 py-1.5 rounded-xl border border-outline-variant focus:outline-none focus:border-primary bg-surface-container-lowest font-medium text-xs"
                 />
               </div>

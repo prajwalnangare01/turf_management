@@ -8,7 +8,7 @@ import { CouponService } from '../../services/couponService';
 import { SupabaseSyncService } from '../../services/supabaseSyncService';
 import { normalizeIndianPhone } from '../../utils/venueTime';
 import { ShieldCheck, Tag, CreditCard, Smartphone, AlertTriangle, AlertCircle, X, Timer, PersonStanding, Clock, RefreshCw, CalendarCheck2, User, Phone, Mail, IndianRupee, Calendar, MapPin } from 'lucide-react';
-import { formatTimeRange12h, formatTime12hPlain, formatTimeRange12hPlain, formatDateDDMMYYYY, formatPhoneNumber } from '../../utils/formatters';
+import { formatTimeRange12h, formatTime12hPlain, formatTimeRange12hPlain, formatDateDDMMYYYY, formatPhoneNumber, isValidIndianPhone, isValidEmail, cleanEmail, cleanPhoneDigits } from '../../utils/formatters';
 import { TimeOfDayIcon } from '../common/TimeOfDayIcon';
 
 interface CheckoutModalProps {
@@ -174,9 +174,19 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   const handleSendOtp = (e: React.FormEvent) => {
     e.preventDefault();
-    if (phone.length < 10) return;
+    setPaymentError('');
+    const cleanPhone = cleanPhoneDigits(phone);
+    if (!isValidIndianPhone(cleanPhone)) {
+      setPaymentError('Please enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.');
+      return;
+    }
+    const cleanMail = cleanEmail(email);
+    if (email && email.trim() && !isValidEmail(cleanMail)) {
+      setPaymentError('Please enter a valid email address (e.g. name@example.com).');
+      return;
+    }
     // If the customer is already logged in with this exact phone, skip redundant OTP
-    if (currentCustomer && currentCustomer.phone === phone) {
+    if (currentCustomer && normalizeIndianPhone(currentCustomer.phone) === normalizeIndianPhone(cleanPhone)) {
       setStep('payment');
       return;
     }
@@ -198,12 +208,13 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
     try {
       // 1. Get or Create Customer
-      const normalizedPhone = normalizeIndianPhone(phone);
-      const cleanDigits = phone.replace(/\D/g, '');
+      const cleanPhone = cleanPhoneDigits(phone);
+      const normalizedPhone = normalizeIndianPhone(cleanPhone);
+      const normalizedEmail = cleanEmail(email) || undefined;
       const customers = store.getCustomers();
       let customer = customers.find(c => 
         normalizeIndianPhone(c.phone) === normalizedPhone || 
-        c.phone.replace(/\D/g, '').slice(-10) === cleanDigits.slice(-10)
+        cleanPhoneDigits(c.phone) === cleanPhone
       );
 
       // EDGE CASE: Check if customer is blacklisted
@@ -216,9 +227,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       if (!customer) {
         customer = {
           id: `cust-${Date.now()}`,
-          name,
+          name: name.trim(),
           phone: normalizedPhone,
-          email,
+          email: normalizedEmail,
           created_at: new Date().toISOString(),
           total_bookings: 0,
           total_spent: 0,
@@ -227,8 +238,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         };
         customers.push(customer);
         store.setCustomers(customers);
-      } else if (email && (!customer.email || customer.email !== email)) {
-        customer.email = email;
+      } else if (normalizedEmail && (!customer.email || cleanEmail(customer.email) !== normalizedEmail)) {
+        customer.email = normalizedEmail;
         store.setCustomers(customers);
       }
 
@@ -494,9 +505,13 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     required
                     maxLength={10}
                     placeholder="10-digit number"
+                    pattern="[6-9][0-9]{9}"
                     value={phone}
-                    onChange={e => setPhone(e.target.value.replace(/\D/g, ''))}
-                    className="form-input text-xs py-1.5 px-2.5"
+                    onChange={e => {
+                      const digits = e.target.value.replace(/\D/g, '');
+                      setPhone(digits.length > 10 ? digits.slice(-10) : digits);
+                    }}
+                    className="form-input text-xs py-1.5 px-2.5 font-mono"
                   />
                 </div>
               </div>
@@ -509,8 +524,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   type="email"
                   placeholder="rahul@example.com"
                   value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  className="form-input text-xs py-1.5 px-2.5"
+                  onChange={e => setEmail(cleanEmail(e.target.value))}
+                  className="form-input text-xs py-1.5 px-2.5 lowercase"
                 />
               </div>
 
@@ -547,7 +562,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   type="submit"
                   className="btn-cta w-full py-2.5 text-xs font-headline font-bold uppercase tracking-wider shadow-md"
                 >
-                  Verify Mobile via OTP →
+                  Continue →
                 </button>
               </div>
             </form>

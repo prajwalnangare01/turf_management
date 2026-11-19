@@ -201,8 +201,8 @@ export class ServerAuthService {
     }
 
     const cleanPhone = phone.replace(/\D/g, '').slice(-10);
-    if (cleanPhone.length < 10) {
-      return { success: false, error: 'Please enter a valid 10-digit phone number.' };
+    if (!/^[6-9]\d{9}$/.test(cleanPhone)) {
+      return { success: false, error: 'Please enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.' };
     }
 
     const customers = store.getCustomers();
@@ -211,8 +211,13 @@ export class ServerAuthService {
       return { success: false, error: 'An account with this mobile number already exists. Please log in.' };
     }
 
+    let cleanEmail;
     if (email) {
-      const cleanEmail = email.trim().toLowerCase();
+      cleanEmail = email.trim().toLowerCase();
+      const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
+      if (!emailRegex.test(cleanEmail)) {
+        return { success: false, error: 'Please enter a valid standard email address.' };
+      }
       const existingEmail = customers.find(c => c.email && c.email.trim().toLowerCase() === cleanEmail);
       if (existingEmail) {
         return { success: false, error: 'An account with this email address already exists.' };
@@ -224,7 +229,7 @@ export class ServerAuthService {
       id: `cust-${Date.now()}`,
       name: name.trim(),
       phone: `+91${cleanPhone}`,
-      email: email ? email.trim().toLowerCase() : undefined,
+      email: cleanEmail || undefined,
       password: hashedPassword,
       total_bookings: 0,
       total_spent: 0,

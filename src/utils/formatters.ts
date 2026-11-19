@@ -97,6 +97,58 @@ export const formatPhoneNumber = (phoneInput?: string): string => {
 };
 
 /**
+ * Standard Email Normalizer: trims whitespace and converts to lower case.
+ */
+export const cleanEmail = (email?: string | null): string => {
+  if (!email || typeof email !== 'string') return '';
+  return email.trim().toLowerCase();
+};
+
+/**
+ * Standard Email Format Validator (RFC 5322 compliant regex):
+ * Validates local part, @ symbol, domain name with period, and valid 2+ character TLD.
+ */
+export const isValidEmail = (email?: string | null): boolean => {
+  if (!email || typeof email !== 'string') return false;
+  const clean = email.trim().toLowerCase();
+  const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
+  return emailRegex.test(clean);
+};
+
+/**
+ * Extracts standard 10-digit mobile number from any Indian phone input.
+ */
+export const cleanPhoneDigits = (phone?: string | null): string => {
+  if (!phone) return '';
+  const str = typeof phone === 'string' ? phone : String(phone);
+  const digits = str.replace(/\D/g, '');
+  return digits.length >= 10 ? digits.slice(-10) : digits;
+};
+
+/**
+ * Validates whether the mobile number is a standard Indian mobile number:
+ * Exactly 10 digits starting with 6, 7, 8, or 9.
+ */
+export const isValidIndianPhone = (phone?: string | null): boolean => {
+  if (!phone) return false;
+  const last10 = cleanPhoneDigits(phone);
+  return /^[6-9]\d{9}$/.test(last10);
+};
+
+/**
+ * Normalizes phone to standard international E.164 format: +91XXXXXXXXXX
+ */
+export const normalizeStandardPhone = (phone?: string | null): string => {
+  if (!phone) return '';
+  const last10 = cleanPhoneDigits(phone);
+  if (last10.length === 10) {
+    return `+91${last10}`;
+  }
+  const str = typeof phone === 'string' ? phone : String(phone);
+  return str.trim();
+};
+
+/**
  * Universal Gate Pass OTP resolver:
  * Ensures multi-slot sibling bookings (e.g. TRF-20261110-2221 and TRF-20261110-2221-2)
  * always resolve to the exact same clean 4-digit code (e.g. "2221"), NEVER "21-2" or missing a digit.

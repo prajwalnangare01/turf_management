@@ -16,7 +16,7 @@ import { NotificationService } from '../services/notificationService';
 import { ExcelExportService } from '../services/excelExportService';
 import { DataArchiveService } from '../services/dataArchiveService';
 import { AuditLogger } from '../services/auditLogger';
-import { formatTimeRange12h, formatTime12hPlain, formatDateDDMMYYYY, getBookingGatePassOtp, getBookingGroupRef } from '../utils/formatters';
+import { formatTimeRange12h, formatTime12hPlain, formatDateDDMMYYYY, getBookingGatePassOtp, getBookingGroupRef, isValidIndianPhone, isValidEmail, cleanEmail, cleanPhoneDigits, normalizeStandardPhone } from '../utils/formatters';
 import { Court, DynamicSlot, BlockedSlot, Booking } from '../types/schema';
 
 declare const process: { exit: (code: number) => void };
@@ -268,32 +268,37 @@ const badPassLogin = CustomerAuthService.loginWithPassword('9876543210', 'wrongp
 assert(badPassLogin.success === false, 'Incorrect password correctly rejected');
 
 // 3. Signup attempt without mobile OTP
-const noOtpSignup = CustomerAuthService.register('New User', '9911223344', '', 'pass123', 'newuser@example.com', '123456');
+const noOtpSignup = CustomerAuthService.register('New User', '9911223344', '', 'pass123456', 'newuser@example.com', '123456');
 assert(noOtpSignup.success === false, 'Signup without mobile OTP rejected');
 assert(noOtpSignup.error?.includes('OTP') === true, 'Clear error message returned requiring mobile OTP');
 
 // 4. Signup attempt with invalid mobile OTP
-const badOtpSignup = CustomerAuthService.register('New User', '9911223344', '9999', 'pass123', 'newuser@example.com', '123456');
+const badOtpSignup = CustomerAuthService.register('New User', '9911223344', '9999', 'pass123456', 'newuser@example.com', '123456');
 assert(badOtpSignup.success === false, 'Signup with invalid mobile OTP rejected');
 
 // 4b. Signup attempt without email OTP
-const noEmailOtpSignup = CustomerAuthService.register('New User', '9911223344', '1234', 'pass123', 'newuser@example.com', '');
+const noEmailOtpSignup = CustomerAuthService.register('New User', '9911223344', '1234', 'pass123456', 'newuser@example.com', '');
 assert(noEmailOtpSignup.success === false, 'Signup without email OTP rejected');
 assert(noEmailOtpSignup.error?.includes('email verification') === true, 'Clear error message returned requiring email OTP');
 
+// 4c. Signup attempt with password shorter than 8 characters
+const shortPassSignup = CustomerAuthService.register('New User', '9911223344', '1234', 'short', 'newuser@example.com', '123456');
+assert(shortPassSignup.success === false, 'Signup with password < 8 characters rejected');
+assert(shortPassSignup.error?.includes('8 characters') === true, 'Requires at least 8 characters');
+
 // 5. Signup attempt with valid Dual OTPs (Mobile: 1234, Email: 123456)
-const validSignup = CustomerAuthService.register('New User', '9911223344', '1234', 'pass123', 'newuser@example.com', '123456');
+const validSignup = CustomerAuthService.register('New User', '9911223344', '1234', 'pass123456', 'newuser@example.com', '123456');
 assert(validSignup.success === true, 'Signup with valid Dual OTPs (Mobile: 1234, Email: 123456) succeeded');
 assert(validSignup.session?.customer.name === 'New User', 'New user account registered and session started');
 assert(validSignup.session?.customer.email_verified === true, 'Email marked verified on registration');
 
 // 6. Duplicate signup with same phone
-const dupSignup = CustomerAuthService.register('Another User', '9911223344', '1234', 'pass123', 'another@example.com', '123456');
+const dupSignup = CustomerAuthService.register('Another User', '9911223344', '1234', 'pass123456', 'another@example.com', '123456');
 assert(dupSignup.success === false, 'Signup with already-registered phone cleanly rejected');
 assert(dupSignup.error?.includes('already exists') === true, 'Informs user to log in instead of creating duplicate');
 
 // 6b. Duplicate signup with same email (different phone)
-const dupEmailSignup = CustomerAuthService.register('Third User', '9911223355', '1234', 'pass123', 'newuser@example.com', '123456');
+const dupEmailSignup = CustomerAuthService.register('Third User', '9911223355', '1234', 'pass123456', 'newuser@example.com', '123456');
 assert(dupEmailSignup.success === false, 'Signup with already-registered email cleanly rejected');
 assert(dupEmailSignup.error?.includes('already exists') === true, 'Informs user email already exists');
 
@@ -508,6 +513,14 @@ assert(normalizeIndianPhone('9876543210') === '+919876543210', '10-digit number 
 assert(normalizeIndianPhone('+919876543210') === '+919876543210', 'Already E.164 normalized number preserved');
 assert(normalizeIndianPhone('09876543210') === '+919876543210', 'Leading 0 phone number normalized correctly');
 assert(normalizeIndianPhone('+91 98765-43210') === '+919876543210', 'Formatted phone with spaces & dashes normalized');
+assert(cleanPhoneDigits('+91 98765-43210') === '9876543210', 'Phone digits extracted without prefix or spaces');
+assert(isValidIndianPhone('9876543210') === true, 'Standard 10-digit Indian phone starting with 9 is valid');
+assert(isValidIndianPhone('5876543210') === false, 'Invalid Indian phone starting with 5 rejected');
+assert(isValidIndianPhone('1234') === false, 'Incomplete phone number rejected');
+assert(cleanEmail('  User.Name@Example.COM  ') === 'user.name@example.com', 'Standard email cleaned and lowercased');
+assert(isValidEmail('user.name@example.co.in') === true, 'Standard email format validated');
+assert(isValidEmail('not-an-email') === false, 'Malformed email without @ or domain rejected');
+assert(isValidEmail('name@domain') === false, 'Email without TLD rejected');
 
 // Register blacklisted customer with normalized phone
 const blacklistedCust = {
@@ -809,24 +822,26 @@ async function runResendTests() {
   // 17.1: Request Email Signup OTP via Resend
   const reqSignup = await EmailVerificationService.requestOtp(testEmail, 'signup', 'Resend Player');
   assert(reqSignup.success, 'EmailVerificationService successfully generates and dispatches signup OTP via Resend');
-  assert(!!reqSignup.code && reqSignup.code.length === 6, 'Generated 6-digit verification code');
+  const activeCode = reqSignup.code || EmailVerificationService.getActiveCode(testEmail, 'signup');
+  assert(!!activeCode && activeCode.length === 6, 'Generated 6-digit verification code');
 
   // 17.2: Verify Invalid vs Valid OTP
   const invalidVerify = EmailVerificationService.verifyOtp(testEmail, '999999', 'signup');
   assert(!invalidVerify.success, 'Invalid verification code rejected');
 
-  const validVerify = EmailVerificationService.verifyOtp(testEmail, reqSignup.code!, 'signup');
+  const validVerify = EmailVerificationService.verifyOtp(testEmail, activeCode!, 'signup');
   assert(validVerify.success, 'Valid 6-digit code successfully verified');
 
   // 17.3: Mandatory Dual OTP Registration (Mobile OTP + Resend Email OTP)
   const reqSignup2 = await EmailVerificationService.requestOtp(testEmail, 'signup', 'Resend Player');
+  const activeCode2 = reqSignup2.code || EmailVerificationService.getActiveCode(testEmail, 'signup');
   const signupRes = CustomerAuthService.register(
     'Resend Player',
     '9123456780',
     '1234',
     'securepass123',
     testEmail,
-    reqSignup2.code!
+    activeCode2!
   );
   assert(signupRes.success && !!signupRes.session, 'Customer registered via Mandatory Dual OTP (Mobile + Resend Email)');
   assert(signupRes.session!.customer.email === testEmail, 'Registered customer email matches');
@@ -839,8 +854,9 @@ async function runResendTests() {
   // 17.4: Profile Update with Email Verification
   const reqUpdate = await EmailVerificationService.requestOtp(updatedEmail, 'profile_update', signupRes.session!.customer.name);
   assert(reqUpdate.success, 'Resend OTP dispatched for profile email update');
+  const updateCode = reqUpdate.code || EmailVerificationService.getActiveCode(updatedEmail, 'profile_update');
 
-  const updateRes = CustomerAuthService.updateCustomerEmail(signupRes.session!.customer.id, updatedEmail, reqUpdate.code!);
+  const updateRes = CustomerAuthService.updateCustomerEmail(signupRes.session!.customer.id, updatedEmail, updateCode!);
   assert(updateRes.success, 'Customer email updated after OTP verification');
   assert(updateRes.customer?.email === updatedEmail, 'Profile email reflects new verified email');
   assert(updateRes.customer?.email_verified === true, 'Updated email marked verified');
@@ -1578,7 +1594,8 @@ async function runResendTests() {
   // 26.2: Request Email Signup OTP via Resend
   const emailReq = await EmailVerificationService.requestOtp('arun.joshi@example.com', 'signup', 'Arun Joshi');
   assert(emailReq.success === true, 'Email signup OTP requested successfully via Resend');
-  assert(!!emailReq.code && emailReq.code.length === 6, 'Generated 6-digit email OTP code');
+  const activeArunCode = emailReq.code || EmailVerificationService.getActiveCode('arun.joshi@example.com', 'signup');
+  assert(!!activeArunCode && activeArunCode.length === 6, 'Generated 6-digit email OTP code');
 
   // 26.3: Register Customer using Dual Verified OTPs
   const regRes = CustomerAuthService.register(
@@ -1587,7 +1604,7 @@ async function runResendTests() {
     smsReq.code!,
     'securePass2026',
     'arun.joshi@example.com',
-    emailReq.code!
+    activeArunCode!
   );
   assert(regRes.success === true, 'Registration succeeded with verified Dual OTPs');
   assert(Boolean(regRes.session?.customer.phone.includes('9822334455')), 'Registered customer profile phone matches');
@@ -1615,9 +1632,10 @@ async function runResendTests() {
   // 26.6: Profile Email Update with Email OTP Verification
   const updateEmailOtpReq = await EmailVerificationService.requestOtp('arun.updated@example.com', 'profile_update', 'Arun Joshi');
   assert(updateEmailOtpReq.success === true, 'Profile update email OTP requested via Resend');
-  assert(!!updateEmailOtpReq.code, 'Generated 6-digit profile update email code');
+  const activeUpdateCode = updateEmailOtpReq.code || EmailVerificationService.getActiveCode('arun.updated@example.com', 'profile_update');
+  assert(!!activeUpdateCode, 'Generated 6-digit profile update email code');
 
-  const updateEmailRes = CustomerAuthService.updateCustomerEmail(regRes.session!.customer.id, 'arun.updated@example.com', updateEmailOtpReq.code!);
+  const updateEmailRes = CustomerAuthService.updateCustomerEmail(regRes.session!.customer.id, 'arun.updated@example.com', activeUpdateCode!);
   assert(updateEmailRes.success === true, 'Email updated successfully after OTP verification');
   assert(updateEmailRes.customer?.email === 'arun.updated@example.com', 'Customer email updated to new verified address');
   assert(updateEmailRes.customer?.email_verified === true, 'Updated email marked verified');
@@ -1752,7 +1770,8 @@ async function runResendTests() {
   // 28.4: Request and confirm OTP for fresh email
   const freshEmailOtpReq = await EmailVerificationService.requestOtp(freshEmail, 'profile_update', testCustomer.name);
   assert(freshEmailOtpReq.success === true, 'OTP requested for fresh email');
-  const freshEmailUpdateRes = CustomerAuthService.updateCustomerEmail(testCustomer.id, freshEmail, freshEmailOtpReq.code!);
+  const freshOtpCode = freshEmailOtpReq.code || EmailVerificationService.getActiveCode(freshEmail, 'profile_update');
+  const freshEmailUpdateRes = CustomerAuthService.updateCustomerEmail(testCustomer.id, freshEmail, freshOtpCode!);
   assert(freshEmailUpdateRes.success === true, 'Customer email updated successfully with valid OTP');
   assert(freshEmailUpdateRes.customer?.email === freshEmail, 'Customer record reflects updated email');
   assert(freshEmailUpdateRes.customer?.email_verified === true, 'Customer email verified status set to true');
@@ -2307,7 +2326,7 @@ async function runResendTests() {
   const sampleCustomer = store.getCustomers()[0];
   sampleCustomer.total_bookings = 5;
   sampleCustomer.total_spent = 6000;
-  store.setSlotLocks([{ court_id: 'crt-001', date: '2026-12-05', start_time: '18:00', end_time: '19:00', expires_at: Date.now() + 60000, locked_by: 'test' }]);
+  store.setSlotLocks([{ court_id: 'crt-001', date: '2026-12-05', start_time: '18:00', expires_at: Date.now() + 60000, locked_by: 'test' }]);
   assert(store.getBookings().length > 0, 'Bookings exist before operational purge');
 
   // 38.2 Execute clearOperationalData

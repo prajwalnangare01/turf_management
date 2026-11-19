@@ -34,16 +34,16 @@ export const customerLoginSchema = z.object({
 
 export const customerSignupSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
-  phone: z.string().min(10, 'Valid 10-digit mobile number is required'),
-  email: z.string().email('Invalid email address').optional().or(z.literal('')),
-  password: z.string().min(4, 'Password must be at least 4 characters'),
+  phone: z.string().refine(val => /^(?:\+91|0)?[6-9]\d{9}$/.test(val.replace(/[\s-]/g, '')), 'Valid 10-digit Indian mobile number starting with 6-9 is required'),
+  email: z.string().trim().toLowerCase().email('Invalid email address').optional().or(z.literal('')),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
   mobileTicket: z.string().optional(),
   emailTicket: z.string().optional()
 });
 
 export const passwordResetSchema = z.object({
   identity: z.string().min(1, 'Identity is required'),
-  newPassword: z.string().min(4, 'New password must be at least 4 characters'),
+  newPassword: z.string().min(8, 'New password must be at least 8 characters'),
   ticket: z.string().optional()
 });
 

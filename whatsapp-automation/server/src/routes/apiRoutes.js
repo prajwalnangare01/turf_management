@@ -1391,7 +1391,7 @@ apiRouter.get('/pay/:ref', async (req, res) => {
               <svg class="w-6 h-6 text-emerald-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
             </div>
             <h3 class="text-lg font-black text-emerald-800">Payment Confirmed!</h3>
-            <p class="text-xs text-slate-600">Your slot is now permanently booked. The official gate pass has been dispatched.</p>
+            <p class="text-xs text-slate-600">Your slot is now booked. The official gate pass has been dispatched.</p>
             <div class="flex flex-col gap-2 pt-2">
               <a href="/api/bookings/${booking.booking_ref}/pass.pdf" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 px-4 rounded-xl text-xs shadow flex items-center justify-center gap-1.5">
                 <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>

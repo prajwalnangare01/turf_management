@@ -1,6 +1,7 @@
 import { Customer } from '../types/schema';
 import { store } from './store';
 import { normalizeIndianPhone } from '../utils/venueTime';
+import { isValidIndianPhone, isValidEmail, cleanEmail, cleanPhoneDigits } from '../utils/formatters';
 // Welcome email disabled per configuration
 import { EmailVerificationService, RequestOtpResult } from './emailVerificationService';
 import { SmsVerificationService, RequestSmsOtpResult } from './smsVerificationService';
@@ -20,9 +21,9 @@ export class CustomerAuthService {
    * Send Signup Mobile OTP via SMS
    */
   public static async sendMobileSignupOtp(phone: string, name?: string): Promise<RequestSmsOtpResult> {
-    const cleanDigits = phone.replace(/\D/g, '');
-    if (cleanDigits.length < 10) {
-      return { success: false, message: 'Please enter a valid 10-digit mobile number.' };
+    const cleanDigits = cleanPhoneDigits(phone);
+    if (!isValidIndianPhone(cleanDigits)) {
+      return { success: false, message: 'Please enter a valid 10-digit Indian mobile number.' };
     }
     return SmsVerificationService.requestOtp(phone, 'signup', name);
   }
@@ -32,9 +33,9 @@ export class CustomerAuthService {
    */
   public static sendOtp(phone: string): { success: boolean; message: string; code?: string } {
     const normalizedPhone = normalizeIndianPhone(phone);
-    const cleanDigits = phone.replace(/\D/g, '');
-    if (cleanDigits.length < 10) {
-      return { success: false, message: 'Please enter a valid 10-digit mobile number.' };
+    const cleanDigits = cleanPhoneDigits(phone);
+    if (!isValidIndianPhone(cleanDigits)) {
+      return { success: false, message: 'Please enter a valid 10-digit Indian mobile number.' };
     }
 
     // Trigger async SMS request
@@ -62,19 +63,19 @@ export class CustomerAuthService {
     existingCustomerByEmail?: Customer;
   } {
     const customers = store.getCustomers();
-    const cleanDigits = phone ? phone.replace(/\D/g, '').slice(-10) : '';
+    const cleanDigits = phone ? cleanPhoneDigits(phone) : '';
     const normalizedPhone = phone ? normalizeIndianPhone(phone) : '';
-    const cleanEmail = email ? email.trim().toLowerCase() : '';
+    const normalizedEmail = email ? cleanEmail(email) : '';
 
     const existingCustomerByPhone = cleanDigits.length >= 10
       ? customers.find(c => 
           normalizeIndianPhone(c.phone) === normalizedPhone || 
-          c.phone.replace(/\D/g, '').slice(-10) === cleanDigits
+          cleanPhoneDigits(c.phone) === cleanDigits
         )
       : undefined;
 
-    const existingCustomerByEmail = (cleanEmail && cleanEmail.includes('@') && cleanEmail.includes('.'))
-      ? customers.find(c => c.email && c.email.trim().toLowerCase() === cleanEmail)
+    const existingCustomerByEmail = (normalizedEmail && isValidEmail(normalizedEmail))
+      ? customers.find(c => c.email && cleanEmail(c.email) === normalizedEmail)
       : undefined;
 
     return {
@@ -139,8 +140,8 @@ export class CustomerAuthService {
       return { success: false, error: 'Please enter your registered mobile number or email.' };
     }
 
-    if (!newPassword || newPassword.trim().length < 4) {
-      return { success: false, error: 'New password must be at least 4 characters long.' };
+    if (!newPassword || newPassword.trim().length < 8) {
+      return { success: false, error: 'New password must be at least 8 characters long.' };
     }
 
     const customers = store.getCustomers();
@@ -323,15 +324,15 @@ export class CustomerAuthService {
     email?: string,
     emailOtp?: string
   ): { success: boolean; session?: CustomerSession; error?: string } {
-    const cleanDigits = phone.replace(/\D/g, '');
+    const cleanDigits = cleanPhoneDigits(phone);
     const normalizedPhone = normalizeIndianPhone(phone);
 
     if (!name.trim()) {
       return { success: false, error: 'Full name is required for registration.' };
     }
 
-    if (cleanDigits.length < 10) {
-      return { success: false, error: 'Valid 10-digit mobile phone number is required.' };
+    if (!isValidIndianPhone(cleanDigits)) {
+      return { success: false, error: 'Please enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.' };
     }
 
     // 1. Mobile Phone OTP Check (Mandatory via SMS)
@@ -352,9 +353,9 @@ export class CustomerAuthService {
     }
 
     // 2. Email Address Check (Mandatory)
-    const cleanEmail = (email || '').trim().toLowerCase();
-    if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
-      return { success: false, error: 'Email address is mandatory for registration.' };
+    const normalizedEmail = cleanEmail(email);
+    if (!normalizedEmail || !isValidEmail(normalizedEmail)) {
+      return { success: false, error: 'Please enter a valid email address (e.g. name@example.com).' };
     }
 
     // 3. Email OTP Check (Mandatory)
@@ -363,18 +364,18 @@ export class CustomerAuthService {
       return { success: false, error: '6-digit email verification code is mandatory.' };
     }
 
-    const emailVerify = EmailVerificationService.verifyOtp(cleanEmail, cleanEmailOtp, 'signup');
+    const emailVerify = EmailVerificationService.verifyOtp(normalizedEmail, cleanEmailOtp, 'signup');
     if (!emailVerify.success) {
       return { success: false, error: emailVerify.message };
     }
 
     // 4. Password Check
-    if (!password || password.length < 4) {
-      return { success: false, error: 'Please set a secure password with at least 4 characters.' };
+    if (!password || password.length < 8) {
+      return { success: false, error: 'Please set a secure password with at least 8 characters.' };
     }
 
     // 5. Strict 1-to-1 Uniqueness Check: 1 user must have 1 unique phone number and 1 unique email
-    const identityCheck = this.checkIdentityExists(phone, cleanEmail);
+    const identityCheck = this.checkIdentityExists(phone, normalizedEmail);
 
     if (identityCheck.phoneExists && identityCheck.emailExists) {
       return { 
@@ -401,7 +402,7 @@ export class CustomerAuthService {
       id: `cust-${Date.now().toString().substring(6)}`,
       name: name.trim(),
       phone: normalizedPhone,
-      email: cleanEmail,
+      email: normalizedEmail,
       email_verified: true,
       password: password.trim(),
       created_at: new Date().toISOString(),

@@ -8,7 +8,7 @@ import { SlotEngine } from '../../services/slotEngine';
 import { AdminUser, BookingSource, PaymentMethod, Payment } from '../../types/schema';
 import { normalizeIndianPhone, getVenueDateString } from '../../utils/venueTime';
 import { AlertTriangle, ShieldAlert, PlusCircle, X, Split, KeyRound, Clock, MapPin, Calendar, User, Phone, Ticket, CreditCard, Sparkles } from 'lucide-react';
-import { formatTime12hPlain, formatDateDDMMYYYY } from '../../utils/formatters';
+import { formatTime12hPlain, formatDateDDMMYYYY, isValidIndianPhone, cleanPhoneDigits } from '../../utils/formatters';
 
 interface OfflineBookingModalProps {
   initialCourtId?: string;
@@ -68,13 +68,13 @@ export const OfflineBookingModal: React.FC<OfflineBookingModalProps> = ({
     e.preventDefault();
     setErrorMsg('');
 
-    const cleanDigits = phone.replace(/\D/g, '');
-    if (!name.trim() || cleanDigits.length < 10) {
-      setErrorMsg('Please enter customer full name and valid 10-digit phone number');
+    const cleanDigits = cleanPhoneDigits(phone);
+    if (!name.trim() || !isValidIndianPhone(cleanDigits)) {
+      setErrorMsg('Please enter customer full name and a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.');
       return;
     }
 
-    const normalizedPhone = normalizeIndianPhone(phone);
+    const normalizedPhone = normalizeIndianPhone(cleanDigits);
 
     // CC-D04: Multi-Tender Split Payment Validation
     if (paymentMethod === 'split') {
@@ -449,7 +449,6 @@ export const OfflineBookingModal: React.FC<OfflineBookingModalProps> = ({
                     <option value="cash">💵 Cash Counter</option>
                     <option value="upi">📱 Direct UPI Scan</option>
                     <option value="card">💳 POS Card Machine</option>
-                    <option value="split">⚖️ Split Tender</option>
                   </select>
                 </div>
               </div>
@@ -607,3 +606,4 @@ export const OfflineBookingModal: React.FC<OfflineBookingModalProps> = ({
     </div>
   );
 };
+
