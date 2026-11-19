@@ -62,7 +62,7 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
   const [initialPolicySection, setInitialPolicySection] = useState<PolicySection>('helpline');
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
-  // Filter sports to only those that have active courts configured at this venue
+  // Filter sports to strictly those that have active courts configured at this venue
   const activeCourts = allCourts.filter(c => c.status === 'active');
   const sports = allSports.filter(s =>
     activeCourts.some(
@@ -73,7 +73,8 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
         )
     )
   );
-  const availableSports = (sports.length > 0 ? sports : allSports).slice().sort((a, b) => {
+  // Do NOT fallback to allSports if activeCourts has no pitches
+  const availableSports = sports.slice().sort((a, b) => {
     const ordA = typeof a.display_order === 'number' ? a.display_order : allSports.findIndex(as => as.id === a.id);
     const ordB = typeof b.display_order === 'number' ? b.display_order : allSports.findIndex(as => as.id === b.id);
     if (ordA !== -1 && ordB !== -1) return ordA - ordB;
@@ -123,12 +124,12 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
     } catch {}
   }, []);
 
-  const [selectedSport, setSelectedSport] = useState<Sport>(() => {
+  const [selectedSport, setSelectedSport] = useState<Sport | null>(() => {
     if (preservedSportId) {
       const match = availableSports.find(s => s.id === preservedSportId);
       if (match) return match;
     }
-    return availableSports[0];
+    return availableSports.length > 0 ? availableSports[0] : null;
   });
   const [selectedCourt, setSelectedCourt] = useState<Court | null>(() => {
     if (preservedCourtId) {
@@ -144,6 +145,8 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
       if (!selectedSport || !availableSports.some(s => s.id === selectedSport.id)) {
         setSelectedSport(availableSports[0]);
       }
+    } else {
+      setSelectedSport(null);
     }
   }, [availableSports, selectedSport]);
 
@@ -244,20 +247,30 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
 
   const [computedSlots, setComputedSlots] = useState<DynamicSlot[]>([]);
 
-  const availableCourts = activeCourts.filter(
-    c => c.sport_ids.includes(selectedSport?.id || '')
-  );
+  const availableCourts = selectedSport
+    ? activeCourts.filter(
+        c =>
+          c.sport_ids.includes(selectedSport.id) ||
+          c.sport_ids.some(
+            id => id.toLowerCase() === selectedSport.id.toLowerCase() || id.toLowerCase().includes(selectedSport.name.toLowerCase())
+          )
+      )
+    : [];
 
   useEffect(() => {
-    if (availableCourts.length > 0 && (!selectedCourt || !selectedCourt.sport_ids.includes(selectedSport.id))) {
+    if (selectedSport && availableCourts.length > 0 && (!selectedCourt || !availableCourts.some(c => c.id === selectedCourt.id))) {
       setSelectedCourt(availableCourts[0]);
+    } else if (availableCourts.length === 0) {
+      setSelectedCourt(null);
     }
-  }, [selectedSport, availableCourts]);
+  }, [selectedSport, availableCourts, selectedCourt]);
 
   const refreshSlots = () => {
     if (selectedCourt) {
       const slots = SlotEngine.computeSlotsForCourt(selectedCourt, selectedDate, effectiveSessionId);
       setComputedSlots(slots);
+    } else {
+      setComputedSlots([]);
     }
   };
 
@@ -819,186 +832,233 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ onSwitchToAdmin }) => 
         )}
 
 
-        {/* Stitch Sport Selection Cards Section */}
-        <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="font-headline font-bold text-xl text-primary tracking-tight">Select Sport</h3>
-            <span className="text-xs text-on-surface-variant font-medium">Showing active sports courts</span>
-          </div>
+        {/* If no active turfs configured in admin panel, do NOT show sports, pitches, date strip or slots on user site */}
+        {activeCourts.length === 0 ? (
+          <div className="bg-white rounded-3xl p-8 sm:p-12 text-center border border-outline-variant/50 shadow-sm max-w-xl mx-auto my-6 sm:my-12 space-y-5 animate-in fade-in">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-primary/10 text-primary rounded-3xl flex items-center justify-center mx-auto text-3xl sm:text-4xl shadow-xs">
+              🏟️
+            </div>
+            <div className="space-y-2">
+              <h3 className="font-headline font-bold text-xl sm:text-2xl text-on-surface">
+                No Turfs Currently Available
+              </h3>
+              <p className="text-xs sm:text-sm text-on-surface-variant max-w-md mx-auto leading-relaxed font-medium">
+                There are currently no active turfs or sports pitches configured for online booking at {venue.name}. Please check back shortly or reach out to venue management directly.
+              </p>
+            </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-            {availableSports.map(s => {
-              const isSelected = selectedSport?.id === s.id;
-              const key = s.name.toLowerCase();
-              const meta = sportImages[key] || {
-                img: DEFAULT_SPORT_FALLBACK_IMAGE,
-                subtitle: 'Professional Facilities'
-              };
-              const cardImage = s.image_url || meta.img;
-              const cardSubtitle = s.subtitle || meta.subtitle;
-              const sportCourtCount = activeCourts.filter(c => c.sport_ids.includes(s.id)).length;
-              const courtsLabel = `${sportCourtCount} Court${sportCourtCount === 1 ? '' : 's'} Available`;
-
-              return (
-                <div
-                  key={s.id}
-                  onClick={() => handleSportSelect(s)}
-                  className={`group relative rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 border ${
-                    isSelected
-                      ? 'border-primary ring-2 ring-primary/20 shadow-md translate-y-[-2px]'
-                      : 'border-outline-variant/50 hover:border-primary/50 hover:shadow-sm'
-                  }`}
+            <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+              {venue.contact_phone && (
+                <a
+                  href={`tel:${venue.contact_phone.replace(/\s+/g, '')}`}
+                  className="btn-cta w-full sm:w-auto px-5 py-2.5 rounded-full text-xs font-headline font-bold flex items-center justify-center gap-2 shadow-xs hover:shadow-md transition cursor-pointer"
                 >
-                  <div className="h-28 w-full relative overflow-hidden">
-                    <img
-                      src={cardImage}
-                      onError={(e) => {
-                        const target = e.currentTarget;
-                        if (target.src !== DEFAULT_SPORT_FALLBACK_IMAGE) {
-                          target.src = DEFAULT_SPORT_FALLBACK_IMAGE;
-                        }
-                      }}
-                      alt={s.name}
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                    />
-                    <div className={`absolute inset-0 transition-opacity ${isSelected ? 'bg-primary/40' : 'bg-black/35 group-hover:bg-black/20'}`} />
-                    <div className="absolute top-2 left-2 text-xl bg-white/90 backdrop-blur-xs p-1 rounded-xl shadow-xs">
-                      {s.icon}
-                    </div>
-                  </div>
+                  <Phone className="w-4 h-4" />
+                  <span>Call Venue: {venue.contact_phone}</span>
+                </a>
+              )}
+              <button
+                onClick={() => {
+                  setInitialPolicySection('location');
+                  setCustomerView('policies');
+                }}
+                className="w-full sm:w-auto px-5 py-2.5 rounded-full text-xs font-headline font-bold border border-outline-variant/60 hover:border-primary/60 hover:bg-surface-container-low transition flex items-center justify-center gap-2 text-on-surface shadow-2xs cursor-pointer"
+              >
+                <MapPin className="w-4 h-4 text-primary" />
+                <span>View Location & Policies</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Stitch Sport Selection Cards Section */}
+            <section className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-headline font-bold text-xl text-primary tracking-tight">Select Sport</h3>
+                <span className="text-xs text-on-surface-variant font-medium">Showing active sports courts</span>
+              </div>
 
-                  <div className="p-3 bg-white space-y-0.5">
-                    <h4 className="font-headline font-bold text-sm text-on-surface flex items-center justify-between">
-                      <span>{s.name}</span>
-                      {isSelected && <span className="w-2 h-2 rounded-full bg-primary" />}
-                    </h4>
-                    <p className="text-[11px] text-on-surface-variant font-medium line-clamp-1">{cardSubtitle}</p>
-                    <p className="text-[10px] text-primary font-bold pt-1">{courtsLabel}</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                {availableSports.map(s => {
+                  const isSelected = selectedSport?.id === s.id;
+                  const key = s.name.toLowerCase();
+                  const meta = sportImages[key] || {
+                    img: DEFAULT_SPORT_FALLBACK_IMAGE,
+                    subtitle: 'Professional Facilities'
+                  };
+                  const cardImage = s.image_url || meta.img;
+                  const cardSubtitle = s.subtitle || meta.subtitle;
+                  const sportCourtCount = activeCourts.filter(c => c.sport_ids.includes(s.id)).length;
+                  const courtsLabel = `${sportCourtCount} Court${sportCourtCount === 1 ? '' : 's'} Available`;
+
+                  return (
+                    <div
+                      key={s.id}
+                      onClick={() => handleSportSelect(s)}
+                      className={`group relative rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 border ${
+                        isSelected
+                          ? 'border-primary ring-2 ring-primary/20 shadow-md translate-y-[-2px]'
+                          : 'border-outline-variant/50 hover:border-primary/50 hover:shadow-sm'
+                      }`}
+                    >
+                      <div className="h-28 w-full relative overflow-hidden">
+                        <img
+                          src={cardImage}
+                          onError={(e) => {
+                            const target = e.currentTarget;
+                            if (target.src !== DEFAULT_SPORT_FALLBACK_IMAGE) {
+                              target.src = DEFAULT_SPORT_FALLBACK_IMAGE;
+                            }
+                          }}
+                          alt={s.name}
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        />
+                        <div className={`absolute inset-0 transition-opacity ${isSelected ? 'bg-primary/40' : 'bg-black/35 group-hover:bg-black/20'}`} />
+                        <div className="absolute top-2 left-2 text-xl bg-white/90 backdrop-blur-xs p-1 rounded-xl shadow-xs">
+                          {s.icon}
+                        </div>
+                      </div>
+
+                      <div className="p-3 bg-white space-y-0.5">
+                        <h4 className="font-headline font-bold text-sm text-on-surface flex items-center justify-between">
+                          <span>{s.name}</span>
+                          {isSelected && <span className="w-2 h-2 rounded-full bg-primary" />}
+                        </h4>
+                        <p className="text-[11px] text-on-surface-variant font-medium line-clamp-1">{cardSubtitle}</p>
+                        <p className="text-[10px] text-primary font-bold pt-1">{courtsLabel}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
+            {/* Available Pitch & Courts Section */}
+            <section id="pitch-selection" className="space-y-4 pt-2 scroll-mt-20">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-headline font-bold text-xl text-primary tracking-tight">Available Pitch & Courts</h3>
+                  <p className="text-xs text-on-surface-variant font-medium mt-0.5">Select a court pitch to view real-time available time slots</p>
+                </div>
+                <span className="text-xs text-primary font-bold bg-primary/10 px-3 py-1 rounded-full border border-primary/20">
+                  {availableCourts.length} Pitch{availableCourts.length !== 1 ? 'es' : ''} Configured
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-5">
+                {isSlotsLoading ? (
+                  <PitchGridSkeleton count={2} />
+                ) : availableCourts.length === 0 ? (
+                  <div className="col-span-full p-8 text-center bg-white rounded-2xl border border-dashed border-outline-variant/60 space-y-2 shadow-xs">
+                    <p className="text-sm font-medium text-on-surface-variant">
+                      No active pitches currently available for this sport.
+                    </p>
+                  </div>
+                ) : (
+                  availableCourts.map(c => {
+                    const isSelected = selectedCourt?.id === c.id;
+                    return (
+                      <TurfSelectionCard
+                        key={c.id}
+                        court={c}
+                        selectedDate={selectedDate}
+                        isSelected={isSelected}
+                        onSelect={() => handleCourtSelect(c)}
+                      />
+                    );
+                  })
+                )}
+              </div>
+            </section>
+
+            {/* Stitch Quick Filter & 14-Day Date Strip */}
+            <section id="date-selection" className="space-y-4 scroll-mt-20">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="font-headline font-bold text-sm text-primary">Quick Date Filter:</span>
+                  <div className="flex gap-1.5 bg-surface-container-low p-1 rounded-2xl text-xs font-headline font-bold">
+                    {[
+                      { id: 'today', label: 'Today' },
+                      { id: 'tomorrow', label: 'Tomorrow' },
+                      { id: 'weekend', label: 'This Weekend' }
+                    ].map(f => (
+                      <button
+                        key={f.id}
+                        onClick={() => handleFilterClick(f.id as any)}
+                        className={`px-3 py-1.5 rounded-xl transition ${
+                          activeFilter === f.id
+                            ? 'bg-primary text-white shadow-xs'
+                            : 'text-on-surface-variant hover:text-on-surface'
+                        }`}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        </section>
 
-        {/* Available Pitch & Courts Section */}
-        <section id="pitch-selection" className="space-y-4 pt-2 scroll-mt-20">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-headline font-bold text-xl text-primary tracking-tight">Available Pitch & Courts</h3>
-              <p className="text-xs text-on-surface-variant font-medium mt-0.5">Select a court pitch to view real-time available time slots</p>
-            </div>
-            <span className="text-xs text-primary font-bold bg-primary/10 px-3 py-1 rounded-full border border-primary/20">
-              {availableCourts.length} Pitch{availableCourts.length !== 1 ? 'es' : ''} Configured
-            </span>
-          </div>
+                <div className="text-xs text-on-surface-variant font-semibold">
+                  Selected Date: <span className="text-primary font-headline font-bold">{formatDateDDMMYYYY(selectedDate)}</span>
+                </div>
+              </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-5">
-            {availableCourts.length === 0 ? (
-              <PitchGridSkeleton count={2} />
-            ) : (
-              availableCourts.map(c => {
-                const isSelected = selectedCourt?.id === c.id;
-                return (
-                  <TurfSelectionCard
-                    key={c.id}
-                    court={c}
-                    selectedDate={selectedDate}
-                    isSelected={isSelected}
-                    onSelect={() => handleCourtSelect(c)}
-                  />
-                );
-              })
+              <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+                {dateStrip.map(d => {
+                  const isSelected = selectedDate === d.iso;
+                  return (
+                    <button
+                      key={d.iso}
+                      onClick={() => handleDateStripSelect(d.iso)}
+                      className={`min-w-[72px] p-3 rounded-2xl text-center font-headline transition-all border flex flex-col items-center justify-center gap-0.5 ${
+                        isSelected
+                          ? 'bg-primary text-white border-primary shadow-md scale-105'
+                          : 'bg-white text-on-surface-variant hover:border-primary/40 border-outline-variant/40 hover:bg-surface-container-low'
+                      }`}
+                    >
+                      <span className="text-[10px] uppercase tracking-wider opacity-80">{d.dayName}</span>
+                      <span className="text-xl font-extrabold">{d.dayNum}</span>
+                      <span className="text-[10px] opacity-80">{d.monthName}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {/* Advance Booking Note */}
+              <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 text-xs bg-surface-container-low px-4 py-2.5 rounded-2xl border border-outline-variant/30 text-on-surface-variant">
+                <span className="flex items-center gap-1.5 font-medium">
+                  <span>📅 Advance online booking is available up to 14 days.</span>
+                </span>
+                <span className="text-[11px] font-bold text-primary">
+                  Need to book next month or after 15 days? Contact Admin: <a href="tel:+919579158374" className="underline hover:text-primary-focus">+91 95791 58374</a>
+                </span>
+              </div>
+            </section>
+
+            {/* Slot Grid Container */}
+            {selectedCourt && (
+              <section id="slots-selection" className="bg-white rounded-3xl p-4 sm:p-6 border border-outline-variant/50 shadow-sm space-y-4 scroll-mt-20">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-outline-variant/40 pb-4">
+                  <div>
+                    <h3 className="font-headline font-bold text-xl text-primary flex items-center gap-2">
+                      <span>Available Time Slots</span>
+                      <span className="text-xs font-normal text-on-surface-variant bg-surface-container-low px-2.5 py-0.5 rounded-full border border-outline-variant/40">
+                        {selectedCourt.slot_duration_minutes} Min Sessions
+                      </span>
+                    </h3>
+                    <p className="text-xs text-on-surface-variant font-medium mt-0.5">
+                      Click available slots to reserve with real-time locking
+                    </p>
+                  </div>
+                </div>
+
+                <SlotGrid
+                  slots={computedSlots}
+                  selectedSlots={selectedSlots}
+                  onToggleSlot={handleToggleSlot}
+                  isLoading={isSlotsLoading}
+                />
+              </section>
             )}
-          </div>
-        </section>
-
-        {/* Stitch Quick Filter & 14-Day Date Strip */}
-        <section id="date-selection" className="space-y-4 scroll-mt-20">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <span className="font-headline font-bold text-sm text-primary">Quick Date Filter:</span>
-              <div className="flex gap-1.5 bg-surface-container-low p-1 rounded-2xl text-xs font-headline font-bold">
-                {[
-                  { id: 'today', label: 'Today' },
-                  { id: 'tomorrow', label: 'Tomorrow' },
-                  { id: 'weekend', label: 'This Weekend' }
-                ].map(f => (
-                  <button
-                    key={f.id}
-                    onClick={() => handleFilterClick(f.id as any)}
-                    className={`px-3 py-1.5 rounded-xl transition ${
-                      activeFilter === f.id
-                        ? 'bg-primary text-white shadow-xs'
-                        : 'text-on-surface-variant hover:text-on-surface'
-                    }`}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="text-xs text-on-surface-variant font-semibold">
-              Selected Date: <span className="text-primary font-headline font-bold">{formatDateDDMMYYYY(selectedDate)}</span>
-            </div>
-          </div>
-
-          <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-            {dateStrip.map(d => {
-              const isSelected = selectedDate === d.iso;
-              return (
-                <button
-                  key={d.iso}
-                  onClick={() => handleDateStripSelect(d.iso)}
-                  className={`min-w-[72px] p-3 rounded-2xl text-center font-headline transition-all border flex flex-col items-center justify-center gap-0.5 ${
-                    isSelected
-                      ? 'bg-primary text-white border-primary shadow-md scale-105'
-                      : 'bg-white text-on-surface-variant hover:border-primary/40 border-outline-variant/40 hover:bg-surface-container-low'
-                  }`}
-                >
-                  <span className="text-[10px] uppercase tracking-wider opacity-80">{d.dayName}</span>
-                  <span className="text-xl font-extrabold">{d.dayNum}</span>
-                  <span className="text-[10px] opacity-80">{d.monthName}</span>
-                </button>
-              );
-            })}
-          </div>
-          {/* Advance Booking Note */}
-          <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 text-xs bg-surface-container-low px-4 py-2.5 rounded-2xl border border-outline-variant/30 text-on-surface-variant">
-            <span className="flex items-center gap-1.5 font-medium">
-              <span>📅 Advance online booking is available up to 14 days.</span>
-            </span>
-            <span className="text-[11px] font-bold text-primary">
-              Need to book next month or after 15 days? Contact Admin: <a href="tel:+919579158374" className="underline hover:text-primary-focus">+91 95791 58374</a>
-            </span>
-          </div>
-        </section>
-
-        {/* Slot Grid Container */}
-        {selectedCourt && (
-          <section id="slots-selection" className="bg-white rounded-3xl p-4 sm:p-6 border border-outline-variant/50 shadow-sm space-y-4 scroll-mt-20">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-outline-variant/40 pb-4">
-              <div>
-                <h3 className="font-headline font-bold text-xl text-primary flex items-center gap-2">
-                  <span>Available Time Slots</span>
-                  <span className="text-xs font-normal text-on-surface-variant bg-surface-container-low px-2.5 py-0.5 rounded-full border border-outline-variant/40">
-                    {selectedCourt.slot_duration_minutes} Min Sessions
-                  </span>
-                </h3>
-                <p className="text-xs text-on-surface-variant font-medium mt-0.5">
-                  Click available slots to reserve with real-time locking
-                </p>
-              </div>
-            </div>
-
-            <SlotGrid
-              slots={computedSlots}
-              selectedSlots={selectedSlots}
-              onToggleSlot={handleToggleSlot}
-              isLoading={isSlotsLoading}
-            />
-          </section>
+          </>
         )}
           </>
         )}

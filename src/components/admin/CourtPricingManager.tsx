@@ -21,8 +21,28 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
   const [blockedSlots, setBlockedSlots] = useState<BlockedSlot[]>(() => store.getBlockedSlots());
   const [sports, setSports] = useState<Sport[]>(() => store.getSports());
 
-  // Subscribe to store updates (Supabase Realtime & background sync)
+  // Auto-restore missing default courts & subscribe to store updates
   useEffect(() => {
+    try {
+      const raw = localStorage.getItem('TURFFLOW_DELETED_COURTS');
+      if (raw) {
+        const list: string[] = JSON.parse(raw);
+        const filtered = list.filter(id => !['crt-001', 'crt-002', 'crt-003', 'crt-004', 'crt-005'].includes(id));
+        localStorage.setItem('TURFFLOW_DELETED_COURTS', JSON.stringify(filtered));
+      }
+    } catch (e) {}
+
+    // Auto-restore missing default pitches if any are missing
+    const defaults = store.getDefaultCourts();
+    const currentList = store.getCourts();
+    const currentIds = new Set(currentList.map(c => c.id));
+    const missing = defaults.filter(d => !currentIds.has(d.id));
+    if (missing.length > 0) {
+      const merged = [...currentList, ...missing];
+      store.setCourts(merged);
+      setCourts(merged);
+    }
+
     const handleStoreChange = () => {
       setCourts([...store.getCourts()]);
       setBlockedSlots([...store.getBlockedSlots()]);
@@ -845,10 +865,34 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
 
       {/* Courts Inventory Cards List */}
       <div>
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <h3 className="font-headline font-bold text-sm text-on-surface uppercase tracking-wider">
             Configured Pitches ({courts.length})
           </h3>
+          <button
+            type="button"
+            onClick={() => {
+              try {
+                localStorage.removeItem('TURFFLOW_DELETED_COURTS');
+              } catch (e) {}
+              const defaults = store.getDefaultCourts();
+              const currentList = store.getCourts();
+              const currentIds = new Set(currentList.map(c => c.id));
+              const merged = [...currentList];
+              for (const d of defaults) {
+                if (!currentIds.has(d.id)) {
+                  merged.push(d);
+                  SupabaseSyncService.syncCourtToSupabase(d).catch(() => {});
+                }
+              }
+              store.setCourts(merged);
+              setCourts(merged);
+            }}
+            className="text-xs text-primary font-bold hover:underline flex items-center gap-1 cursor-pointer"
+            title="Restore all default venue pitches (Football, Cricket, Badminton, Pickleball)"
+          >
+            <RotateCcw className="w-3 h-3" /> Restore All Standard Pitches
+          </button>
         </div>
 
         {courts.length === 0 ? (

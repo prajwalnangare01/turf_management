@@ -74,11 +74,20 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   onSuccess
 }) => {
   const [name, setName] = useState(currentCustomer?.name || '');
-  const [phone, setPhone] = useState(currentCustomer?.phone || '');
+  const [phone, setPhone] = useState(() => cleanPhoneDigits(currentCustomer?.phone));
   const [email, setEmail] = useState(currentCustomer?.email || '');
   const [couponCode, setCouponCode] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
   const [couponError, setCouponError] = useState('');
+
+  // Keep contact details in sync if currentCustomer updates
+  useEffect(() => {
+    if (currentCustomer) {
+      if (currentCustomer.name && !name) setName(currentCustomer.name);
+      if (currentCustomer.phone) setPhone(cleanPhoneDigits(currentCustomer.phone));
+      if (currentCustomer.email && !email) setEmail(currentCustomer.email);
+    }
+  }, [currentCustomer]);
 
   // 5-minute hold target timestamp (computed once on modal mount)
   const [targetExpiryMs] = useState<number>(() => {
@@ -508,8 +517,13 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     pattern="[6-9][0-9]{9}"
                     value={phone}
                     onChange={e => {
-                      const digits = e.target.value.replace(/\D/g, '');
-                      setPhone(digits.length > 10 ? digits.slice(-10) : digits);
+                      const digits = cleanPhoneDigits(e.target.value);
+                      setPhone(digits);
+                    }}
+                    onPaste={e => {
+                      e.preventDefault();
+                      const pasted = e.clipboardData.getData('text');
+                      setPhone(cleanPhoneDigits(pasted));
                     }}
                     className="form-input text-xs py-1.5 px-2.5 font-mono"
                   />

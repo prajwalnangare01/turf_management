@@ -979,7 +979,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
                 </div>
                 <div className="flex flex-col xs:flex-row xs:flex-wrap items-start xs:items-center gap-1.5 xs:gap-3 sm:gap-4 text-xs text-on-surface-variant mt-1.5 font-medium">
                   <span className="flex items-center gap-1 shrink-0">
-                    <Phone className="w-3.5 h-3.5 text-primary" /> {currentCustomer.phone.startsWith('+91') ? currentCustomer.phone : `+91 ${currentCustomer.phone}`}
+                    <Phone className="w-3.5 h-3.5 text-primary" /> {formatPhoneNumber(currentCustomer.phone)}
                   </span>
                   {currentCustomer.email ? (
                     <span className="flex items-center gap-1.5 flex-wrap">

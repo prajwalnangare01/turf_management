@@ -124,6 +124,50 @@ const DEFAULT_COURTS: Court[] = [
     peak_start_time: '18:00',
     peak_end_time: '22:00',
     peak_price_per_hour: 800
+  },
+  {
+    id: 'crt-004',
+    venue_id: 'ven-001',
+    sport_ids: ['sp-pickleball'],
+    name: 'Court 2 — Pro Cushion Pickleball Arena',
+    slot_duration_minutes: 60,
+    opening_time: '06:00',
+    closing_time: '22:00',
+    buffer_minutes: 0,
+    status: 'active',
+    base_price_per_hour: 600,
+    original_price_per_hour: 800,
+    saturday_price_per_hour: 850,
+    saturday_offer_price_per_hour: 750,
+    sunday_price_per_hour: 850,
+    sunday_offer_price_per_hour: 750,
+    peak_enabled: true,
+    peak_start_time: '18:00',
+    peak_end_time: '22:00',
+    peak_price_per_hour: 950,
+    peak_offer_price_per_hour: 850
+  },
+  {
+    id: 'crt-005',
+    venue_id: 'ven-001',
+    sport_ids: ['sp-football', 'sp-cricket'],
+    name: 'Turf C — 7-a-side Championship AstroTurf',
+    slot_duration_minutes: 60,
+    opening_time: '06:00',
+    closing_time: '23:00',
+    buffer_minutes: 0,
+    status: 'active',
+    base_price_per_hour: 1800,
+    original_price_per_hour: 2200,
+    saturday_price_per_hour: 2400,
+    saturday_offer_price_per_hour: 2150,
+    sunday_price_per_hour: 2400,
+    sunday_offer_price_per_hour: 2150,
+    peak_enabled: true,
+    peak_start_time: '18:00',
+    peak_end_time: '23:00',
+    peak_price_per_hour: 2600,
+    peak_offer_price_per_hour: 2350
   }
 ];
 
@@ -389,7 +433,12 @@ class AppStore {
         let deletedCourtIds: string[] = [];
         try {
           const raw = localStorage.getItem('TURFFLOW_DELETED_COURTS');
-          if (raw) deletedCourtIds = JSON.parse(raw);
+          if (raw) {
+            const list: string[] = JSON.parse(raw);
+            // Default venues crt-001 through crt-005 must NEVER be suppressed by a legacy local blacklist
+            deletedCourtIds = list.filter(id => !['crt-001', 'crt-002', 'crt-003', 'crt-004', 'crt-005'].includes(id));
+            localStorage.setItem('TURFFLOW_DELETED_COURTS', JSON.stringify(deletedCourtIds));
+          }
           const testCourtIds = (parsed.courts || [])
             .filter((c: Court) => ['test', 'test2', 'test3'].includes(c.name?.toLowerCase()?.trim()))
             .map((c: Court) => c.id);
@@ -399,12 +448,17 @@ class AppStore {
           }
         } catch (e) {}
 
-        const rawCourts: Court[] = (parsed.courts || DEFAULT_COURTS).filter(
+        // Merge parsed courts with any missing DEFAULT_COURTS so active venue pitches are always restored if missing
+        const existingCourtIds = new Set((parsed.courts || []).map((c: Court) => c.id));
+        const missingDefaults = DEFAULT_COURTS.filter(dc => !existingCourtIds.has(dc.id) && !deletedCourtIds.includes(dc.id));
+        const candidateCourts = [...(parsed.courts || []), ...missingDefaults];
+
+        const rawCourts: Court[] = (candidateCourts.length > 0 ? candidateCourts : DEFAULT_COURTS).filter(
           (c: Court) => !deletedCourtIds.includes(c.id) && 
                         c.status !== 'inactive' &&
                         !['test', 'test2', 'test3'].includes(c.name?.toLowerCase()?.trim())
         );
-        this.courts = rawCourts.map(c => {
+        let loadedCourts = rawCourts.map(c => {
           if (!c.original_price_per_hour) {
             const def = DEFAULT_COURTS.find(dc => dc.id === c.id);
             if (def && def.original_price_per_hour) {
@@ -413,6 +467,10 @@ class AppStore {
           }
           return c;
         });
+        if (loadedCourts.length === 0) {
+          loadedCourts = DEFAULT_COURTS;
+        }
+        this.courts = loadedCourts;
         const rawRules: PricingRule[] = parsed.pricingRules || DEFAULT_PRICING_RULES;
         this.pricingRules = rawRules.filter(
           r => !(r.start_time === '18:00' && r.end_time === '23:00') &&
@@ -491,6 +549,7 @@ class AppStore {
   public getVenue() { return this.venue; }
   public getSports() { return this.sports; }
   public getCourts() { return this.courts; }
+  public getDefaultCourts(): Court[] { return DEFAULT_COURTS; }
   public getPricingRules() { return this.pricingRules; }
   public getCustomers() { return this.customers; }
   public getAdminUsers() { return this.adminUsers; }

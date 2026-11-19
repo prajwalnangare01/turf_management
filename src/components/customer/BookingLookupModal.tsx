@@ -4,7 +4,7 @@ import { PostgresEngine } from '../../services/postgresEngine';
 import { Booking, Customer } from '../../types/schema';
 import { CancelBookingConfirmModal } from './CancelBookingConfirmModal';
 import { Calendar, XCircle, AlertCircle, X, ShieldCheck, Tag, RotateCcw, Ticket, CloudRain } from 'lucide-react';
-import { formatDateDDMMYYYY, formatTimeRange12h } from '../../utils/formatters';
+import { formatDateDDMMYYYY, formatTimeRange12h, formatPhoneNumber } from '../../utils/formatters';
 
 interface BookingLookupModalProps {
   currentCustomer: Customer;
@@ -84,7 +84,7 @@ export const BookingLookupModal: React.FC<BookingLookupModalProps> = ({ currentC
             <div className="min-w-0">
               <h3 className="font-headline font-bold text-base sm:text-lg text-primary leading-tight truncate">My Verified Bookings</h3>
               <p className="text-[11px] text-on-surface-variant flex items-center gap-1 font-medium truncate">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" /> Account: {currentCustomer.name} ({currentCustomer.phone.startsWith('+91') ? currentCustomer.phone : `+91 ${currentCustomer.phone}`})
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" /> Account: {currentCustomer.name} ({formatPhoneNumber(currentCustomer.phone)})
               </p>
             </div>
           </div>

@@ -102,7 +102,11 @@ export class SupabaseSyncService {
         let deletedCourtIds: string[] = [];
         try {
           const raw = localStorage.getItem('TURFFLOW_DELETED_COURTS');
-          if (raw) deletedCourtIds = JSON.parse(raw);
+          if (raw) {
+            const list: string[] = JSON.parse(raw);
+            deletedCourtIds = list.filter(id => !['crt-001', 'crt-002', 'crt-003', 'crt-004', 'crt-005'].includes(id));
+            localStorage.setItem('TURFFLOW_DELETED_COURTS', JSON.stringify(deletedCourtIds));
+          }
         } catch (e) {}
 
         const activeRemoteCourts = courts.filter((c: any) => 
@@ -130,10 +134,23 @@ export class SupabaseSyncService {
             } else if (c.id === 'crt-003') {
               resolvedSportIds = ['sp-badminton'];
               Promise.resolve(supabase.from('court_sports').upsert([{ court_id: c.id, sport_id: 'sp-badminton' }])).catch(() => {});
+            } else if (c.id === 'crt-004') {
+              resolvedSportIds = ['sp-pickleball'];
+              Promise.resolve(supabase.from('court_sports').upsert([{ court_id: c.id, sport_id: 'sp-pickleball' }])).catch(() => {});
+            } else if (c.id === 'crt-005') {
+              resolvedSportIds = ['sp-football', 'sp-cricket'];
+              Promise.resolve(supabase.from('court_sports').upsert([{ court_id: c.id, sport_id: 'sp-football' }, { court_id: c.id, sport_id: 'sp-cricket' }])).catch(() => {});
             } else {
               resolvedSportIds = ['sp-football'];
             }
           }
+
+          // Strict assignment for default court IDs to guarantee exact sport mapping
+          if (c.id === 'crt-001') resolvedSportIds = ['sp-football'];
+          if (c.id === 'crt-002') resolvedSportIds = ['sp-football', 'sp-cricket'];
+          if (c.id === 'crt-003') resolvedSportIds = ['sp-badminton'];
+          if (c.id === 'crt-004') resolvedSportIds = ['sp-pickleball'];
+          if (c.id === 'crt-005') resolvedSportIds = ['sp-football', 'sp-cricket'];
 
           return {
             id: c.id,
@@ -161,7 +178,11 @@ export class SupabaseSyncService {
           };
         });
 
-        store.setCourts(enrichedCourts, false);
+        if (enrichedCourts.length > 0) {
+          store.setCourts(enrichedCourts, false);
+        } else if (existingCourts.length > 0) {
+          store.setCourts(existingCourts, false);
+        }
       }
 
       // 4. Fetch Customers
