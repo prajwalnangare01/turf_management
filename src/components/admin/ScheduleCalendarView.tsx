@@ -462,7 +462,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
           <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-surface-container-low border-b border-outline-variant/40 text-xs font-headline font-bold text-on-surface-variant">
-              <th className="p-3 w-32 min-w-[120px] text-center border-r border-outline-variant/40 sticky left-0 z-10 bg-surface-container-low">Time</th>
+              <th className="p-3 w-32 min-w-[120px] text-center border-r border-outline-variant/40 md:sticky md:left-0 md:z-10 bg-surface-container-low">Time</th>
               {filteredCourts.map(court => (
                 <th key={court.id} className="p-3 min-w-[190px] border-r border-outline-variant/40 last:border-r-0">
                   <div className="font-headline font-bold text-on-surface text-sm">{court.name}</div>
@@ -490,7 +490,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({ curr
               return (
               <tr key={timeStr} className="border-b border-outline-variant/30 hover:bg-surface-container-low/50">
                 {/* Time Column */}
-                <td className="p-2.5 border-r border-outline-variant/40 bg-surface-container-low sticky left-0 z-10">
+                <td className="p-2.5 border-r border-outline-variant/40 bg-surface-container-low md:sticky md:left-0 md:z-10">
                   <div className="flex items-center justify-center gap-2">
                     <div
                       className={`p-1.5 rounded-lg shrink-0 flex items-center justify-center ${

@@ -3,10 +3,11 @@ import QRCode from 'qrcode';
 import { store } from '../../services/store';
 import { PostgresEngine } from '../../services/postgresEngine';
 import { Customer, Booking, BookingStatus } from '../../types/schema';
-import { formatTimeRange12h, formatTime12hPlain, formatTimeRange12hPlain, formatDateDDMMYYYY, formatPhoneNumber, getBookingGatePassOtp, getBookingGroupRef } from '../../utils/formatters';
+import { formatTimeRange12h, formatTime12hPlain, formatTimeRange12hPlain, formatDateDDMMYYYY, formatPhoneNumber, getBookingGatePassOtp, getBookingGroupRef, isValidEmail, cleanEmail, isValidIndianPhone, cleanPhoneDigits } from '../../utils/formatters';
 import { TimeOfDayIcon, getTimeOfDaySvg } from '../common/TimeOfDayIcon';
 import { CancelBookingConfirmModal } from './CancelBookingConfirmModal';
 import { ConfirmModal } from '../common/ConfirmModal';
+import { Toast } from '../common/Toast';
 import { 
   User, Phone, Mail, Calendar, ArrowLeft, ShieldCheck, Ticket, 
   XCircle, CheckCircle2, Clock, Award, LogOut, Edit2, Save, X, KeyRound, RotateCcw,
@@ -52,6 +53,27 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
   const [isConfirmingEmailOtp, setIsConfirmingEmailOtp] = useState(false);
   const [emailCooldown, setEmailCooldown] = useState(0);
 
+  // Toast notification state
+  const [toastState, setToastState] = useState<{
+    isOpen: boolean;
+    type?: 'success' | 'error' | 'warning' | 'info';
+    title?: string;
+    message: string;
+  }>({
+    isOpen: false,
+    type: 'success',
+    message: ''
+  });
+
+  const showToast = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'success', title?: string) => {
+    setToastState({
+      isOpen: true,
+      type,
+      title,
+      message
+    });
+  };
+
   // Validation for updating email (Old vs New Email comparison & Duplicate registration check)
   const validateEmailUpdate = (newEmail: string, oldEmail?: string, currentCustId?: string) => {
     const cleanNew = newEmail.trim().toLowerCase();
@@ -70,12 +92,12 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
       };
     }
 
-    // 2. Format check
-    const isValidFormat = cleanNew.includes('@') && cleanNew.includes('.') && cleanNew.length >= 5;
+    // 2. Standard format check
+    const isValidFormat = isValidEmail(cleanNew);
     if (!isValidFormat) {
       return {
         isConflict: false,
-        warning: null,
+        warning: 'Please enter a valid standard email address (e.g. name@example.com).',
         isValid: false
       };
     }
@@ -318,14 +340,14 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
     // If customer is updating email in edit form
     if (isUpdatingEmailInEdit && newEmailInput.trim()) {
       if (editEmailValidation.warning) {
-        alert(editEmailValidation.warning);
+        showToast(editEmailValidation.warning, 'warning', 'Invalid Email');
         return;
       }
       if (!emailOtpSent) {
-        alert('Please click "Send Verification Code" and verify your new email address with OTP before saving.');
+        showToast('Please click "Send Verification Code" and verify your new email address with OTP before saving.', 'warning', 'Verification Required');
         return;
       }
-      alert('Please enter the 6-digit verification code to complete your email update.');
+      showToast('Please enter the 6-digit verification code to complete your email update.', 'warning', 'Verification Code Required');
       return;
     }
 
@@ -348,7 +370,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
     onUpdateCustomer(updated);
     setIsEditing(false);
     setIsUpdatingEmailInEdit(false);
-    alert('Profile details updated successfully!');
+    showToast('Profile details updated successfully!', 'success', 'Profile Saved');
   };
 
   const handleSendEmailOtpForEditUpdate = async (e?: React.MouseEvent) => {
@@ -429,7 +451,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
       setEmailOtpCode('');
       setEmailOtpNotice(null);
       setEmailOtpSent(false);
-      alert('Email address verified and profile updated successfully!');
+      showToast('Email address verified and profile updated successfully!', 'success', 'Email Updated');
     } else {
       setEmailOtpError(result.error || 'Verification failed. Please check the code.');
     }
@@ -530,7 +552,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
       setEmailOtpCode('');
       setEmailOtpNotice(null);
       setEmailOtpSent(false);
-      alert('Email address verified and profile updated successfully!');
+      showToast('Email address verified and profile updated successfully!', 'success', 'Email Updated');
     } else {
       setEmailOtpError(result.error || 'Verification failed. Please check the code.');
     }
@@ -2007,11 +2029,21 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
         confirmText="Yes, Sign Out"
         cancelText="Cancel"
         variant="danger"
+        icon={<LogOut className="w-7 h-7 text-red-600" />}
         onConfirm={() => {
           setShowLogoutConfirm(false);
           onLogout();
         }}
         onCancel={() => setShowLogoutConfirm(false)}
+      />
+
+      {/* Action Toast Notification */}
+      <Toast
+        isOpen={toastState.isOpen}
+        type={toastState.type}
+        title={toastState.title}
+        message={toastState.message}
+        onClose={() => setToastState(prev => ({ ...prev, isOpen: false }))}
       />
 
     </div>

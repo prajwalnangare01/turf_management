@@ -245,43 +245,6 @@ export const WhatsAppManagerTab: React.FC<Props> = ({ currentAdmin }) => {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
-      
-      {/* Top Banner / Status Overview */}
-      <div className="bg-gradient-to-r from-emerald-950 via-slate-900 to-slate-900 rounded-2xl p-6 text-white border border-emerald-800/40 shadow-sm flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <span className="p-2 bg-emerald-500/20 rounded-xl text-emerald-400">
-              <Bot className="w-5 h-5" />
-            </span>
-            <h2 className="text-xl font-headline font-bold">TurfFlow WhatsApp AI Agent</h2>
-            <span className={`text-xs px-2.5 py-0.5 rounded-full border font-semibold flex items-center gap-1.5 ${
-              waClientStatus.status === 'connected'
-                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-            }`}>
-              <span className={`w-2 h-2 rounded-full ${waClientStatus.status === 'connected' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
-              {waClientStatus.status === 'connected' ? 'LIVE ON REAL WHATSAPP' : 'AWAITING PHONE PAIRING'}
-            </span>
-          </div>
-          <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
-            Directly connected to WhatsApp number <strong>+91 {activeTenDigitPhone}</strong>. When a customer sends a message to this number on WhatsApp, the AI concierge answers queries, checks live slots in Supabase, and books pitches automatically.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap md:flex-col gap-2 shrink-0 text-xs">
-          <div className="bg-slate-800/80 px-3.5 py-2 rounded-xl border border-slate-700/60 flex items-center justify-between gap-3">
-            <span className="text-slate-400 font-medium">Supabase Realtime:</span>
-            <span className={`font-mono font-bold ${agentHealth.supabaseRealtime ? 'text-emerald-400' : 'text-amber-400'}`}>
-              {agentHealth.supabaseRealtime ? '⚡ CONNECTED' : 'FALLBACK'}
-            </span>
-          </div>
-          <div className="bg-slate-800/80 px-3.5 py-2 rounded-xl border border-slate-700/60 flex items-center justify-between gap-3">
-            <span className="text-slate-400 font-medium">5-min Slot Holds:</span>
-            <span className="font-mono font-bold text-cyan-400">{agentHealth.activeLocks} Active</span>
-          </div>
-        </div>
-      </div>
-
       {/* PROPER WHATSAPP PHONE PAIRING SECTION */}
       <div className="bg-white rounded-2xl p-6 border border-emerald-500/30 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4 mb-4">

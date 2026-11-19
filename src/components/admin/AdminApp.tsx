@@ -20,7 +20,7 @@ import { getVenueDateString } from '../../utils/venueTime';
 import { 
   Calendar, ListFilter, Settings, Users, BarChart3, History, 
   Sliders, PlusCircle, UserCheck, ArrowLeft, Lock, ShieldCheck, Zap, LogOut, ShieldAlert,
-  MessageSquare, Trash2
+  MessageSquare, Trash2, TrendingUp
 } from 'lucide-react';
 
 interface AdminAppProps {
@@ -112,6 +112,10 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onSwitchToCustomer }) => {
   const todayStr = getVenueDateString(0);
   const todayBookings = bookings.filter(b => b.booking_date === todayStr && b.status !== 'cancelled');
   const todayRevenue = todayBookings.reduce((sum, b) => sum + b.total_amount, 0);
+
+  const currentMonthPrefix = todayStr.slice(0, 7);
+  const monthBookings = bookings.filter(b => b.booking_date.startsWith(currentMonthPrefix) && b.status !== 'cancelled');
+  const monthRevenue = monthBookings.reduce((sum, b) => sum + (b.total_amount - (b.refund_amount || 0)), 0);
 
   const activeLocksCount = store.getSlotLocks().filter(l => l.expires_at > Date.now()).length;
 
@@ -264,7 +268,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onSwitchToCustomer }) => {
 
           <div className="bg-white p-5 rounded-xl border border-outline-variant/50 shadow-sm space-y-2">
             <div className="flex justify-between items-center text-on-surface-variant font-headline font-bold text-xs uppercase tracking-wider">
-              <span>Live Redis Locks</span>
+              <span>Live Slot Locks</span>
               <Lock className="w-4 h-4 text-sky-600" />
             </div>
             <p className="text-3xl font-headline font-extrabold text-sky-700">{activeLocksCount}</p>
@@ -273,11 +277,11 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onSwitchToCustomer }) => {
 
           <div className="bg-white p-5 rounded-xl border border-outline-variant/50 shadow-sm space-y-2">
             <div className="flex justify-between items-center text-on-surface-variant font-headline font-bold text-xs uppercase tracking-wider">
-              <span>DB Integrity Guard</span>
-              <ShieldCheck className="w-4 h-4 text-primary" />
+              <span>Monthly Revenue</span>
+              <TrendingUp className="w-4 h-4 text-emerald-600" />
             </div>
-            <p className="text-3xl font-headline font-extrabold text-primary">100%</p>
-            <p className="text-[11px] text-on-surface-variant font-medium">Zero double-bookings</p>
+            <p className="text-3xl font-headline font-extrabold text-emerald-700">₹{monthRevenue.toLocaleString()}</p>
+            <p className="text-[11px] text-on-surface-variant font-medium">{monthBookings.length} bookings this month</p>
           </div>
         </div>
 
@@ -410,6 +414,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onSwitchToCustomer }) => {
         confirmText="Yes, Log Out"
         cancelText="Cancel"
         variant="danger"
+        icon={<LogOut className="w-7 h-7 text-red-600" />}
         onConfirm={() => {
           setShowLogoutConfirm(false);
           handleLogout();
