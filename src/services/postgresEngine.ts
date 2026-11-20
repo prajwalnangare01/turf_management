@@ -149,9 +149,9 @@ export class PostgresEngine {
       ...booking,
       id: `bk-${Date.now()}-${randomSuffix}`,
       booking_ref: booking.booking_ref || `TRF-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${randomSuffix}`,
-      venue_name: (booking as any).venue_name || currentVenue.name,
-      venue_address: (booking as any).venue_address || currentVenue.address,
-      venue_location_url: (booking as any).venue_location_url || currentVenue.location_url || currentVenue.google_maps_link,
+      venue_name: currentVenue.name || (booking as any).venue_name || 'TurfFlow Arena',
+      venue_address: currentVenue.address || (booking as any).venue_address || 'Plot 42, Sports Enclave, Pune',
+      venue_location_url: currentVenue.location_url || currentVenue.google_maps_link || (booking as any).venue_location_url || 'https://maps.google.com/?q=18.5204,73.8567',
       created_at: now,
       updated_at: now
     };

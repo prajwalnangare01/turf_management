@@ -71,9 +71,9 @@ export const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> =
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [locationQrDataUrl, setLocationQrDataUrl] = useState<string>('');
 
-  const venueLocationUrl = booking.venue_location_url || venue.location_url || venue.google_maps_link || `https://maps.google.com/?q=${encodeURIComponent((booking.venue_name || venue.name) + ', ' + (booking.venue_address || venue.address))}`;
-  const venueName = booking.venue_name || venue.name;
-  const venueAddress = booking.venue_address || venue.address;
+  const venueName = venue.name || booking.venue_name || 'TurfFlow Arena';
+  const venueAddress = venue.address || booking.venue_address || 'Plot 42, Sports Enclave, Pune';
+  const venueLocationUrl = venue.location_url || venue.google_maps_link || booking.venue_location_url || `https://maps.google.com/?q=${encodeURIComponent(venueName + ', ' + venueAddress)}`;
 
   useEffect(() => {
     QRCode.toDataURL(venueLocationUrl, { margin: 1, width: 160 })

@@ -610,9 +610,9 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
     const court = courts.find(c => c.id === booking.court_id);
     const cleanPhone = formatPhoneNumber(currentCustomer.phone);
     const hasMultipleSlots = allSlots.length > 1;
-    const resolvedVenueName = booking.venue_name || venue.name;
-    const resolvedVenueAddress = booking.venue_address || venue.address;
-    const resolvedVenueLocationUrl = booking.venue_location_url || venue.location_url || venue.google_maps_link || venueLocationUrl;
+    const resolvedVenueName = venue.name || booking.venue_name || 'TurfFlow Arena';
+    const resolvedVenueAddress = venue.address || booking.venue_address || 'Plot 42, Sports Enclave, Pune';
+    const resolvedVenueLocationUrl = venue.location_url || venue.google_maps_link || booking.venue_location_url || venueLocationUrl;
 
     const htmlContent = `
       <!DOCTYPE html>
@@ -865,9 +865,9 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
       const singleSlotDisplay = `${formatTime12hPlain(booking.start_time)} – ${formatTime12hPlain(booking.end_time)}`;
       const otpCode = getBookingGatePassOtp(booking);
       const court = courts.find(c => c.id === booking.court_id);
-      const resolvedVenueName = booking.venue_name || venue.name;
-      const resolvedVenueAddress = booking.venue_address || venue.address;
-      const resolvedVenueLocationUrl = booking.venue_location_url || venue.location_url || venue.google_maps_link || venueLocationUrl;
+      const resolvedVenueName = venue.name || booking.venue_name || 'TurfFlow Arena';
+      const resolvedVenueAddress = venue.address || booking.venue_address || 'Plot 42, Sports Enclave, Pune';
+      const resolvedVenueLocationUrl = venue.location_url || venue.google_maps_link || booking.venue_location_url || venueLocationUrl;
 
       const fullPayload = {
         ...booking,
@@ -1806,13 +1806,13 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({
                   <div className="flex-1 min-w-0 space-y-1">
                     <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                       <MapPin className="w-3 h-3 text-[#006b30] shrink-0" />
-                      <span>{passModalBooking.venue_name || venue.name}</span>
+                      <span>{venue.name || passModalBooking.venue_name || 'TurfFlow Arena'}</span>
                     </div>
                     <p className="text-[11px] font-semibold text-slate-800 leading-snug line-clamp-2">
-                      {passModalBooking.venue_address || venue.address}
+                      {venue.address || passModalBooking.venue_address || 'Plot 42, Sports Enclave, Pune'}
                     </p>
                     <a
-                      href={passModalBooking.venue_location_url || venueLocationUrl}
+                      href={venue.location_url || venue.google_maps_link || passModalBooking.venue_location_url || venueLocationUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 text-[10.5px] font-bold text-[#006b30] hover:underline bg-[#006b30]/10 px-2 py-0.5 rounded-md border border-[#006b30]/20"

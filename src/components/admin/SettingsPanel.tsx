@@ -3,7 +3,8 @@ import QRCode from 'qrcode';
 import { store } from '../../services/store';
 import { AuditLogger } from '../../services/auditLogger';
 import { AdminUser, CancellationPolicy, CancellationSettings } from '../../types/schema';
-import { Sliders, Save, RefreshCw, MessageSquare, DollarSign, Clock, PlusCircle, Trash2, ShieldCheck, ArrowRight, AlertCircle, RotateCcw, Mail, Send, CheckCircle2, Database, Radio, MapPin, QrCode, ExternalLink, Info } from 'lucide-react';
+import { Sliders, Save, RefreshCw, MessageSquare, DollarSign, Clock, PlusCircle, Trash2, ShieldCheck, ArrowRight, AlertCircle, RotateCcw, Mail, Send, CheckCircle2, Database, Radio, MapPin, QrCode, ExternalLink, Info, Building2, Receipt, Bell } from 'lucide-react';
+import { normalizeGoogleMapsUrl } from '../../utils/formatters';
 import { getSupabaseConfig, setSupabaseConfig, clearSupabaseConfig, testSupabaseConnection, isSupabaseConfigured } from '../../services/supabaseClient';
 import { SupabaseSyncService } from '../../services/supabaseSyncService';
 import { EmailService } from '../../services/emailService';
@@ -39,10 +40,17 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin, onOp
   // Venue Settings & Gate Pass Location QR States
   const [venueQrDataUrl, setVenueQrDataUrl] = useState<string>('');
   const [venueSuccessMsg, setVenueSuccessMsg] = useState<string | null>(null);
+  const [locationSuccessMsg, setLocationSuccessMsg] = useState<string | null>(null);
+  const [isSavingLocation, setIsSavingLocation] = useState(false);
 
   // Real-time Venue Location QR Code generation for testing & verification
   useEffect(() => {
-    const targetUrl = venue.location_url || venue.google_maps_link || `https://maps.google.com/?q=${encodeURIComponent(venue.name + ', ' + venue.address)}`;
+    const cleanAddr = (venue.address || '').trim();
+    const userLoc = (venue.location_url ?? venue.google_maps_link ?? '').trim();
+    const targetUrl = userLoc 
+      ? normalizeGoogleMapsUrl(userLoc, venue.name, cleanAddr)
+      : (cleanAddr ? `https://maps.google.com/?q=${encodeURIComponent(venue.name + ', ' + cleanAddr)}` : '');
+    
     if (!targetUrl) {
       setVenueQrDataUrl('');
       return;
@@ -165,22 +173,21 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin, onOp
     }
   };
 
-  const handleSaveVenue = (e: React.FormEvent) => {
-    e.preventDefault();
+  const saveVenueWithFeedback = async (updatedVenue: any, successMsg: string) => {
     if (currentAdmin.role === 'staff') {
       alert('Permission denied: Staff accounts cannot modify venue parameters. Only Owners and Managers can update venue settings.');
       return;
     }
-    const targetMapUrl = venue.location_url || venue.google_maps_link || `https://maps.google.com/?q=${encodeURIComponent(venue.name + ', ' + venue.address)}`;
-    const updatedVenue = {
-      ...venue,
-      location_url: targetMapUrl,
-      google_maps_link: targetMapUrl
-    };
-
     setVenue(updatedVenue);
     store.setVenue(updatedVenue);
     AuditLogger.log(currentAdmin.id, 'UPDATE_VENUE_SETTINGS', 'Venue', venue.id, null, updatedVenue);
+
+    // Sync to Supabase directly and await so data is committed before any refresh
+    try {
+      await SupabaseSyncService.syncVenueToSupabase(updatedVenue);
+    } catch (err) {
+      console.warn('Supabase venue sync:', err);
+    }
 
     // Sync to backend server
     try {
@@ -194,15 +201,87 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin, onOp
       }).catch(() => {});
     } catch {}
 
-    // Sync to Supabase
-    SupabaseSyncService.syncVenueToSupabase(updatedVenue).catch(() => {});
-
-    setVenueSuccessMsg('Venue settings, address, and Google Maps location QR link updated successfully!');
-    setVenueToastMsg('Venue settings, address, and Google Maps location link updated successfully!');
+    setVenueSuccessMsg(successMsg);
+    setVenueToastMsg(successMsg);
     setTimeout(() => {
       setVenueSuccessMsg(null);
       setVenueToastMsg(null);
-    }, 5000);
+    }, 4000);
+  };
+
+  const handleSaveIdentity = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await saveVenueWithFeedback(
+      { ...venue, name: venue.name.trim(), contact_phone: venue.contact_phone.trim() },
+      'Venue display name and contact phone saved successfully!'
+    );
+  };
+
+  const handleSaveLocation = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (currentAdmin.role === 'staff') {
+      alert('Permission denied: Staff accounts cannot modify venue parameters. Only Owners and Managers can update venue settings.');
+      return;
+    }
+    setIsSavingLocation(true);
+    try {
+      const cleanAddress = (venue.address || '').trim();
+      const rawLoc = (venue.location_url !== undefined ? venue.location_url : (venue.google_maps_link ?? '')).trim();
+      const targetMapUrl = rawLoc ? normalizeGoogleMapsUrl(rawLoc, venue.name, cleanAddress) : '';
+      const updated = {
+        ...venue,
+        address: cleanAddress,
+        location_url: targetMapUrl,
+        google_maps_link: targetMapUrl
+      };
+      setVenue(updated);
+      await saveVenueWithFeedback(
+        updated,
+        'Physical address, Google Maps link, and Gate Pass QR saved successfully!'
+      );
+      setLocationSuccessMsg('Physical address and Google Maps location saved! All active Gate Passes and QR codes have been updated.');
+      setTimeout(() => setLocationSuccessMsg(null), 5000);
+    } finally {
+      setIsSavingLocation(false);
+    }
+  };
+
+  const handleSaveConstraints = (e: React.FormEvent) => {
+    e.preventDefault();
+    saveVenueWithFeedback(
+      {
+        ...venue,
+        gst_number: (venue.gst_number || '').trim().toUpperCase(),
+        min_notice_minutes: Number(venue.min_notice_minutes) || 0,
+        max_advance_days: Number(venue.max_advance_days) || 14
+      },
+      'GST tax number and reservation notice rules saved successfully!'
+    );
+  };
+
+  const handleSaveNotifications = (e: React.FormEvent) => {
+    e.preventDefault();
+    saveVenueWithFeedback(
+      {
+        ...venue,
+        whatsapp_enabled: Boolean(venue.whatsapp_enabled),
+        sms_fallback_enabled: Boolean(venue.sms_fallback_enabled),
+        email_enabled: venue.email_enabled !== false,
+        email_sender: (venue.email_sender || '').trim()
+      },
+      'Notification dispatch channels and SMTP sender saved successfully!'
+    );
+  };
+
+  const handleSaveVenue = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanAddress = (venue.address || '').trim() || venue.address;
+    const rawLoc = (venue.location_url !== undefined ? venue.location_url : (venue.google_maps_link ?? '')).trim();
+    const targetMapUrl = rawLoc ? normalizeGoogleMapsUrl(rawLoc, venue.name, cleanAddress) : '';
+    saveVenueWithFeedback(
+      { ...venue, address: cleanAddress, location_url: targetMapUrl, google_maps_link: targetMapUrl },
+      'All venue parameters and location saved successfully!'
+    );
   };
 
   const handleSaveCancellationTerms = (e: React.FormEvent) => {
@@ -304,23 +383,23 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin, onOp
   };
 
   return (
-    <div className="space-y-6 max-w-4xl text-on-surface">
+    <div className="space-y-4 sm:space-y-6 max-w-4xl text-on-surface px-0.5 sm:px-0">
       
       {/* SECTION 1: CANCELLATION & REFUND MECHANISM CONTROL */}
-      <div className="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/40 space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-outline-variant/30 pb-3">
+      <div className="bg-surface-container-low p-3.5 sm:p-5 md:p-6 rounded-2xl sm:rounded-3xl border border-outline-variant/40 space-y-4 sm:space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-outline-variant/30 pb-3">
           <div>
-            <h2 className="font-headline font-bold text-lg text-primary flex items-center gap-2">
-              <DollarSign className="w-5 h-5 text-emerald-700" /> Cancellation & Refund Policy Rules
+            <h2 className="font-headline font-bold text-base sm:text-lg text-primary flex items-center gap-2">
+              <DollarSign className="w-5 h-5 text-emerald-700 shrink-0" /> Cancellation & Refund Policy Rules
             </h2>
-            <p className="text-xs text-on-surface-variant font-medium mt-0.5">
+            <p className="text-[11px] sm:text-xs text-on-surface-variant font-medium mt-0.5">
               Control the time notice window and refund percentage returned to customers upon reservation cancellation.
             </p>
           </div>
           <button
             type="button"
             onClick={handleResetPolicyDefaults}
-            className="btn-secondary text-[11px] px-3 py-1.5 font-bold flex items-center gap-1.5 shrink-0"
+            className="btn-secondary text-[11px] px-3 py-1.5 font-bold flex items-center justify-center gap-1.5 shrink-0 self-start sm:self-auto cursor-pointer"
             title="Reset to 24h=100%, 6h=50%, 0h=0%"
           >
             <RotateCcw className="w-3.5 h-3.5 text-primary" /> Reset Defaults
@@ -328,31 +407,31 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin, onOp
         </div>
 
         {policySuccessMsg && (
-          <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 p-3 rounded-xl text-xs font-medium flex items-center gap-2 animate-in fade-in">
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 p-2.5 sm:p-3 rounded-xl text-xs font-medium flex items-center gap-2 animate-in fade-in">
             <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
             <span>{policySuccessMsg}</span>
           </div>
         )}
 
         {/* PRIMARY CANCELLATION TERMS & CONDITIONS INPUTS */}
-        <form onSubmit={handleSaveCancellationTerms} className="bg-white p-4 rounded-xl border border-outline-variant/60 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-outline-variant/20 pb-2">
+        <form onSubmit={handleSaveCancellationTerms} className="bg-white p-3.5 sm:p-4 rounded-xl border border-outline-variant/60 shadow-xs space-y-3.5 sm:space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-outline-variant/20 pb-2">
             <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4 text-primary" />
-              <h3 className="font-headline font-bold text-sm text-on-surface">
+              <Clock className="w-4 h-4 text-primary shrink-0" />
+              <h3 className="font-headline font-bold text-xs sm:text-sm text-on-surface">
                 Primary Cancellation Cut-Off & Refund Rules
               </h3>
             </div>
-            <span className="text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+            <span className="text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary px-2 py-0.5 rounded-full self-start sm:self-auto">
               Customer Self-Service Policy
             </span>
           </div>
 
-          <p className="text-xs text-on-surface-variant">
+          <p className="text-[11px] sm:text-xs text-on-surface-variant leading-relaxed">
             Set the cut-off notice deadline and refund percentage. When a user cancels, they receive a refund only if they cancel before this time window.
           </p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
             {/* Input 1: Till what time any booking can be cancelled */}
             <div className="space-y-1">
               <label className="block text-xs font-headline font-bold text-on-surface">
@@ -437,8 +516,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin, onOp
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pt-2 border-t border-outline-variant/20">
-            <div className="text-[11px] text-on-surface-variant">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2.5 pt-2 border-t border-outline-variant/20">
+            <div className="text-[11px] text-on-surface-variant leading-relaxed">
               <span>Rule Summary: </span>
               <strong className="text-primary font-bold">
                 Cancel ≥ {cancellationSettings.cutoff_hours}h prior → {cancellationSettings.refund_percentage}% refund ({cancellationSettings.processing_business_days} business days). Cancel &lt; {cancellationSettings.cutoff_hours}h → ₹0 refund.
@@ -448,7 +527,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin, onOp
             {currentAdmin.role !== 'staff' && (
               <button
                 type="submit"
-                className="btn-primary text-xs py-1.5 px-4 font-bold flex items-center gap-1.5 shadow-xs shrink-0 self-end sm:self-auto"
+                className="btn-primary text-xs py-2 px-4 font-bold flex items-center justify-center gap-1.5 shadow-xs w-full sm:w-auto shrink-0 cursor-pointer"
               >
                 <Save className="w-3.5 h-3.5" /> Save Terms
               </button>
@@ -457,79 +536,99 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin, onOp
         </form>
 
         {/* Active Policy Tiers Table */}
-        <div className="space-y-3">
-          <span className="font-headline font-bold text-xs uppercase tracking-wider text-on-surface-variant block">
-            Active Refund Window Tiers (Sorted by notice hours)
-          </span>
+        <div className="space-y-2.5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+            <div>
+              <span className="font-headline font-bold text-xs uppercase tracking-wider text-on-surface-variant block">
+                Active Refund Window Tiers (Sorted by notice hours)
+              </span>
+              <p className="text-[10.5px] text-on-surface-variant/80 font-medium">
+                Evaluated in strict descending order of match notice window.
+              </p>
+            </div>
+            <span className="text-[10px] font-bold bg-primary/10 text-primary border border-primary/20 px-2.5 py-0.5 rounded-full font-mono self-start sm:self-auto shrink-0">
+              {policies.length} {policies.length === 1 ? 'Tier' : 'Tiers'} Configured
+            </span>
+          </div>
 
           <div className="grid gap-2.5">
             {policies.map((p, idx) => (
               <div 
                 key={p.id}
-                className="bg-white p-3.5 rounded-xl border border-outline-variant/50 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs"
+                className="bg-white p-3 sm:p-3.5 rounded-xl border border-outline-variant/50 shadow-xs space-y-2.5 text-xs"
               >
-                <div className="flex items-center gap-2.5">
-                  <span className="w-6 h-6 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-xs shrink-0 font-mono">
-                    {idx + 1}
-                  </span>
-                  <div className="space-y-0.5">
-                    <div className="flex items-center gap-2">
-                      <strong className="font-headline font-bold text-sm text-on-surface">
-                        ≥ {p.hours_before_start} Hours Notice
-                      </strong>
-                      <span className={`px-2 py-0.5 rounded-full font-headline font-bold text-[11px] ${
-                        p.refund_percentage >= 100 
-                          ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                          : p.refund_percentage > 0
-                          ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                          : 'bg-red-100 text-red-900 border border-red-300'
-                      }`}>
-                        {p.refund_percentage}% Refund
-                      </span>
-                    </div>
-                    <span className="text-[11px] text-on-surface-variant font-medium block">
-                      {p.label || `Eligible for ${p.refund_percentage}% refund if cancelled ≥ ${p.hours_before_start}h prior`}
+                {/* Header Row: Index, Notice Window Title, Refund Status Badge, & Delete Action */}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <span className="w-6 h-6 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-xs shrink-0 font-mono mt-0.5">
+                      {idx + 1}
                     </span>
-                  </div>
-                </div>
-
-                {/* Inline Editing Controls */}
-                <div className="flex items-center gap-2 self-end md:self-auto">
-                  <div className="flex items-center gap-1 bg-surface-container-low px-2 py-1 rounded-lg border border-outline-variant/30">
-                    <span className="text-[10px] font-bold text-on-surface-variant">Hours:</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={p.hours_before_start}
-                      disabled={currentAdmin.role === 'staff'}
-                      onChange={e => handleUpdatePolicyTierField(p.id, 'hours_before_start', e.target.value)}
-                      className="w-14 bg-white border border-outline-variant/40 rounded px-1.5 py-0.5 text-xs font-bold text-center"
-                    />
-                  </div>
-
-                  <div className="flex items-center gap-1 bg-surface-container-low px-2 py-1 rounded-lg border border-outline-variant/30">
-                    <span className="text-[10px] font-bold text-on-surface-variant">Refund %:</span>
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={p.refund_percentage}
-                      disabled={currentAdmin.role === 'staff'}
-                      onChange={e => handleUpdatePolicyTierField(p.id, 'refund_percentage', e.target.value)}
-                      className="w-14 bg-white border border-outline-variant/40 rounded px-1.5 py-0.5 text-xs font-bold text-center text-primary"
-                    />
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                        <strong className="font-headline font-bold text-xs sm:text-sm text-on-surface">
+                          ≥ {p.hours_before_start} Hours Notice
+                        </strong>
+                        <span className={`px-2 py-0.5 rounded-full font-headline font-bold text-[10px] sm:text-[11px] shrink-0 ${
+                          p.refund_percentage >= 100 
+                            ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                            : p.refund_percentage > 0
+                            ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                            : 'bg-red-100 text-red-900 border border-red-300'
+                        }`}>
+                          {p.refund_percentage}% Refund
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-on-surface-variant font-medium leading-relaxed break-words">
+                        {p.label || `Eligible for ${p.refund_percentage}% refund if cancelled ≥ ${p.hours_before_start}h prior`}
+                      </p>
+                    </div>
                   </div>
 
                   {currentAdmin.role !== 'staff' && (
                     <button
                       type="button"
                       onClick={() => handleDeletePolicyTier(p.id)}
-                      className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition"
-                      title="Delete this tier"
+                      disabled={policies.length <= 1}
+                      className={`p-1.5 rounded-lg transition shrink-0 cursor-pointer ${
+                        policies.length <= 1 
+                          ? 'text-slate-300 cursor-not-allowed opacity-40' 
+                          : 'text-red-600 hover:text-red-800 hover:bg-red-50'
+                      }`}
+                      title={policies.length <= 1 ? 'Minimum 1 refund tier required' : 'Delete this tier'}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
                   )}
+                </div>
+
+                {/* Inline Editing Controls */}
+                <div className="pt-2 border-t border-outline-variant/20 flex flex-col sm:flex-row sm:items-center sm:justify-end gap-2">
+                  <div className="grid grid-cols-2 gap-1.5 sm:gap-2 w-full sm:w-auto sm:flex sm:items-center">
+                    <div className="flex items-center justify-between sm:justify-start gap-1 bg-surface-container-low px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg border border-outline-variant/30 min-w-0">
+                      <span className="text-[10px] font-bold text-on-surface-variant shrink-0">Hours:</span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={p.hours_before_start}
+                        disabled={currentAdmin.role === 'staff'}
+                        onChange={e => handleUpdatePolicyTierField(p.id, 'hours_before_start', e.target.value)}
+                        className="w-12 sm:w-16 bg-white border border-outline-variant/40 rounded px-1 py-0.5 text-xs font-bold text-center shrink-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between sm:justify-start gap-1 bg-surface-container-low px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg border border-outline-variant/30 min-w-0">
+                      <span className="text-[10px] font-bold text-on-surface-variant shrink-0">Refund %:</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={p.refund_percentage}
+                        disabled={currentAdmin.role === 'staff'}
+                        onChange={e => handleUpdatePolicyTierField(p.id, 'refund_percentage', e.target.value)}
+                        className="w-12 sm:w-16 bg-white border border-outline-variant/40 rounded px-1 py-0.5 text-xs font-bold text-center text-primary shrink-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             ))}
@@ -538,12 +637,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin, onOp
 
         {/* Add New Refund Tier Form */}
         {currentAdmin.role !== 'staff' && (
-          <form onSubmit={handleAddPolicyTier} className="bg-white p-4 rounded-xl border border-dashed border-primary/40 space-y-3 text-xs">
+          <form onSubmit={handleAddPolicyTier} className="bg-white p-3.5 sm:p-4 rounded-xl border border-dashed border-primary/40 space-y-3 text-xs">
             <span className="font-headline font-bold text-xs text-primary flex items-center gap-1.5">
               <PlusCircle className="w-4 h-4 text-primary" /> Add Custom Refund Window Tier
             </span>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
               <div>
                 <label className="block text-on-surface-variant font-headline font-bold mb-1">Hours Notice Threshold *</label>
                 <input
@@ -585,7 +684,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin, onOp
 
             <button
               type="submit"
-              className="btn-primary text-xs px-4 py-2 font-headline font-bold flex items-center gap-1.5 shadow-sm"
+              className="btn-primary text-xs px-4 py-2 font-headline font-bold flex items-center justify-center gap-1.5 shadow-sm w-full sm:w-auto cursor-pointer"
             >
               <PlusCircle className="w-3.5 h-3.5" /> Append Refund Tier
             </button>
@@ -593,7 +692,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin, onOp
         )}
 
         {/* Live Example Card */}
-        <div className="bg-primary/5 border border-primary/20 p-3.5 rounded-xl text-xs space-y-1 text-primary">
+        <div className="bg-primary/5 border border-primary/20 p-3 sm:p-3.5 rounded-xl text-xs space-y-1 text-primary">
           <strong className="font-headline font-bold block">💡 How Customer Cancellation Refunds Work:</strong>
           <p className="text-[11px] text-on-surface-variant leading-relaxed">
             When a customer cancels via their portal or self-service lookup, the system calculates the exact hours remaining until match start. The highest matching tier is applied to credit the refund automatically and release the reserved pitch.
@@ -602,30 +701,43 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin, onOp
       </div>
 
       {/* SECTION 2: VENUE OPERATIONAL PARAMETERS */}
-      <div className="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/40 space-y-4">
+      <div className="bg-surface-container-low p-3.5 sm:p-5 md:p-6 rounded-2xl sm:rounded-3xl border border-outline-variant/40 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-outline-variant/30 pb-3">
           <div>
-            <h2 className="font-headline font-bold text-lg text-primary flex items-center gap-2">
-              <Sliders className="w-5 h-5 text-primary" /> Venue Location, Identity & Operational Parameters
+            <h2 className="font-headline font-bold text-base sm:text-lg text-primary flex items-center gap-2">
+              <Sliders className="w-5 h-5 text-primary shrink-0" /> Venue Location, Identity & Operational Parameters
             </h2>
-            <p className="text-xs text-on-surface-variant font-medium mt-0.5">
+            <p className="text-[11px] sm:text-xs text-on-surface-variant font-medium mt-0.5">
               Configure turf address, Google Maps navigation link (encoded into Gate Pass QR), tax details, and channels.
             </p>
           </div>
-          <span className="text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary px-2.5 py-1 rounded-full shrink-0">
+          <span className="text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary px-2.5 py-1 rounded-full shrink-0 self-start sm:self-auto">
             {currentAdmin.role === 'staff' ? 'View Only (Staff)' : 'Admin Authority: Editable'}
           </span>
         </div>
 
         {venueSuccessMsg && (
-          <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 p-3 rounded-xl text-xs font-medium flex items-center gap-2 animate-in fade-in">
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 p-2.5 sm:p-3 rounded-xl text-xs font-medium flex items-center gap-2 animate-in fade-in">
             <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
             <span>{venueSuccessMsg}</span>
           </div>
         )}
 
-        <form onSubmit={handleSaveVenue} className="space-y-4 text-xs">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {/* FUNCTION 1: VENUE BRANDING & CONTACT */}
+        <form onSubmit={handleSaveIdentity} className="p-3.5 sm:p-5 bg-white rounded-2xl border border-outline-variant/50 shadow-xs space-y-3 sm:space-y-4 text-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 border-b border-outline-variant/20 pb-2.5">
+            <div className="flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-primary shrink-0" />
+              <h3 className="font-headline font-bold text-xs sm:text-sm text-on-surface">
+                Venue Identity & Support Contact
+              </h3>
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/80">
+              Header & Customer Invoices
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
             <div>
               <label className="block text-on-surface-variant font-headline font-bold mb-1">Venue Display Name *</label>
               <input
@@ -650,125 +762,193 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin, onOp
             </div>
           </div>
 
-          {/* TURF LOCATION & GATE PASS GOOGLE MAPS QR CONFIGURATION */}
-          <div className="p-4 bg-white rounded-xl border border-outline-variant/60 shadow-xs space-y-3">
-            <div className="flex items-center justify-between border-b border-outline-variant/20 pb-2">
-              <div className="flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-primary" />
-                <h3 className="font-headline font-bold text-sm text-on-surface">
-                  Turf Physical Address & Google Maps Navigation Link
-                </h3>
+          <div className="flex justify-end pt-1">
+            <button
+              type="submit"
+              disabled={currentAdmin.role === 'staff'}
+              className="btn-primary text-xs px-4 py-2 font-headline font-bold flex items-center justify-center gap-1.5 shadow-sm w-full sm:w-auto cursor-pointer"
+            >
+              <Save className="w-3.5 h-3.5" /> Save Venue Identity
+            </button>
+          </div>
+        </form>
+
+        {/* FUNCTION 2: TURF LOCATION & GATE PASS GOOGLE MAPS QR CONFIGURATION */}
+        <form onSubmit={handleSaveLocation} className="p-3.5 sm:p-5 bg-white rounded-2xl border border-outline-variant/50 shadow-xs space-y-3 sm:space-y-4 text-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 border-b border-outline-variant/20 pb-2.5">
+            <div className="flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-primary shrink-0" />
+              <h3 className="font-headline font-bold text-xs sm:text-sm text-on-surface">
+                Turf Physical Address & Google Maps Navigation Link
+              </h3>
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1 self-start sm:self-auto">
+              <QrCode className="w-3 h-3 text-emerald-600" /> Embedded in Gate Pass
+            </span>
+          </div>
+
+          {locationSuccessMsg && (
+            <div className="bg-emerald-50 border border-emerald-300 text-emerald-900 p-2.5 sm:p-3 rounded-xl text-xs font-semibold flex items-center gap-2 animate-in fade-in">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>{locationSuccessMsg}</span>
+            </div>
+          )}
+
+          <p className="text-[11px] sm:text-xs text-on-surface-variant leading-relaxed">
+            Admin Authority: Update the venue physical address and Google Maps directions link below. When updated, the new address and Google Maps link will appear across all Gate Passes, PDF receipts, WhatsApp notifications, and will be automatically encoded into the scannable Gate Pass Location QR Code.
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-3 sm:gap-4 items-start pt-1">
+            <div className="md:col-span-8 space-y-3">
+              {/* Physical Address */}
+              <div>
+                <label className="block text-on-surface-variant font-headline font-bold mb-1">
+                  Venue Physical Address *
+                </label>
+                <textarea
+                  rows={2}
+                  required
+                  autoComplete="off"
+                  data-lpignore="true"
+                  data-form-type="other"
+                  name="turf_venue_physical_address"
+                  value={venue.address ?? ''}
+                  disabled={currentAdmin.role === 'staff'}
+                  onChange={e => setVenue({ ...venue, address: e.target.value })}
+                  placeholder="e.g. Plot 42, Sports Enclave, Near Viman Nagar, Pune, Maharashtra 411045"
+                  className="form-input text-xs resize-none"
+                />
+                <p className="text-[10.5px] text-on-surface-variant mt-0.5">
+                  Printed at the bottom of customer Gate Passes, PDF passes, tax receipts, and booking alerts.
+                </p>
               </div>
-              <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
-                <QrCode className="w-3 h-3 text-emerald-600" /> Embedded in Gate Pass
+
+              {/* Google Maps Location URL */}
+              <div>
+                <div className="flex flex-wrap items-center justify-between gap-1 mb-1">
+                  <label className="block text-on-surface-variant font-headline font-bold">
+                    Google Maps Location Link (URL / Share Link / Coordinates)
+                  </label>
+                  {(venue.location_url || venue.google_maps_link) && (
+                    <a
+                      href={normalizeGoogleMapsUrl(venue.location_url || venue.google_maps_link, venue.name, venue.address)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10.5px] font-bold text-primary hover:underline flex items-center gap-1"
+                    >
+                      <ExternalLink className="w-3 h-3" /> Test in Google Maps
+                    </a>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  inputMode="url"
+                  autoComplete="off"
+                  data-lpignore="true"
+                  data-form-type="other"
+                  name="turf_venue_google_maps_url"
+                  value={venue.location_url !== undefined ? venue.location_url : (venue.google_maps_link ?? '')}
+                  disabled={currentAdmin.role === 'staff'}
+                  onChange={e => setVenue({ 
+                    ...venue, 
+                    location_url: e.target.value,
+                    google_maps_link: e.target.value 
+                  })}
+                  placeholder="e.g. https://maps.app.goo.gl/... or 18.5204, 73.8567"
+                  className="form-input text-xs font-mono"
+                />
+                <p className="text-[10.5px] text-on-surface-variant mt-0.5">
+                  Accepts Google Maps URLs, short share links (maps.app.goo.gl), GPS coordinates, or area search terms. Encoded directly into Gate Pass QR codes.
+                </p>
+              </div>
+            </div>
+
+            {/* Real-time Location QR Code Preview */}
+            <div className="md:col-span-4 bg-surface-container-low rounded-xl p-3 sm:p-3.5 border border-outline-variant/40 flex flex-col items-center justify-center text-center w-full">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1 flex items-center gap-1">
+                <QrCode className="w-3 h-3 text-primary" /> Live Gate Pass QR
+              </span>
+              {venueQrDataUrl ? (
+                <div className="p-1.5 bg-white rounded-lg border border-outline-variant/40 shadow-2xs my-1">
+                  <img 
+                    src={venueQrDataUrl} 
+                    alt="Turf Location QR Code" 
+                    className="w-24 h-24 sm:w-28 sm:h-28 object-contain"
+                  />
+                </div>
+              ) : (
+                <div className="w-24 h-24 bg-surface-container rounded-lg flex items-center justify-center border border-dashed border-outline-variant/40 my-1">
+                  <QrCode className="w-8 h-8 text-on-surface-variant/40 animate-pulse" />
+                </div>
+              )}
+              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 mt-1">
+                Gate Pass QR Ready
+              </span>
+              <span className="text-[9.5px] text-on-surface-variant mt-1 leading-tight">
+                Scan with your phone to test navigation directly to the turf.
               </span>
             </div>
+          </div>
 
-            <p className="text-xs text-on-surface-variant leading-relaxed">
-              Admin Authority: Update the venue physical address and Google Maps directions link below. When updated, the new address and Google Maps link will appear across all Gate Passes, PDF receipts, WhatsApp notifications, and will be automatically encoded into the scannable Gate Pass Location QR Code.
-            </p>
-
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start pt-1">
-              <div className="md:col-span-8 space-y-3">
-                {/* Physical Address */}
-                <div>
-                  <label className="block text-on-surface-variant font-headline font-bold mb-1">
-                    Venue Physical Address *
-                  </label>
-                  <textarea
-                    rows={2}
-                    required
-                    value={venue.address}
-                    disabled={currentAdmin.role === 'staff'}
-                    onChange={e => setVenue({ ...venue, address: e.target.value })}
-                    placeholder="e.g. Plot 42, Sports Enclave, Near Viman Nagar, Pune, Maharashtra 411045"
-                    className="form-input text-xs resize-none"
-                  />
-                  <p className="text-[10.5px] text-on-surface-variant mt-0.5">
-                    Printed at the bottom of customer Gate Passes, PDF passes, tax receipts, and booking alerts.
-                  </p>
-                </div>
-
-                {/* Google Maps Location URL */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-on-surface-variant font-headline font-bold">
-                      Google Maps Location Link (URL) *
-                    </label>
-                    {(venue.location_url || venue.google_maps_link) && (
-                      <a
-                        href={venue.location_url || venue.google_maps_link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[10.5px] font-bold text-primary hover:underline flex items-center gap-1"
-                      >
-                        <ExternalLink className="w-3 h-3" /> Test in Google Maps
-                      </a>
-                    )}
-                  </div>
-                  <input
-                    type="url"
-                    required
-                    value={venue.location_url || venue.google_maps_link || ''}
-                    disabled={currentAdmin.role === 'staff'}
-                    onChange={e => setVenue({ 
-                      ...venue, 
-                      location_url: e.target.value,
-                      google_maps_link: e.target.value 
-                    })}
-                    placeholder="https://maps.google.com/?q=18.5204,73.8567"
-                    className="form-input text-xs font-mono"
-                  />
-                  <p className="text-[10.5px] text-on-surface-variant mt-0.5">
-                    This exact Google Maps link is encoded into the Gate Pass QR code. Scanning the QR code with any mobile camera immediately opens Google Maps navigation.
-                  </p>
-                </div>
-              </div>
-
-              {/* Real-time Location QR Code Preview */}
-              <div className="md:col-span-4 bg-surface-container-low rounded-xl p-3.5 border border-outline-variant/40 flex flex-col items-center justify-center text-center">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1 flex items-center gap-1">
-                  <QrCode className="w-3 h-3 text-primary" /> Live Gate Pass QR
-                </span>
-                {venueQrDataUrl ? (
-                  <div className="p-1.5 bg-white rounded-lg border border-outline-variant/40 shadow-2xs my-1">
-                    <img 
-                      src={venueQrDataUrl} 
-                      alt="Turf Location QR Code" 
-                      className="w-24 h-24 sm:w-28 sm:h-28 object-contain"
-                    />
-                  </div>
-                ) : (
-                  <div className="w-24 h-24 bg-surface-container rounded-lg flex items-center justify-center border border-dashed border-outline-variant/40 my-1">
-                    <QrCode className="w-8 h-8 text-on-surface-variant/40 animate-pulse" />
-                  </div>
-                )}
-                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 mt-1">
-                  Gate Pass QR Ready
-                </span>
-                <span className="text-[9.5px] text-on-surface-variant mt-1 leading-tight">
-                  Scan with your phone to test navigation directly to the turf.
-                </span>
-              </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-outline-variant/20">
+            <div className="text-[11px] text-slate-500 font-medium">
+              Encoded Destination: <span className="font-mono text-primary font-bold">{normalizeGoogleMapsUrl(venue.location_url || venue.google_maps_link, venue.name, venue.address)}</span>
+            </div>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              {(venue.location_url || venue.google_maps_link) && (
+                <a
+                  href={normalizeGoogleMapsUrl(venue.location_url || venue.google_maps_link, venue.name, venue.address)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-secondary text-xs px-3 py-2 font-bold flex items-center justify-center gap-1 border-primary/30 text-primary hover:bg-primary/5"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" /> Test Link
+                </a>
+              )}
+              <button
+                type="submit"
+                disabled={currentAdmin.role === 'staff' || isSavingLocation}
+                className="btn-primary text-xs px-4 py-2 font-headline font-bold flex items-center justify-center gap-1.5 shadow-sm w-full sm:w-auto cursor-pointer disabled:opacity-50"
+              >
+                <Save className="w-3.5 h-3.5" /> {isSavingLocation ? 'Saving to Database...' : 'Save Location & Update All Gate Passes'}
+              </button>
             </div>
           </div>
+        </form>
 
-          <div>
-            <label className="block text-on-surface-variant font-headline font-bold mb-1">GST Identification Number</label>
-            <input
-              type="text"
-              value={venue.gst_number}
-              onChange={e => setVenue({ ...venue, gst_number: e.target.value })}
-              className="form-input font-mono uppercase"
-            />
+        {/* FUNCTION 3: TAX IDENTIFICATION & BOOKING CONSTRAINTS */}
+        <form onSubmit={handleSaveConstraints} className="p-3.5 sm:p-5 bg-white rounded-2xl border border-outline-variant/50 shadow-xs space-y-3 sm:space-y-4 text-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 border-b border-outline-variant/20 pb-2.5">
+            <div className="flex items-center gap-2">
+              <Receipt className="w-4 h-4 text-primary shrink-0" />
+              <h3 className="font-headline font-bold text-xs sm:text-sm text-on-surface">
+                Tax Identification & Booking Constraints
+              </h3>
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/80">
+              Invoicing & Calendar Limits
+            </span>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
+            <div>
+              <label className="block text-on-surface-variant font-headline font-bold mb-1">GST Identification Number</label>
+              <input
+                type="text"
+                value={venue.gst_number}
+                disabled={currentAdmin.role === 'staff'}
+                onChange={e => setVenue({ ...venue, gst_number: e.target.value })}
+                placeholder="27AAAAA0000A1Z5"
+                className="form-input font-mono uppercase"
+              />
+            </div>
             <div>
               <label className="block text-on-surface-variant font-headline font-bold mb-1">Min Notice (Minutes)</label>
               <input
                 type="number"
+                min="0"
                 value={venue.min_notice_minutes}
+                disabled={currentAdmin.role === 'staff'}
                 onChange={e => setVenue({ ...venue, min_notice_minutes: parseInt(e.target.value) || 0 })}
                 className="form-input"
               />
@@ -777,173 +957,207 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin, onOp
               <label className="block text-on-surface-variant font-headline font-bold mb-1">Max Advance Booking (Days)</label>
               <input
                 type="number"
+                min="1"
+                max="90"
                 value={venue.max_advance_days}
+                disabled={currentAdmin.role === 'staff'}
                 onChange={e => setVenue({ ...venue, max_advance_days: parseInt(e.target.value) || 14 })}
                 className="form-input"
               />
             </div>
           </div>
 
-          <div className="pt-3 border-t border-outline-variant/30 space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="font-headline font-bold text-sm text-on-surface">Outbound Notification Channels</p>
-              <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
-                EmailService.isBrevoConfigured()
-                  ? 'bg-purple-100 text-purple-800 border border-purple-300'
-                  : EmailService.isConfigured()
-                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                    : 'bg-amber-100 text-amber-800 border border-amber-300'
-              }`}>
-                {EmailService.isBrevoConfigured() ? '⚡ Brevo HTTPS API Active' : '⚡ Brevo & Nodemailer Ready'}
-              </span>
+          <div className="flex justify-end pt-1">
+            <button
+              type="submit"
+              disabled={currentAdmin.role === 'staff'}
+              className="btn-primary text-xs px-4 py-2 font-headline font-bold flex items-center justify-center gap-1.5 shadow-sm w-full sm:w-auto cursor-pointer"
+            >
+              <Save className="w-3.5 h-3.5" /> Save Tax & Booking Rules
+            </button>
+          </div>
+        </form>
+
+        {/* FUNCTION 4: OUTBOUND NOTIFICATION CHANNELS & SMTP */}
+        <form onSubmit={handleSaveNotifications} className="p-3.5 sm:p-5 bg-white rounded-2xl border border-outline-variant/50 shadow-xs space-y-3 sm:space-y-4 text-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 border-b border-outline-variant/20 pb-2.5">
+            <div className="flex items-center gap-2">
+              <Bell className="w-4 h-4 text-primary shrink-0" />
+              <h3 className="font-headline font-bold text-xs sm:text-sm text-on-surface">
+                Outbound Notification Channels & SMTP
+              </h3>
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <label className="flex items-center gap-2 font-medium text-xs cursor-pointer p-2.5 rounded-lg bg-surface-container-low border border-outline-variant/30">
-                <input
-                  type="checkbox"
-                  checked={venue.whatsapp_enabled}
-                  onChange={e => setVenue({ ...venue, whatsapp_enabled: e.target.checked })}
-                  className="rounded accent-primary"
-                />
-                <span>WhatsApp Instant Dispatch</span>
-              </label>
-
-              <label className="flex items-center gap-2 font-medium text-xs cursor-pointer p-2.5 rounded-lg bg-surface-container-low border border-outline-variant/30">
-                <input
-                  type="checkbox"
-                  checked={venue.sms_fallback_enabled}
-                  onChange={e => setVenue({ ...venue, sms_fallback_enabled: e.target.checked })}
-                  className="rounded accent-primary"
-                />
-                <span>SMS Gateway Fallback</span>
-              </label>
-
-              <label className="flex items-center gap-2 font-medium text-xs cursor-pointer p-2.5 rounded-lg bg-surface-container-low border border-outline-variant/30">
-                <input
-                  type="checkbox"
-                  checked={venue.email_enabled !== false}
-                  onChange={e => setVenue({ ...venue, email_enabled: e.target.checked })}
-                  className="rounded accent-primary"
-                />
-                <span>Nodemailer Email Dispatch</span>
-              </label>
-            </div>
-
-            {/* Nodemailer Email Configuration & Live Test */}
-            <div className="bg-surface-container-low p-3.5 rounded-xl border border-outline-variant/30 space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">
-                    SMTP From / Sender Address
-                  </label>
-                  <input
-                    type="text"
-                    value={venue.email_sender || 'TurfFlow Arena <rajupainter84688@gmail.com>'}
-                    onChange={e => setVenue({ ...venue, email_sender: e.target.value })}
-                    placeholder="TurfFlow Arena <rajupainter84688@gmail.com>"
-                    className="form-input text-xs"
-                  />
-                  <p className="text-[10px] text-on-surface-variant mt-1">
-                    Active Sender: <code className="bg-surface-container px-1 py-0.5 rounded text-primary font-bold">rajupainter84688@gmail.com</code> (TurfFlow Arena)
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">
-                    Send Test Email (Brevo / Nodemailer)
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="email"
-                      value={testEmailRecipient}
-                      onChange={e => setTestEmailRecipient(e.target.value)}
-                      placeholder="e.g. your-email@gmail.com"
-                      className="form-input text-xs flex-1"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleSendTestEmail}
-                      disabled={testEmailLoading || !testEmailRecipient}
-                      className="btn-secondary text-xs px-3 py-1.5 font-bold flex items-center gap-1.5 border-primary/40 text-primary hover:bg-primary/5 shrink-0"
-                    >
-                      {testEmailLoading ? (
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <Send className="w-3.5 h-3.5" />
-                      )}
-                      <span>Test Email</span>
-                    </button>
-                  </div>
-                  {/* Resend Sender Email Conflict Notice (No Brackets) */}
-                  {EmailService.isResendSenderEmail(testEmailRecipient) ? (
-                    <div className="flex items-center gap-1.5 text-[11px] text-red-800 bg-red-50 border border-red-300 px-2.5 py-1.5 rounded-lg mt-2 font-medium">
-                      <AlertCircle className="w-3.5 h-3.5 text-red-600 shrink-0" />
-                      <span><strong>You can't send to this email — it's the sender email!</strong> Please enter a separate test recipient.</span>
-                    </div>
-                  ) : testEmailRecipient.trim().includes('@') ? (
-                    <div className="flex items-center gap-1.5 text-[11px] text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1.5 rounded-lg mt-2 font-medium">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                      <span>Recipient is distinct from sender. Ready for dispatch.</span>
-                    </div>
-                  ) : null}
-                  <p className="text-[10px] text-on-surface-variant mt-1.5">
-                    Tip: Enter any email address to test live delivery via Gmail SMTP.
-                  </p>
-                </div>
-              </div>
-
-              {testEmailResult && (
-                <div className={`p-2.5 rounded-lg text-xs flex items-center gap-2 ${
-                  testEmailResult.success
-                    ? testEmailResult.simulated
-                      ? 'bg-amber-50 text-amber-800 border border-amber-200'
-                      : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                    : 'bg-red-50 text-red-800 border border-red-200'
-                }`}>
-                  {testEmailResult.success ? (
-                    <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
-                  ) : (
-                    <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
-                  )}
-                  <span>{testEmailResult.message}</span>
-                </div>
-              )}
-            </div>
+            <span className={`text-[10px] sm:text-[11px] font-bold px-2.5 py-0.5 rounded-full self-start sm:self-auto ${
+              EmailService.isBrevoConfigured()
+                ? 'bg-purple-100 text-purple-800 border border-purple-300'
+                : EmailService.isConfigured()
+                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                  : 'bg-amber-100 text-amber-800 border border-amber-300'
+            }`}>
+              {EmailService.isBrevoConfigured() ? '⚡ Brevo HTTPS API Active' : '⚡ Brevo & Nodemailer Ready'}
+            </span>
           </div>
 
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
+            <label className="flex items-center gap-2 font-medium text-xs cursor-pointer p-2.5 rounded-lg bg-surface-container-low border border-outline-variant/30 hover:border-primary/40 transition">
+              <input
+                type="checkbox"
+                checked={venue.whatsapp_enabled}
+                disabled={currentAdmin.role === 'staff'}
+                onChange={e => setVenue({ ...venue, whatsapp_enabled: e.target.checked })}
+                className="rounded accent-primary"
+              />
+              <span>WhatsApp Instant Dispatch</span>
+            </label>
+
+            <label className="flex items-center gap-2 font-medium text-xs cursor-pointer p-2.5 rounded-lg bg-surface-container-low border border-outline-variant/30 hover:border-primary/40 transition">
+              <input
+                type="checkbox"
+                checked={venue.sms_fallback_enabled}
+                disabled={currentAdmin.role === 'staff'}
+                onChange={e => setVenue({ ...venue, sms_fallback_enabled: e.target.checked })}
+                className="rounded accent-primary"
+              />
+              <span>SMS Gateway Fallback</span>
+            </label>
+
+            <label className="flex items-center gap-2 font-medium text-xs cursor-pointer p-2.5 rounded-lg bg-surface-container-low border border-outline-variant/30 hover:border-primary/40 transition">
+              <input
+                type="checkbox"
+                checked={venue.email_enabled !== false}
+                disabled={currentAdmin.role === 'staff'}
+                onChange={e => setVenue({ ...venue, email_enabled: e.target.checked })}
+                className="rounded accent-primary"
+              />
+              <span>Nodemailer Email Dispatch</span>
+            </label>
+          </div>
+
+          {/* Nodemailer Email Configuration & Live Test */}
+          <div className="bg-surface-container-low p-3 sm:p-3.5 rounded-xl border border-outline-variant/30 space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">
+                  SMTP From / Sender Address
+                </label>
+                <input
+                  type="text"
+                  value={venue.email_sender || 'TurfFlow Arena <rajupainter84688@gmail.com>'}
+                  disabled={currentAdmin.role === 'staff'}
+                  onChange={e => setVenue({ ...venue, email_sender: e.target.value })}
+                  placeholder="TurfFlow Arena <rajupainter84688@gmail.com>"
+                  className="form-input text-xs"
+                />
+                <p className="text-[10px] text-on-surface-variant mt-1">
+                  Active Sender: <code className="bg-surface-container px-1 py-0.5 rounded text-primary font-bold">rajupainter84688@gmail.com</code> (TurfFlow Arena)
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">
+                  Send Test Email (Brevo / Nodemailer)
+                </label>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="email"
+                    value={testEmailRecipient}
+                    onChange={e => setTestEmailRecipient(e.target.value)}
+                    placeholder="e.g. your-email@gmail.com"
+                    className="form-input text-xs flex-1 w-full"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSendTestEmail}
+                    disabled={testEmailLoading || !testEmailRecipient}
+                    className="btn-secondary text-xs px-3.5 py-2 sm:py-1.5 font-bold flex items-center justify-center gap-1.5 border-primary/40 text-primary hover:bg-primary/5 shrink-0 w-full sm:w-auto cursor-pointer"
+                  >
+                    {testEmailLoading ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Send className="w-3.5 h-3.5" />
+                    )}
+                    <span>Test Email</span>
+                  </button>
+                </div>
+                {/* Resend Sender Email Conflict Notice (No Brackets) */}
+                {EmailService.isResendSenderEmail(testEmailRecipient) ? (
+                  <div className="flex items-center gap-1.5 text-[11px] text-red-800 bg-red-50 border border-red-300 px-2.5 py-1.5 rounded-lg mt-2 font-medium">
+                    <AlertCircle className="w-3.5 h-3.5 text-red-600 shrink-0" />
+                    <span><strong>You can't send to this email — it's the sender email!</strong> Please enter a separate test recipient.</span>
+                  </div>
+                ) : testEmailRecipient.trim().includes('@') ? (
+                  <div className="flex items-center gap-1.5 text-[11px] text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1.5 rounded-lg mt-2 font-medium">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span>Recipient is distinct from sender. Ready for dispatch.</span>
+                  </div>
+                ) : null}
+                <p className="text-[10px] text-on-surface-variant mt-1.5">
+                  Tip: Enter any email address to test live delivery via Gmail SMTP.
+                </p>
+              </div>
+            </div>
+
+            {testEmailResult && (
+              <div className={`p-2.5 rounded-lg text-xs flex items-center gap-2 ${
+                testEmailResult.success
+                  ? testEmailResult.simulated
+                    ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                    : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                  : 'bg-red-50 text-red-800 border border-red-200'
+              }`}>
+                {testEmailResult.success ? (
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
+                )}
+                <span>{testEmailResult.message}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end pt-1">
+            <button
+              type="submit"
+              disabled={currentAdmin.role === 'staff'}
+              className="btn-primary text-xs px-4 py-2 font-headline font-bold flex items-center justify-center gap-1.5 shadow-sm w-full sm:w-auto cursor-pointer"
+            >
+              <Save className="w-3.5 h-3.5" /> Save Notification Settings
+            </button>
+          </div>
+        </form>
+
           {/* 6. Supabase Cloud Database & Realtime Sync Card */}
-          <div className="card p-6 border-slate-200/80 bg-white/95 shadow-sm space-y-5">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600">
-                  <Database className="w-5 h-5" />
+          <div className="card p-3.5 sm:p-5 md:p-6 border-slate-200/80 bg-white/95 shadow-sm space-y-4 sm:space-y-5 rounded-2xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3.5 sm:pb-4">
+              <div className="flex items-start sm:items-center gap-3">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600 shrink-0">
+                  <Database className="w-4 h-4 sm:w-5 sm:h-5" />
                 </div>
                 <div>
-                  <h3 className="font-headline font-bold text-base text-slate-800 flex items-center gap-2">
-                    Supabase PostgreSQL & Realtime Synchronization
+                  <h3 className="font-headline font-bold text-sm sm:text-base text-slate-800 flex flex-wrap items-center gap-1.5 sm:gap-2">
+                    <span>Supabase PostgreSQL & Realtime Sync</span>
                     {isSupabaseConfigured() ? (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
-                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Live Supabase Sync
+                      <span className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Live Sync
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
-                        <span className="w-2 h-2 rounded-full bg-amber-500"></span> Local Cache (Demo Mode)
+                      <span className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Local Cache
                       </span>
                     )}
                   </h3>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
                     Synchronizes bookings, slot locks, and customer data in real time between Website and WhatsApp Bot.
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 self-start sm:self-auto w-full sm:w-auto">
                 <button
                   type="button"
                   onClick={handleForceFullSync}
                   disabled={supabaseSyncLoading}
-                  className="btn-secondary text-xs px-3 py-1.5 font-bold flex items-center gap-1.5"
+                  className="btn-secondary text-xs px-3 py-1.5 font-bold flex items-center justify-center gap-1.5 w-full sm:w-auto cursor-pointer"
                   title="Pull latest bookings, courts, and customers from Supabase"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${supabaseSyncLoading ? 'animate-spin' : ''}`} />
@@ -952,12 +1166,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin, onOp
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 text-xs">
               <div className="space-y-1.5">
                 <label className="font-semibold text-slate-700 flex items-center justify-between">
-                  <span>Supabase Project URL (VITE_SUPABASE_URL)</span>
+                  <span>Supabase Project URL</span>
                   {supabaseConfig.isCustom && (
-                    <span className="text-[10px] text-primary font-mono">(Custom Override Active)</span>
+                    <span className="text-[10px] text-primary font-mono">(Custom Override)</span>
                   )}
                 </label>
                 <input
@@ -965,32 +1179,32 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin, onOp
                   value={supabaseUrlInput}
                   onChange={e => setSupabaseUrlInput(e.target.value)}
                   placeholder="https://your-project-id.supabase.co"
-                  className="input-field font-mono text-xs"
+                  className="input-field font-mono text-xs w-full"
                 />
-                <p className="text-[11px] text-slate-400">Found in Supabase Dashboard -&gt; Project Settings -&gt; API</p>
+                <p className="text-[10.5px] sm:text-[11px] text-slate-400">Found in Supabase Dashboard -&gt; Project Settings -&gt; API</p>
               </div>
 
               <div className="space-y-1.5">
                 <label className="font-semibold text-slate-700">
-                  Supabase Anon Key (VITE_SUPABASE_ANON_KEY)
+                  Supabase Anon Key
                 </label>
                 <input
                   type="password"
                   value={supabaseKeyInput}
                   onChange={e => setSupabaseKeyInput(e.target.value)}
                   placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                  className="input-field font-mono text-xs"
+                  className="input-field font-mono text-xs w-full"
                 />
-                <p className="text-[11px] text-slate-400">Public browser key with Row-Level Security (RLS) enforcement</p>
+                <p className="text-[10.5px] sm:text-[11px] text-slate-400">Public browser key with Row-Level Security (RLS) enforcement</p>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 pt-1 border-t border-slate-100">
+            <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5 sm:gap-3 pt-1 border-t border-slate-100">
               <button
                 type="button"
                 onClick={handleSaveSupabaseConfig}
                 disabled={supabaseSyncLoading}
-                className="btn-primary text-xs px-4 py-2 font-bold flex items-center gap-1.5 shadow-sm"
+                className="btn-primary text-xs px-4 py-2 font-bold flex items-center justify-center gap-1.5 shadow-sm w-full sm:w-auto cursor-pointer"
               >
                 <Save className="w-3.5 h-3.5" />
                 <span>Save Credentials & Connect</span>
@@ -1000,7 +1214,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin, onOp
                 type="button"
                 onClick={handleTestSupabase}
                 disabled={supabaseTestLoading}
-                className="btn-secondary text-xs px-4 py-2 font-bold flex items-center gap-1.5 border-slate-300 hover:bg-slate-50"
+                className="btn-secondary text-xs px-4 py-2 font-bold flex items-center justify-center gap-1.5 border-slate-300 hover:bg-slate-50 w-full sm:w-auto cursor-pointer"
               >
                 {supabaseTestLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin text-primary" /> : <Radio className="w-3.5 h-3.5 text-emerald-600" />}
                 <span>Test Live Connection</span>
@@ -1010,13 +1224,13 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin, onOp
                 <button
                   type="button"
                   onClick={handleClearSupabaseConfig}
-                  className="text-xs text-slate-500 hover:text-slate-800 underline px-2 py-1"
+                  className="text-xs text-slate-500 hover:text-slate-800 underline px-2 py-1 text-center sm:text-left cursor-pointer"
                 >
                   Clear Custom Credentials
                 </button>
               )}
 
-              <div className="ml-auto flex items-center gap-2">
+              <div className="sm:ml-auto flex items-center justify-center sm:justify-end gap-2 pt-1 sm:pt-0">
                 <a
                   href="https://supabase.com/dashboard"
                   target="_blank"
@@ -1030,7 +1244,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin, onOp
 
             {/* Test Connection Output Banner */}
             {supabaseTestResult && (
-              <div className={`p-3.5 rounded-xl text-xs flex items-start gap-2.5 ${
+              <div className={`p-3 sm:p-3.5 rounded-xl text-xs flex items-start gap-2.5 ${
                 supabaseTestResult.connected
                   ? 'bg-emerald-50 text-emerald-900 border border-emerald-200'
                   : 'bg-amber-50 text-amber-900 border border-amber-200'
@@ -1040,17 +1254,17 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin, onOp
                 ) : (
                   <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
                 )}
-                <div className="space-y-1 flex-1">
-                  <div className="font-bold flex items-center justify-between">
+                <div className="space-y-1 flex-1 min-w-0">
+                  <div className="font-bold flex flex-wrap items-center justify-between gap-1">
                     <span>{supabaseTestResult.message}</span>
                     {supabaseTestResult.venue && (
-                      <span className="text-[11px] font-mono font-normal opacity-75">
+                      <span className="text-[10.5px] sm:text-[11px] font-mono font-normal opacity-75">
                         Venue: {supabaseTestResult.venue.name}
                       </span>
                     )}
                   </div>
                   {supabaseTestResult.stats && (
-                    <div className="flex items-center gap-4 text-[11px] pt-1 text-emerald-700 font-mono">
+                    <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-[10.5px] sm:text-[11px] pt-1 text-emerald-700 font-mono">
                       <span>Courts: {supabaseTestResult.stats.courts}</span>
                       <span>Bookings: {supabaseTestResult.stats.bookings}</span>
                       <span>Customers: {supabaseTestResult.stats.customers}</span>
@@ -1061,35 +1275,35 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin, onOp
             )}
 
             {/* Schema Migration Helper */}
-            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-2">
-              <div className="flex items-center justify-between font-semibold text-slate-800">
+            <div className="p-3 sm:p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-1 font-semibold text-slate-800">
                 <span className="flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
                   Automated Database Setup & Schema Deployment
                 </span>
-                <span className="text-[11px] text-slate-500 font-mono">supabase_setup.sql</span>
+                <span className="text-[10px] sm:text-[11px] text-slate-500 font-mono">supabase_setup.sql</span>
               </div>
-              <p className="text-slate-600 leading-relaxed text-[11px]">
-                Run the included schema in your Supabase project with one click: Open your Supabase Dashboard, navigate to the <b>SQL Editor</b>, paste the contents of <code>supabase_setup.sql</code> (in the project root), and click <b>Run</b>. It creates all 15 tables, activates Supabase Realtime publication on bookings, and installs the Layer-2 Concurrency Unique Index.
+              <p className="text-slate-600 leading-relaxed text-[10.5px] sm:text-[11px]">
+                Run the included schema in your Supabase project with one click: Open your Supabase Dashboard, navigate to the <b>SQL Editor</b>, paste the contents of <code>supabase_setup.sql</code> (in the project root), and click <b>Run</b>. It creates all tables, activates Supabase Realtime publication on bookings, and installs the Layer-2 Concurrency Unique Index.
               </p>
             </div>
           </div>
 
           {/* 7. Danger Zone: Database Management & Purge */}
-          <div className="card p-6 border-red-200/90 bg-red-50/25 shadow-sm space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-red-100 pb-4">
+          <div className="card p-3.5 sm:p-5 md:p-6 border-red-200/90 bg-red-50/25 shadow-sm space-y-4 rounded-2xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-red-100 pb-3.5 sm:pb-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-red-100 border border-red-200 flex items-center justify-center text-red-600 shrink-0">
-                  <Trash2 className="w-5 h-5" />
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-red-100 border border-red-200 flex items-center justify-center text-red-600 shrink-0">
+                  <Trash2 className="w-4 h-4 sm:w-5 sm:h-5" />
                 </div>
                 <div>
-                  <h3 className="font-headline font-bold text-base text-slate-900 flex items-center gap-2">
-                    Database Management & Wipe
+                  <h3 className="font-headline font-bold text-sm sm:text-base text-slate-900 flex flex-wrap items-center gap-1.5 sm:gap-2">
+                    <span>Database Management & Wipe</span>
                     <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-300">
                       DANGER ZONE
                     </span>
                   </h3>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
                     Purge operational bookings, payment receipts, active locks, and reset customer counters.
                   </p>
                 </div>
@@ -1098,53 +1312,38 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentAdmin, onOp
               <button
                 type="button"
                 onClick={handleResetDatabase}
-                className="bg-red-600 hover:bg-red-700 text-white text-xs font-headline font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-sm transition-all active:scale-98 shrink-0 self-start sm:self-auto cursor-pointer"
+                className="bg-red-600 hover:bg-red-700 text-white text-xs font-headline font-bold px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all active:scale-98 shrink-0 w-full sm:w-auto cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>Clear Database</span>
               </button>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-              <div className="bg-white p-3 rounded-xl border border-red-100 shadow-2xs">
-                <span className="text-[11px] text-slate-500 font-semibold block">Total Bookings</span>
-                <span className="text-lg font-bold text-slate-900 font-mono">{store.getBookings().length}</span>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 text-xs">
+              <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-red-100 shadow-2xs">
+                <span className="text-[10px] sm:text-[11px] text-slate-500 font-semibold block truncate">Total Bookings</span>
+                <span className="text-base sm:text-lg font-bold text-slate-900 font-mono">{store.getBookings().length}</span>
               </div>
-              <div className="bg-white p-3 rounded-xl border border-red-100 shadow-2xs">
-                <span className="text-[11px] text-slate-500 font-semibold block">Total Payments</span>
-                <span className="text-lg font-bold text-slate-900 font-mono">{store.getPayments().length}</span>
+              <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-red-100 shadow-2xs">
+                <span className="text-[10px] sm:text-[11px] text-slate-500 font-semibold block truncate">Total Payments</span>
+                <span className="text-base sm:text-lg font-bold text-slate-900 font-mono">{store.getPayments().length}</span>
               </div>
-              <div className="bg-white p-3 rounded-xl border border-red-100 shadow-2xs">
-                <span className="text-[11px] text-slate-500 font-semibold block">Live Slot Locks</span>
-                <span className="text-lg font-bold text-slate-900 font-mono">{store.getSlotLocks().length}</span>
+              <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-red-100 shadow-2xs">
+                <span className="text-[10px] sm:text-[11px] text-slate-500 font-semibold block truncate">Live Slot Locks</span>
+                <span className="text-base sm:text-lg font-bold text-slate-900 font-mono">{store.getSlotLocks().length}</span>
               </div>
-              <div className="bg-white p-3 rounded-xl border border-red-100 shadow-2xs">
-                <span className="text-[11px] text-slate-500 font-semibold block">Target Storage</span>
-                <span className="text-xs font-bold text-emerald-700 block truncate">
-                  {isSupabaseConfigured() ? 'Supabase PostgreSQL' : 'Local Browser Cache'}
+              <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-red-100 shadow-2xs">
+                <span className="text-[10px] sm:text-[11px] text-slate-500 font-semibold block truncate">Target Storage</span>
+                <span className="text-[11px] sm:text-xs font-bold text-emerald-700 block truncate">
+                  {isSupabaseConfigured() ? 'Supabase DB' : 'Local Cache'}
                 </span>
               </div>
             </div>
 
-            <p className="text-[11px] text-slate-500 leading-relaxed">
+            <p className="text-[10.5px] sm:text-[11px] text-slate-500 leading-relaxed">
               Clicking <b>Clear Database</b> opens a secure confirmation modal with options to either wipe operational transaction data (keeping your pitches & sports setups intact) or execute a full factory reset.
             </p>
           </div>
-
-          <div className="pt-3 flex gap-3">
-            <button type="submit" className="btn-primary text-xs px-6 py-2.5 font-headline font-bold flex items-center gap-1.5 shadow-sm">
-              <Save className="w-4 h-4" /> Save Configuration
-            </button>
-
-            <button
-              type="button"
-              onClick={handleResetDatabase}
-              className="btn-secondary text-xs px-4 py-2.5 font-bold text-red-700 hover:bg-red-50 border-red-200 flex items-center gap-1.5 ml-auto cursor-pointer"
-            >
-              <Trash2 className="w-4 h-4 text-red-600" /> Clear Database
-            </button>
-          </div>
-        </form>
       </div>
 
       <ClearDatabaseModal

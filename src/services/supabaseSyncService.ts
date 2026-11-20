@@ -59,10 +59,17 @@ export class SupabaseSyncService {
       const { data: venues, error: vErr } = await supabase.from('venues').select('*').limit(1);
       if (!vErr && venues && venues.length > 0) {
         const remote = venues[0];
-        const loc = remote.location_url || remote.google_maps_link || store.getVenue().location_url || store.getVenue().google_maps_link;
+        const localVenue = store.getVenue();
+        const loc = remote.location_url !== undefined && remote.location_url !== null
+          ? remote.location_url
+          : (remote.google_maps_link !== undefined && remote.google_maps_link !== null 
+              ? remote.google_maps_link 
+              : (localVenue.location_url ?? ''));
+        const addr = remote.address !== undefined && remote.address !== null ? remote.address : localVenue.address;
         store.setVenue({
-          ...store.getVenue(),
+          ...localVenue,
           ...remote,
+          address: addr,
           location_url: loc,
           google_maps_link: loc
         });
@@ -405,10 +412,17 @@ export class SupabaseSyncService {
             console.log(`⚡ [Realtime Sync Event] Venue ${payload.eventType}:`, payload.new?.name || payload.old?.id);
             if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
               const remote = payload.new;
-              const loc = remote.location_url || remote.google_maps_link || store.getVenue().location_url;
+              const localVenue = store.getVenue();
+              const loc = remote.location_url !== undefined && remote.location_url !== null
+                ? remote.location_url
+                : (remote.google_maps_link !== undefined && remote.google_maps_link !== null
+                    ? remote.google_maps_link
+                    : (localVenue.location_url ?? ''));
+              const addr = remote.address !== undefined && remote.address !== null ? remote.address : localVenue.address;
               store.setVenue({
-                ...store.getVenue(),
+                ...localVenue,
                 ...remote,
+                address: addr,
                 location_url: loc,
                 google_maps_link: loc
               });
@@ -1144,13 +1158,12 @@ export class SupabaseSyncService {
 
     try {
       const payload: any = {
-        id: venue.id,
+        id: venue.id || 'ven-001',
         name: venue.name,
         address: venue.address,
         timezone: venue.timezone || 'Asia/Kolkata',
         gst_number: venue.gst_number,
         contact_phone: venue.contact_phone,
-        contact_email: venue.contact_email || null,
         is_active: venue.is_active,
         min_notice_minutes: venue.min_notice_minutes || 15,
         max_advance_days: venue.max_advance_days || 14,
@@ -1162,13 +1175,27 @@ export class SupabaseSyncService {
         google_maps_link: venue.location_url || venue.google_maps_link || null
       };
 
-      const { error } = await supabase.from('venues').upsert([payload], { onConflict: 'id' });
-      if (error) {
-        console.warn('⚠️ [Supabase Sync] Note when syncing venue to Supabase:', error.message);
-        return false;
+      if (venue.contact_email) {
+        payload.contact_email = venue.contact_email;
       }
-      console.log(`✅ [Supabase Sync] Venue ${venue.name} synced to Supabase.`);
-      return true;
+
+      let currentPayload = { ...payload };
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const { error } = await supabase.from('venues').upsert([currentPayload], { onConflict: 'id' });
+        if (!error) {
+          console.log(`✅ [Supabase Sync] Venue ${venue.name} synced to Supabase.`);
+          return true;
+        }
+        const match = error.message?.match(/Could not find the '([^']+)' column/i);
+        if (match && match[1]) {
+          console.warn(`[Supabase Sync] Stripping unmigrated column '${match[1]}' and retrying...`);
+          delete currentPayload[match[1]];
+        } else {
+          console.warn('⚠️ [Supabase Sync] Note when syncing venue to Supabase:', error.message);
+          return false;
+        }
+      }
+      return false;
     } catch (err: any) {
       console.warn('⚠️ [Supabase Sync] Exception syncing venue to Supabase:', err.message);
       return false;

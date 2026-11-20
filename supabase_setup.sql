@@ -37,6 +37,9 @@ ALTER TABLE venues ADD COLUMN IF NOT EXISTS whatsapp_enabled BOOLEAN DEFAULT TRU
 ALTER TABLE venues ADD COLUMN IF NOT EXISTS sms_fallback_enabled BOOLEAN DEFAULT TRUE;
 ALTER TABLE venues ADD COLUMN IF NOT EXISTS email_enabled BOOLEAN DEFAULT TRUE;
 ALTER TABLE venues ADD COLUMN IF NOT EXISTS email_sender VARCHAR(255) DEFAULT 'TurfFlow Arena <rajupainter84688@gmail.com>';
+ALTER TABLE venues ADD COLUMN IF NOT EXISTS contact_email VARCHAR(255) DEFAULT 'rajupainter84688@gmail.com';
+ALTER TABLE venues ADD COLUMN IF NOT EXISTS location_url TEXT DEFAULT 'https://maps.google.com/?q=18.5204,73.8567';
+ALTER TABLE venues ADD COLUMN IF NOT EXISTS google_maps_link TEXT DEFAULT 'https://maps.google.com/?q=18.5204,73.8567';
 
 -- -----------------------------------------------------------------------------
 -- 2. SPORTS TABLE

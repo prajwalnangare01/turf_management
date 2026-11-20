@@ -49,8 +49,8 @@ export class GatePassService {
    */
   static async generatePassPdfBuffer(booking) {
     const venue = booking.venue || store.getVenue();
-    const venueName = booking.venue_name || venue.name;
-    const venueAddress = booking.venue_address || venue.address;
+    const venueName = (booking.venue && booking.venue.name) || venue.name || booking.venue_name || 'TurfFlow Arena';
+    const venueAddress = (booking.venue && booking.venue.address) || venue.address || booking.venue_address || 'Plot 42, Sports Enclave, Pune';
     const court = store.getCourts().find(c => c.id === booking.court_id);
     const sports = store.getSports();
     const sport = sports.find(s => s.id === booking.sport_id);
@@ -65,11 +65,11 @@ export class GatePassService {
     const courtName = (court?.name || booking.court_name || 'Turf Pitch').replace(/[^\x00-\x7F]/g, '');
     const sportName = (sport?.name || booking.sport_name || 'Football').replace(/[^\x00-\x7F]/g, '');
 
-    // Resolve accurate venue location link
+    // Resolve accurate venue location link (venue configured location takes precedence)
     const venueLocationUrl = (booking.venue && (booking.venue.location_url || booking.venue.google_maps_link)) ||
-      booking.venue_location_url ||
       venue.location_url ||
       venue.google_maps_link ||
+      booking.venue_location_url ||
       `https://maps.google.com/?q=${encodeURIComponent(venueName + ', ' + venueAddress)}`;
 
     // Generate Location QR code for directions / navigation
@@ -287,8 +287,8 @@ export class GatePassService {
    */
   static async generatePassHtml(booking) {
     const venue = booking.venue || store.getVenue();
-    const venueName = booking.venue_name || venue.name;
-    const venueAddress = booking.venue_address || venue.address;
+    const venueName = (booking.venue && booking.venue.name) || venue.name || booking.venue_name || 'TurfFlow Arena';
+    const venueAddress = (booking.venue && booking.venue.address) || venue.address || booking.venue_address || 'Plot 42, Sports Enclave, Pune';
     const court = store.getCourts().find(c => c.id === booking.court_id);
     const customer = store.getCustomers().find(c => c.id === booking.customer_id) || {
       name: booking.customer_name || 'Customer',
@@ -298,11 +298,11 @@ export class GatePassService {
     const cleanCustomerPhone = formatPhoneNumber(rawCustomerPhone);
     const otpCode = WhatsAppFormatter.getBookingGatePassOtp(booking);
 
-    // Resolve accurate venue location link & generate Location QR code
+    // Resolve accurate venue location link & generate Location QR code (venue configured location takes precedence)
     const venueLocationUrl = (booking.venue && (booking.venue.location_url || booking.venue.google_maps_link)) ||
-      booking.venue_location_url ||
       venue.location_url ||
       venue.google_maps_link ||
+      booking.venue_location_url ||
       `https://maps.google.com/?q=${encodeURIComponent(venueName + ', ' + venueAddress)}`;
     let locationQrDataUrl = '';
     try {

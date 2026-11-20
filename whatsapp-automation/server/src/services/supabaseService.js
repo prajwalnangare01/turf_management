@@ -25,12 +25,12 @@ export class SupabaseService {
       if (!vErr && venues?.length > 0) {
         const remote = venues[0];
         const loc = remote.location_url || remote.google_maps_link || store.venue?.location_url || store.venue?.google_maps_link;
-        store.venue = {
+        store.setVenue({
           ...store.venue,
           ...remote,
           location_url: loc,
           google_maps_link: loc
-        };
+        });
       }
 
       // 2. Fetch Sports

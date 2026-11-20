@@ -260,7 +260,11 @@ export class EmailService {
           </tr>
           <tr>
             <td style="padding: 12px 16px; font-size: 13px; color: #64748b;">Venue Location</td>
-            <td style="padding: 12px 16px; font-size: 12px; color: #334155;"><strong>${venue.name}</strong><br/>${venue.address}</td>
+            <td style="padding: 12px 16px; font-size: 12px; color: #334155;">
+              <strong>${venue.name}</strong><br/>
+              ${venue.address}
+              ${(venue.location_url || venue.google_maps_link) ? `<br/><a href="${venue.location_url || venue.google_maps_link}" style="color: #006b30; font-weight: 700; text-decoration: underline; font-size: 11px;">View on Google Maps &rarr;</a>` : ''}
+            </td>
           </tr>
         </table>
 
@@ -1207,6 +1211,7 @@ export class EmailService {
             <td style="padding: 12px 16px; font-size: 12px; color: #334155;">
               <strong>${venue.name}</strong><br/>
               ${venue.address}
+              ${(venue.location_url || venue.google_maps_link) ? `<br/><a href="${venue.location_url || venue.google_maps_link}" style="color: #006b30; font-weight: 700; text-decoration: underline; font-size: 11px;">View on Google Maps &rarr;</a>` : ''}
             </td>
           </tr>
         </table>

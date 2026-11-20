@@ -256,7 +256,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onSwitchToCustomer }) => {
       </header>
 
       {/* Metric Cards Grid */}
-      <div className="max-w-7xl mx-auto px-4 py-6">
+      <div className="max-w-7xl mx-auto px-2.5 sm:px-4 py-4 sm:py-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
           <div className="bg-white p-5 rounded-xl border border-outline-variant/50 shadow-sm space-y-2">
             <div className="flex justify-between items-center text-on-surface-variant font-headline font-bold text-xs uppercase tracking-wider">
@@ -357,7 +357,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onSwitchToCustomer }) => {
         </div>
 
         {/* Tab Content Views with Role Security Gate */}
-        <div className="bg-white rounded-2xl p-6 border border-outline-variant/50 shadow-sm">
+        <div className="bg-white rounded-2xl p-3 sm:p-5 md:p-6 border border-outline-variant/50 shadow-sm">
           {!hasAccessToTab(activeTab) ? (
             <div className="py-12 text-center space-y-4 max-w-md mx-auto">
               <div className="w-16 h-16 bg-amber-100 text-amber-700 rounded-3xl flex items-center justify-center mx-auto text-2xl shadow-xs">

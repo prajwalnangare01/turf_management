@@ -380,9 +380,19 @@ apiRouter.post('/venue', optionalAuth, (req, res) => {
           location_url: updated.location_url || updated.google_maps_link,
           google_maps_link: updated.location_url || updated.google_maps_link
         };
-        supabase.from('venues').upsert([payload], { onConflict: 'id' }).then(({ error }) => {
-          if (error) console.warn('Supabase venue upsert notice:', error.message);
-        });
+        (async () => {
+          let currentPayload = { ...payload };
+          for (let attempt = 0; attempt < 5; attempt++) {
+            const { error } = await supabase.from('venues').upsert([currentPayload], { onConflict: 'id' });
+            if (!error) break;
+            const match = error.message?.match(/Could not find the '([^']+)' column/i);
+            if (match && match[1]) {
+              delete currentPayload[match[1]];
+            } else {
+              break;
+            }
+          }
+        })().catch(() => {});
       }
     } catch {}
     return res.json({ success: true, venue: updated });
@@ -412,9 +422,19 @@ apiRouter.put('/venue', optionalAuth, (req, res) => {
           location_url: updated.location_url || updated.google_maps_link,
           google_maps_link: updated.location_url || updated.google_maps_link
         };
-        supabase.from('venues').upsert([payload], { onConflict: 'id' }).then(({ error }) => {
-          if (error) console.warn('Supabase venue upsert notice:', error.message);
-        });
+        (async () => {
+          let currentPayload = { ...payload };
+          for (let attempt = 0; attempt < 5; attempt++) {
+            const { error } = await supabase.from('venues').upsert([currentPayload], { onConflict: 'id' });
+            if (!error) break;
+            const match = error.message?.match(/Could not find the '([^']+)' column/i);
+            if (match && match[1]) {
+              delete currentPayload[match[1]];
+            } else {
+              break;
+            }
+          }
+        })().catch(() => {});
       }
     } catch {}
     return res.json({ success: true, venue: updated });

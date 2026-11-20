@@ -160,12 +160,21 @@ class Store {
   getVenue() { return this.venue; }
   setVenue(venue) {
     if (!venue) return this.venue;
+    const loc = venue.location_url !== undefined ? venue.location_url : (venue.google_maps_link !== undefined ? venue.google_maps_link : (this.venue.location_url || ''));
     this.venue = {
       ...this.venue,
       ...venue,
-      location_url: venue.location_url || venue.google_maps_link || this.venue.location_url,
-      google_maps_link: venue.location_url || venue.google_maps_link || this.venue.google_maps_link
+      location_url: loc,
+      google_maps_link: loc
     };
+    if (this.bookings && this.bookings.length > 0) {
+      this.bookings = this.bookings.map(b => ({
+        ...b,
+        venue_name: this.venue.name || b.venue_name,
+        venue_address: this.venue.address || b.venue_address,
+        venue_location_url: loc || b.venue_location_url
+      }));
+    }
     return this.venue;
   }
   getSports() { return this.sports; }

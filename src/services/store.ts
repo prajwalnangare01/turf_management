@@ -4,6 +4,7 @@ import {
   NotificationLog, AuditLog, DataArchiveSettings 
 } from '../types/schema';
 import { getVenueDateString } from '../utils/venueTime';
+import { normalizeGoogleMapsUrl } from '../utils/formatters';
 
 // Initial Mock Seed Data
 const DEFAULT_VENUE: Venue = {
@@ -402,9 +403,6 @@ class AppStore {
         if (this.venue.name === 'Apex Turf & Arena') {
           this.venue.name = 'TurfFlow Arena';
         }
-        if (this.venue.address && this.venue.address.includes('Bengaluru')) {
-          this.venue.address = 'Plot 42, Sports Enclave, Pune';
-        }
         if (!this.venue.contact_phone || this.venue.contact_phone.includes('98765 43210') || this.venue.contact_phone.includes('9876543210')) {
           this.venue.contact_phone = '+91 95791 58374';
         }
@@ -414,10 +412,10 @@ class AppStore {
         if (!this.venue.contact_email || this.venue.contact_email.includes('contact@turfflow.com') || this.venue.contact_email.includes('apexturf')) {
           this.venue.contact_email = 'rajupainter84688@gmail.com';
         }
-        if (!this.venue.location_url) {
-          this.venue.location_url = this.venue.google_maps_link || 'https://maps.google.com/?q=18.5204,73.8567';
+        if (this.venue.location_url === undefined) {
+          this.venue.location_url = this.venue.google_maps_link || '';
         }
-        if (!this.venue.google_maps_link) {
+        if (this.venue.google_maps_link === undefined) {
           this.venue.google_maps_link = this.venue.location_url;
         }
         const rawSports: Sport[] = Array.isArray(parsed.sports) && parsed.sports.length > 0 ? parsed.sports : DEFAULT_SPORTS;
@@ -570,13 +568,34 @@ class AppStore {
     this.saveToStorage();
   }
   public setVenue(venue: Venue) {
-    const locUrl = venue.location_url || venue.google_maps_link || this.venue?.location_url || this.venue?.google_maps_link || '';
+    const cleanName = (venue.name || this.venue?.name || '').trim();
+    const cleanAddress = (venue.address !== undefined ? venue.address : (this.venue?.address || '')).trim();
+    const rawLoc = venue.location_url !== undefined
+      ? venue.location_url.trim()
+      : (venue.google_maps_link !== undefined 
+          ? venue.google_maps_link.trim() 
+          : (this.venue?.location_url || this.venue?.google_maps_link || '').trim());
+    const locUrl = rawLoc ? normalizeGoogleMapsUrl(rawLoc, cleanName, cleanAddress) : '';
+
     this.venue = {
       ...this.venue,
       ...venue,
+      name: cleanName || this.venue.name,
+      address: cleanAddress,
       location_url: locUrl,
       google_maps_link: locUrl
     };
+
+    // Propagate updated venue address & location link to all bookings in store so all existing gate passes update immediately
+    if (this.bookings && this.bookings.length > 0) {
+      this.bookings = this.bookings.map(b => ({
+        ...b,
+        venue_name: this.venue.name,
+        venue_address: this.venue.address,
+        venue_location_url: locUrl
+      }));
+    }
+
     this.saveToStorage();
   }
   public setSports(sports: Sport[]) { this.sports = sports; this.saveToStorage(); }

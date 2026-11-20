@@ -208,4 +208,36 @@ export const getBookingGroupRef = (booking?: {
   return siblingMatch ? siblingMatch[1] : raw;
 };
 
+/**
+ * Universal Google Maps URL normalizer:
+ * Converts full links, short links (maps.app.goo.gl, goo.gl/maps), raw coordinates, or addresses into valid Google Maps links
+ */
+export const normalizeGoogleMapsUrl = (input?: string | null, venueName = '', venueAddress = ''): string => {
+  const trimmed = (input || '').trim();
+  if (!trimmed) {
+    const q = [venueName, venueAddress].filter(Boolean).join(', ');
+    return q ? `https://maps.google.com/?q=${encodeURIComponent(q)}` : 'https://maps.google.com/?q=18.5204,73.8567';
+  }
+  // Standard HTTP or HTTPS link
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+  // Shortened Google Maps links or domain without protocol
+  if (/^(maps\.app\.goo\.gl|goo\.gl\/maps|google\.[a-z.]+\/maps|maps\.google\.[a-z.]+)/i.test(trimmed)) {
+    return `https://${trimmed}`;
+  }
+  // Raw latitude, longitude coordinates (e.g. "18.5204, 73.8567" or "18.5204,73.8567")
+  if (/^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(trimmed)) {
+    const cleanCoords = trimmed.replace(/\s+/g, '');
+    return `https://maps.google.com/?q=${cleanCoords}`;
+  }
+  // Standard www prefix
+  if (/^www\./i.test(trimmed)) {
+    return `https://${trimmed}`;
+  }
+  // Plain text address or search query
+  return `https://maps.google.com/?q=${encodeURIComponent(trimmed)}`;
+};
+
+
 
