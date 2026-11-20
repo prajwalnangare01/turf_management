@@ -95,6 +95,18 @@ export class SupabaseSyncService {
             display_order: typeof sp.display_order === 'number' ? sp.display_order : existing?.display_order
           };
         });
+
+        // Merge local non-deleted custom sports (like Swimming) so they are NEVER wiped out by polling!
+        for (const locSport of currentSports) {
+          if (
+            !mergedSports.some(ms => ms.id === locSport.id || ms.name.toLowerCase() === locSport.name.toLowerCase()) &&
+            !deletedSportIds.includes(locSport.id)
+          ) {
+            mergedSports.push(locSport);
+            // Self-heal sync to Supabase
+            SupabaseSyncService.syncSportToSupabase(locSport).catch(() => {});
+          }
+        }
         mergedSports.sort((a, b) => {
           const ordA = typeof a.display_order === 'number' ? a.display_order : currentSports.findIndex(cs => cs.id === a.id);
           const ordB = typeof b.display_order === 'number' ? b.display_order : currentSports.findIndex(cs => cs.id === b.id);
@@ -121,9 +133,7 @@ export class SupabaseSyncService {
         } catch (e) {}
 
         const activeRemoteCourts = courts.filter((c: any) => 
-          !deletedCourtIds.includes(c.id) && 
-          c.status !== 'inactive' &&
-          !['test', 'test2', 'test3'].includes(c.name?.toLowerCase()?.trim())
+          !deletedCourtIds.includes(c.id) && c.status !== 'inactive'
         );
         const existingCourts = store.getCourts();
         const enrichedCourts: Court[] = activeRemoteCourts.map((c: any) => {
@@ -189,8 +199,18 @@ export class SupabaseSyncService {
           };
         });
 
-        if (enrichedCourts.length > 0) {
-          store.setCourts(enrichedCourts, false);
+        // Merge remote courts with local non-deleted courts so in-flight or newly created courts are never wiped
+        const combinedCourts = [...enrichedCourts];
+        for (const localC of existingCourts) {
+          if (!combinedCourts.some(c => c.id === localC.id) && !deletedCourtIds.includes(localC.id)) {
+            combinedCourts.push(localC);
+            // Self-heal sync to Supabase so it persists permanently in PostgreSQL!
+            SupabaseSyncService.syncCourtToSupabase(localC).catch(() => {});
+          }
+        }
+
+        if (combinedCourts.length > 0) {
+          store.setCourts(combinedCourts, false);
         } else if (existingCourts.length > 0) {
           store.setCourts(existingCourts, false);
         }
@@ -903,11 +923,6 @@ export class SupabaseSyncService {
    */
   public static async syncCourtToSupabase(court: Court): Promise<boolean> {
     if (!court || !court.id || court.status === 'inactive') return false;
-    const lowerName = court.name?.toLowerCase()?.trim() || '';
-    if (['test', 'test2', 'test3'].includes(lowerName) || lowerName.startsWith('test')) {
-      console.log(`🛡️ [Supabase Sync] Blocked sync of test court: ${court.name} (${court.id})`);
-      return false;
-    }
 
     try {
       const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('TURFFLOW_DELETED_COURTS') : null;
@@ -955,6 +970,15 @@ export class SupabaseSyncService {
       // Sync court_sports junction table
       if (court.sport_ids && court.sport_ids.length > 0) {
         try {
+          // Pre-sync any local sports that may not yet be in Supabase to satisfy foreign key constraint!
+          const localSports = store.getSports();
+          for (const sid of court.sport_ids) {
+            const locSport = localSports.find(s => s.id === sid);
+            if (locSport) {
+              await SupabaseSyncService.syncSportToSupabase(locSport).catch(() => {});
+            }
+          }
+
           await supabase.from('court_sports').delete().eq('court_id', court.id);
           const junctionRows = court.sport_ids.map(sid => ({
             court_id: court.id,
@@ -1046,6 +1070,17 @@ export class SupabaseSyncService {
    * Persist or update Sport (including custom card image & subtitle) in Supabase
    */
   public static async syncSportToSupabase(sport: Sport): Promise<boolean> {
+    // Un-blacklist if re-adding/syncing an active sport
+    try {
+      const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('TURFFLOW_DELETED_SPORTS') : null;
+      if (raw) {
+        const list: string[] = JSON.parse(raw);
+        if (list.includes(sport.id)) {
+          localStorage.setItem('TURFFLOW_DELETED_SPORTS', JSON.stringify(list.filter(id => id !== sport.id)));
+        }
+      }
+    } catch (e) {}
+
     const supabase = getSupabase();
     if (!supabase) return false;
 

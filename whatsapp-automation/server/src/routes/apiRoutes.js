@@ -12,6 +12,7 @@ import { SmsService } from '../services/smsService.js';
 import { WhatsAppFormatter } from '../utils/whatsappFormatter.js';
 import { RazorpayService } from '../services/razorpayService.js';
 import { getSupabase } from '../data/supabaseClient.js';
+import { SupabaseService } from '../services/supabaseService.js';
 import { getVenueDateString } from '../utils/venueTime.js';
 import { ServerAuthService } from '../services/authService.js';
 import { requireAuth, requireAdmin, requireRole, requireCustomer, optionalAuth } from '../middleware/authMiddleware.js';
@@ -471,6 +472,16 @@ apiRouter.post('/sports', requireRole(['owner', 'manager']), (req, res) => {
     store.sports.push(sportObj);
   }
 
+  // Also sync to Supabase so foreign key constraints on court_sports succeed!
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabase();
+    if (supabase) {
+      supabase.from('sports').upsert([sportObj], { onConflict: 'id' }).catch(err => {
+        console.warn('⚠️ [API] Failed to sync sport to Supabase:', err.message);
+      });
+    }
+  }
+
   res.json({ success: true, sports: store.getSports() });
 });
 
@@ -547,6 +558,9 @@ apiRouter.post('/courts/sync', requireRole(['owner', 'manager']), async (req, re
     const prevKey = store.courts.map(c => c.id).sort().join(',');
     const newKey = active.map(c => c.id).sort().join(',');
     store.courts = active;
+    for (const c of active) {
+      SupabaseService.upsertCourt(c).catch(() => {});
+    }
     if (prevKey !== newKey) {
       console.log(`🔄 [API] Updated server courts array with ${store.courts.length} active courts from admin client.`);
     }

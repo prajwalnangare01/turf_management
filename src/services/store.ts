@@ -57,6 +57,14 @@ const DEFAULT_SPORTS: Sport[] = [
     image_url: 'https://images.unsplash.com/photo-1622279457486-62dcc4a431d6?auto=format&fit=crop&w=600&q=80',
     subtitle: 'Outdoor Pro Cushioned',
     display_order: 3
+  },
+  {
+    id: 'sp-swimming',
+    name: 'Swimming',
+    icon: '🏊',
+    image_url: 'https://images.unsplash.com/photo-1530549387789-4c1017266635?auto=format&fit=crop&w=600&q=80',
+    subtitle: 'Olympic & Training Pools',
+    display_order: 4
   }
 ];
 
@@ -437,24 +445,25 @@ class AppStore {
             deletedCourtIds = list.filter(id => !['crt-001', 'crt-002', 'crt-003', 'crt-004', 'crt-005'].includes(id));
             localStorage.setItem('TURFFLOW_DELETED_COURTS', JSON.stringify(deletedCourtIds));
           }
-          const testCourtIds = (parsed.courts || [])
-            .filter((c: Court) => ['test', 'test2', 'test3'].includes(c.name?.toLowerCase()?.trim()))
-            .map((c: Court) => c.id);
-          if (testCourtIds.length > 0) {
-            deletedCourtIds = Array.from(new Set([...deletedCourtIds, ...testCourtIds]));
-            localStorage.setItem('TURFFLOW_DELETED_COURTS', JSON.stringify(deletedCourtIds));
-          }
         } catch (e) {}
 
+        const parsedCourts: Court[] = parsed.courts || [];
+        // If any court was saved locally in parsedCourts, ensure it is not suppressed by a stale blacklist
+        const parsedCourtIds = new Set(parsedCourts.map(c => c.id));
+        if (deletedCourtIds.some(id => parsedCourtIds.has(id))) {
+          deletedCourtIds = deletedCourtIds.filter(id => !parsedCourtIds.has(id));
+          try {
+            localStorage.setItem('TURFFLOW_DELETED_COURTS', JSON.stringify(deletedCourtIds));
+          } catch (e) {}
+        }
+
         // Merge parsed courts with any missing DEFAULT_COURTS so active venue pitches are always restored if missing
-        const existingCourtIds = new Set((parsed.courts || []).map((c: Court) => c.id));
+        const existingCourtIds = new Set(parsedCourts.map((c: Court) => c.id));
         const missingDefaults = DEFAULT_COURTS.filter(dc => !existingCourtIds.has(dc.id) && !deletedCourtIds.includes(dc.id));
-        const candidateCourts = [...(parsed.courts || []), ...missingDefaults];
+        const candidateCourts = [...parsedCourts, ...missingDefaults];
 
         const rawCourts: Court[] = (candidateCourts.length > 0 ? candidateCourts : DEFAULT_COURTS).filter(
-          (c: Court) => !deletedCourtIds.includes(c.id) && 
-                        c.status !== 'inactive' &&
-                        !['test', 'test2', 'test3'].includes(c.name?.toLowerCase()?.trim())
+          (c: Court) => !deletedCourtIds.includes(c.id) && c.status !== 'inactive'
         );
         let loadedCourts = rawCourts.map(c => {
           if (!c.original_price_per_hour) {
@@ -608,9 +617,19 @@ class AppStore {
       const courtsHash = courts.map(c => `${c.id}:${c.status}:${c.name}`).join('|');
       if (courtsHash && courtsHash !== this.lastSyncedCourtsHash) {
         this.lastSyncedCourtsHash = courtsHash;
+        let authHeaders: Record<string, string> = {};
+        try {
+          const raw = localStorage.getItem('turfflow_admin_session');
+          if (raw) {
+            const session = JSON.parse(raw);
+            if (session?.token) {
+              authHeaders['Authorization'] = `Bearer ${session.token}`;
+            }
+          }
+        } catch (e) {}
         fetch('/api/courts/sync', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...authHeaders },
           body: JSON.stringify({ courts })
         }).catch(() => {});
       }

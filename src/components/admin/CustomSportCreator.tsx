@@ -3,6 +3,7 @@ import { Upload, X, Image as ImageIcon, AlertCircle } from 'lucide-react';
 import { Sport } from '../../types/schema';
 import { store } from '../../services/store';
 import { SupabaseSyncService } from '../../services/supabaseSyncService';
+import { AuthService } from '../../services/authService';
 import { processSportImageFile } from '../../utils/imageUpload';
 
 export const SPORT_EMOJI_CHOICES = [
@@ -95,6 +96,14 @@ export const CustomSportCreator: React.FC<CustomSportCreatorProps> = ({
     store.setSports(updatedSports);
     onSportsUpdated(updatedSports);
     onSelectSportId(targetSport.id);
+
+    // Sync to backend WhatsApp automation server
+    fetch('/api/sports', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...AuthService.getAuthHeaders() },
+      body: JSON.stringify(targetSport)
+    }).catch(() => {});
+
     SupabaseSyncService.syncSportToSupabase(targetSport).catch(() => {});
   };
 

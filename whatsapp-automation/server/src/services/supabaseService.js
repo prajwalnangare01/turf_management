@@ -75,7 +75,11 @@ export class SupabaseService {
             peak_price_per_hour: Number(c.peak_price_per_hour) || 1800,
             peak_offer_price_per_hour: c.peak_offer_price_per_hour ? Number(c.peak_offer_price_per_hour) : undefined,
             offer_end_date: c.offer_end_date ? String(c.offer_end_date).slice(0, 10) : undefined,
-            sport_ids: matchingSports.length > 0 ? matchingSports : ['sp-football']
+            sport_ids: matchingSports.length > 0 
+              ? matchingSports 
+              : (store.courts.find(ec => ec.id === c.id)?.sport_ids?.length 
+                  ? store.courts.find(ec => ec.id === c.id).sport_ids 
+                  : ['sp-football'])
           };
         });
       }
@@ -559,7 +563,12 @@ export class SupabaseService {
 
       const { data: sports, error: sErr } = await supabase.from('sports').select('*');
       if (!sErr && sports && sports.length > 0) {
-        store.sports = sports;
+        const remoteIds = new Set(sports.map(s => s.id));
+        const merged = [...sports];
+        for (const loc of store.sports) {
+          if (!remoteIds.has(loc.id)) merged.push(loc);
+        }
+        store.sports = merged;
       }
 
       const { data: courts, error: cErr } = await supabase.from('courts').select('*');
@@ -603,7 +612,11 @@ export class SupabaseService {
               peak_price_per_hour: Number(c.peak_price_per_hour) || 1800,
               peak_offer_price_per_hour: c.peak_offer_price_per_hour ? Number(c.peak_offer_price_per_hour) : undefined,
               offer_end_date: c.offer_end_date ? String(c.offer_end_date).slice(0, 10) : undefined,
-              sport_ids: matchingSports.length > 0 ? matchingSports : ['sp-football']
+              sport_ids: matchingSports.length > 0 
+                ? matchingSports 
+                : (store.courts.find(ec => ec.id === c.id)?.sport_ids?.length 
+                    ? store.courts.find(ec => ec.id === c.id).sport_ids 
+                    : ['sp-football'])
             };
           });
         console.log(`🏟️ [SupabaseService] Refreshed courts count: ${store.courts.length}`);
@@ -656,8 +669,8 @@ export class SupabaseService {
         venue_id: court.venue_id || 'ven-001',
         name: court.name,
         slot_duration_minutes: court.slot_duration_minutes || 60,
-        opening_time: court.opening_time || '06:00',
-        closing_time: court.closing_time || '23:00',
+        opening_time: court.opening_time ? (court.opening_time.length === 5 ? `${court.opening_time}:00` : court.opening_time) : '06:00:00',
+        closing_time: court.closing_time ? (court.closing_time.length === 5 ? `${court.closing_time}:00` : court.closing_time) : '23:00:00',
         buffer_minutes: court.buffer_minutes || 0,
         status: court.status || 'active',
         base_price_per_hour: court.base_price_per_hour || 1200,
@@ -667,8 +680,8 @@ export class SupabaseService {
         sunday_price_per_hour: court.sunday_price_per_hour || 1600,
         sunday_offer_price_per_hour: court.sunday_offer_price_per_hour || null,
         peak_enabled: Boolean(court.peak_enabled),
-        peak_start_time: court.peak_start_time || '18:00',
-        peak_end_time: court.peak_end_time || '23:00',
+        peak_start_time: court.peak_start_time ? (court.peak_start_time.length === 5 ? `${court.peak_start_time}:00` : court.peak_start_time) : '18:00:00',
+        peak_end_time: court.peak_end_time ? (court.peak_end_time.length === 5 ? `${court.peak_end_time}:00` : court.peak_end_time) : '23:00:00',
         peak_price_per_hour: court.peak_price_per_hour || 1800,
         peak_offer_price_per_hour: court.peak_offer_price_per_hour || null,
         offer_end_date: court.offer_end_date || null
@@ -677,6 +690,17 @@ export class SupabaseService {
       await supabase.from('courts').upsert([payload], { onConflict: 'id' });
 
       if (Array.isArray(court.sport_ids) && court.sport_ids.length > 0) {
+        // Pre-sync any local sports into Supabase sports table first to satisfy foreign key constraint!
+        for (const sid of court.sport_ids) {
+          const storeSport = store.sports.find(s => s.id === sid);
+          if (storeSport) {
+            await supabase.from('sports').upsert([{
+              id: storeSport.id,
+              name: storeSport.name,
+              icon: storeSport.icon || '🏆'
+            }], { onConflict: 'id' }).catch(() => {});
+          }
+        }
         await supabase.from('court_sports').delete().eq('court_id', court.id);
         const junction = court.sport_ids.map(sid => ({ court_id: court.id, sport_id: sid }));
         await supabase.from('court_sports').upsert(junction);

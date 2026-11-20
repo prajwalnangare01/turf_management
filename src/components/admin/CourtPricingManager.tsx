@@ -4,6 +4,7 @@ import { AuditLogger } from '../../services/auditLogger';
 import { PostgresEngine } from '../../services/postgresEngine';
 import { SupabaseSyncService } from '../../services/supabaseSyncService';
 import { AdminUser, Court, BlockedSlot, Sport } from '../../types/schema';
+import { AuthService } from '../../services/authService';
 import { ConfirmModal } from '../common/ConfirmModal';
 import { PitchGridSkeleton } from '../common/SkeletonLoaders';
 import { Settings, ShieldAlert, Trash2, PlusCircle, Edit3, X, Check, Calendar, Zap, Clock, AlertTriangle, Tag, Sparkles, Percent, RotateCcw, Image as ImageIcon } from 'lucide-react';
@@ -112,6 +113,7 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
 
   // Add Court Modal State
   const [showAddCourtModal, setShowAddCourtModal] = useState(false);
+  const [isSavingCourt, setIsSavingCourt] = useState(false);
   const [newCourtName, setNewCourtName] = useState('');
   const [selectedSportIds, setSelectedSportIds] = useState<string[]>([sports[0]?.id || 'sp-football']);
   const [newOriginalPrice, setNewOriginalPrice] = useState<number | ''>('');
@@ -395,7 +397,21 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
 
   const canEdit = true; // Add, Edit, and Delete features enabled for Admin Panel
 
+  const parseTimeToMinutes = (timeStr: string, isClosingOrEnd = false) => {
+    if (!timeStr) return 0;
+    const [h, m] = timeStr.split(':').map(Number);
+    let total = (isNaN(h) ? 0 : h) * 60 + (isNaN(m) ? 0 : m);
+    // If it's a closing or end time past midnight (00:00 - 04:00), treat as +24 hours
+    if (isClosingOrEnd && (isNaN(h) ? 0 : h) <= 4) {
+      total += 24 * 60;
+    }
+    return total;
+  };
+
   const executeAddCourt = () => {
+    if (isSavingCourt) return;
+    setIsSavingCourt(true);
+
     const origPriceNum = newOriginalPrice !== '' ? Number(newOriginalPrice) : undefined;
     const satOfferNum = newSatOfferPrice !== '' ? Number(newSatOfferPrice) : undefined;
     const sunOfferNum = newSunOfferPrice !== '' ? Number(newSunOfferPrice) : undefined;
@@ -435,15 +451,9 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
       }
     } catch (e) {}
 
-    const updatedCourts = [...courts, newCourt];
-    store.setCourts(updatedCourts);
-    setCourts(updatedCourts);
-    SupabaseSyncService.syncCourtToSupabase(newCourt).catch(err => {
-      console.warn('❌ [CourtPricingManager] Error syncing new court to Supabase:', err);
-    });
-
-    AuditLogger.log(currentAdmin.id, 'CREATE_COURT', 'Court', newCourt.id, null, newCourt);
-
+    // Instantly close the modal and reset inputs so the UI updates immediately on 1 click
+    setShowAddCourtModal(false);
+    closeConfirm();
     setNewCourtName('');
     setNewOriginalPrice('');
     setNewPrice(1200);
@@ -454,12 +464,34 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
     setNewPeakPrice(1800);
     setNewPeakOfferPrice('');
     setNewOfferEndDate('');
-    setShowAddCourtModal(false);
-    closeConfirm();
+
+    const updatedCourts = [...courts, newCourt];
+    store.setCourts(updatedCourts);
+    setCourts(updatedCourts);
+
+    AuditLogger.log(currentAdmin.id, 'CREATE_COURT', 'Court', newCourt.id, null, newCourt);
+
+    // Sync to Supabase PostgreSQL & WhatsApp automation server in the background
+    Promise.allSettled([
+      fetch('/api/courts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...AuthService.getAuthHeaders() },
+        body: JSON.stringify(newCourt)
+      }).catch(err => {
+        console.warn('❌ [CourtPricingManager] Error posting new court to /api/courts:', err);
+      }),
+      SupabaseSyncService.syncCourtToSupabase(newCourt).catch(err => {
+        console.warn('❌ [CourtPricingManager] Error syncing new court to Supabase:', err);
+      })
+    ]).finally(() => {
+      setIsSavingCourt(false);
+    });
   };
 
   const handleAddCourt = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSavingCourt) return;
+
     if (currentAdmin.role === 'staff') {
       alert('Permission denied: Only Owners and Managers can add pitches.');
       return;
@@ -475,7 +507,9 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
       return;
     }
 
-    if (newOpening >= newClosing) {
+    const openMin = parseTimeToMinutes(newOpening);
+    const closeMin = parseTimeToMinutes(newClosing, true);
+    if (openMin >= closeMin) {
       alert('Opening time must be earlier than closing time.');
       return;
     }
@@ -485,9 +519,13 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
       return;
     }
 
-    if (newPeakEnabled && newPeakStart >= newPeakEnd) {
-      alert('Peak start time must be earlier than peak end time.');
-      return;
+    if (newPeakEnabled) {
+      const peakStartMin = parseTimeToMinutes(newPeakStart);
+      const peakEndMin = parseTimeToMinutes(newPeakEnd, true);
+      if (peakStartMin >= peakEndMin) {
+        alert('Peak start time must be earlier than peak end time.');
+        return;
+      }
     }
 
     if (Number(newDuration) <= 0 || Number(newBuffer) < 0) {
@@ -495,14 +533,8 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
       return;
     }
 
-    setConfirmState({
-      isOpen: true,
-      title: 'Confirm New Pitch Creation',
-      message: `Add "${newCourtName.trim()}" (Weekday: ₹${newPrice}/hr | Sat: ₹${newSatPrice}/hr | Sun: ₹${newSunPrice}/hr${newPeakEnabled ? ` | Peak: ₹${newPeakPrice}/hr [${newPeakStart}-${newPeakEnd}]` : ''})?`,
-      confirmText: 'Save & Launch Pitch',
-      variant: 'success',
-      onConfirm: executeAddCourt
-    });
+    // Launch pitch directly without redundant nested modal
+    executeAddCourt();
   };
 
   const handleStartEditCourt = (court: Court) => {
@@ -560,6 +592,16 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
     const updatedCourts = courts.map(c => (c.id === editingCourt.id ? updatedCourt : c));
     store.setCourts(updatedCourts);
     setCourts(updatedCourts);
+
+    // Sync to backend WhatsApp automation server
+    fetch(`/api/courts/${editingCourt.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...AuthService.getAuthHeaders() },
+      body: JSON.stringify(updatedCourt)
+    }).catch(err => {
+      console.warn('❌ [CourtPricingManager] Error putting updated court to /api/courts:', err);
+    });
+
     SupabaseSyncService.syncCourtToSupabase(updatedCourt).catch(err => {
       console.warn('❌ [CourtPricingManager] Error syncing updated court to Supabase:', err);
     });
@@ -583,7 +625,9 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
       return;
     }
 
-    if (editOpening >= editClosing) {
+    const editOpenMin = parseTimeToMinutes(editOpening);
+    const editCloseMin = parseTimeToMinutes(editClosing, true);
+    if (editOpenMin >= editCloseMin) {
       alert('Opening time must be earlier than closing time.');
       return;
     }
@@ -593,9 +637,13 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
       return;
     }
 
-    if (editPeakEnabled && editPeakStart >= editPeakEnd) {
-      alert('Peak start time must be earlier than peak end time.');
-      return;
+    if (editPeakEnabled) {
+      const editPeakStartMin = parseTimeToMinutes(editPeakStart);
+      const editPeakEndMin = parseTimeToMinutes(editPeakEnd, true);
+      if (editPeakStartMin >= editPeakEndMin) {
+        alert('Peak start time must be earlier than peak end time.');
+        return;
+      }
     }
 
     if (Number(editDuration) <= 0 || Number(editBuffer) < 0) {
@@ -661,10 +709,13 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
 
         // 4. Immediately notify WhatsApp Automation Server so it removes the pitch in real-time
         try {
-          await fetch(`/api/courts/${courtId}`, { method: 'DELETE' });
+          await fetch(`/api/courts/${courtId}`, {
+            method: 'DELETE',
+            headers: { ...AuthService.getAuthHeaders() }
+          });
           await fetch('/api/courts/sync', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...AuthService.getAuthHeaders() },
             body: JSON.stringify({ courts: updatedCourts })
           });
         } catch (err) {
@@ -1569,8 +1620,19 @@ export const CourtPricingManager: React.FC<CourtPricingManagerProps> = ({ curren
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn-primary flex-1 py-2 text-xs font-headline font-bold">
-                  Save & Launch Pitch
+                <button
+                  type="submit"
+                  disabled={isSavingCourt}
+                  className="btn-primary flex-1 py-2 text-xs font-headline font-bold flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  {isSavingCourt ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                      Launching Pitch...
+                    </>
+                  ) : (
+                    'Save & Launch Pitch'
+                  )}
                 </button>
               </div>
             </form>

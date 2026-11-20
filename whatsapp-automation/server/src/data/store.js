@@ -35,7 +35,8 @@ export const DEFAULT_SPORTS = [
   { id: 'sp-football', name: 'Football', icon: '⚽' },
   { id: 'sp-cricket', name: 'Cricket', icon: '🏏' },
   { id: 'sp-badminton', name: 'Badminton', icon: '🏸' },
-  { id: 'sp-pickleball', name: 'Pickleball', icon: '🏓' }
+  { id: 'sp-pickleball', name: 'Pickleball', icon: '🏓' },
+  { id: 'sp-swimming', name: 'Swimming', icon: '🏊' }
 ];
 
 export const DEFAULT_COURTS = [
