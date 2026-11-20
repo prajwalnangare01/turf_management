@@ -1259,7 +1259,7 @@ async function runResendTests() {
   console.log('\n--- TEST 22: Multi-Slot Partial Cancellation & Gate Pass Dynamic Slot Pruning ---');
   const multiGroupRef = `TRF-GROUP-${Date.now()}`;
   const commonMultiOtp = '8821';
-  const groupDate = '2026-11-20';
+  const groupDate = new Date(Date.now() + 86400000 * 5).toISOString().split('T')[0];
   const commonPayment = `pay_partial_${Date.now()}`;
 
   const slotA = PostgresEngine.createBooking({
